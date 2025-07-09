@@ -1,0 +1,150 @@
+---
+- name: 安装和配置MySQL Router
+  hosts: mysql_router
+  become: yes
+  gather_facts: yes
+  
+  tasks:
+    - name: 检测系统架构和版本
+      set_fact:
+        mysql_arch: "{{ mysql_architecture_map[ansible_architecture] | default('x86_64') }}"
+        centos_version: "{{ ansible_distribution_major_version }}"
+        centos_release: "{{ centos_version_map[ansible_distribution_major_version] | default('el7') }}"
+
+    - name: 安装必要的系统包
+      yum:
+        name:
+          - wget
+          - curl
+          - python3
+          - python3-pip
+        state: present
+
+    - name: 检查MySQL YUM仓库是否已安装
+      stat:
+        path: /etc/yum.repos.d/mysql-community.repo
+      register: mysql_repo_exists
+
+    - name: 下载MySQL官方YUM仓库
+      get_url:
+        url: "https://dev.mysql.com/get/mysql80-community-release-{{ centos_release }}-1.noarch.rpm"
+        dest: "/tmp/mysql80-community-release-{{ centos_release }}-1.noarch.rpm"
+        mode: '0644'
+      when: not mysql_repo_exists.stat.exists
+
+    - name: 安装MySQL YUM仓库
+      yum:
+        name: "/tmp/mysql80-community-release-{{ centos_release }}-1.noarch.rpm"
+        state: present
+        disable_gpg_check: yes
+      when: not mysql_repo_exists.stat.exists
+
+    - name: 安装MySQL Router
+      yum:
+        name: mysql-router
+        state: present
+
+    - name: 创建MySQL Router配置目录
+      file:
+        path: /etc/mysqlrouter
+        state: directory
+        owner: mysqlrouter
+        group: mysqlrouter
+        mode: '0755'
+
+    - name: 创建MySQL Router日志目录
+      file:
+        path: /var/log/mysqlrouter
+        state: directory
+        owner: mysqlrouter
+        group: mysqlrouter
+        mode: '0755'
+
+    - name: 创建MySQL Router数据目录
+      file:
+        path: /var/lib/mysqlrouter
+        state: directory
+        owner: mysqlrouter
+        group: mysqlrouter
+        mode: '0755'
+
+    - name: 配置MySQL Router
+      shell: |
+        mysqlrouter --bootstrap {{ mysql_cluster_user }}:{{ mysql_cluster_password }}@{{ hostvars[groups['mysql_primary'][0]]['ansible_default_ipv4']['address'] }}:{{ mysql_port }} \
+        --directory /var/lib/mysqlrouter \
+        --conf-use-sockets \
+        --account mysqlrouter \
+        --account-create always \
+        --force
+      register: router_bootstrap
+      become_user: mysqlrouter
+
+    - name: 显示Router配置结果
+      debug:
+        var: router_bootstrap.stdout
+
+    - name: 创建MySQL Router systemd服务文件
+      template:
+        src: ../roles/mysql-router/templates/mysqlrouter.service.j2
+        dest: /etc/systemd/system/mysqlrouter.service
+        owner: root
+        group: root
+        mode: '0644'
+      notify: reload systemd
+
+    - name: 配置防火墙规则（MySQL Router端口）
+      firewalld:
+        port: "{{ item }}"
+        permanent: yes
+        state: enabled
+        immediate: yes
+      loop:
+        - "{{ mysql_router_port }}/tcp"
+        - "{{ mysql_router_admin_port }}/tcp"
+      ignore_errors: yes
+
+    - name: 启动并启用MySQL Router服务
+      systemd:
+        name: mysqlrouter
+        state: started
+        enabled: yes
+        daemon_reload: yes
+
+    - name: 等待MySQL Router启动
+      wait_for:
+        port: "{{ mysql_router_port }}"
+        host: "{{ ansible_default_ipv4.address }}"
+        delay: 5
+        timeout: 60
+
+    - name: 测试MySQL Router连接
+      shell: |
+        mysql -h {{ ansible_default_ipv4.address }} -P {{ mysql_router_port }} -u {{ mysql_cluster_user }} -p{{ mysql_cluster_password }} -e "SELECT @@hostname, @@port"
+      register: router_test
+      ignore_errors: yes
+
+    - name: 显示Router连接测试结果
+      debug:
+        var: router_test.stdout
+      when: router_test.rc == 0
+
+    - name: MySQL Router安装完成提示
+      debug:
+        msg: |
+          MySQL Router 安装配置完成！
+          
+          连接信息:
+          - Router地址: {{ ansible_default_ipv4.address }}
+          - 读写端口: {{ mysql_router_port }}
+          - 管理端口: {{ mysql_router_admin_port }}
+          
+          应用连接示例:
+          mysql -h {{ ansible_default_ipv4.address }} -P {{ mysql_router_port }} -u your_user -p
+          
+          Router状态检查:
+          systemctl status mysqlrouter
+
+  handlers:
+    - name: reload systemd
+      systemd:
+        daemon_reload: yes 

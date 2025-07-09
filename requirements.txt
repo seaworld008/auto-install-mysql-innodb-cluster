@@ -1,0 +1,17 @@
+# Ansible和MySQL InnoDB Cluster部署所需的Python包
+
+# Ansible核心
+ansible>=6.0.0
+ansible-core>=2.13.0
+
+# MySQL相关模块
+PyMySQL>=1.0.0
+mysql-connector-python>=8.0.0
+
+# 系统工具
+jmespath>=1.0.0
+netaddr>=0.8.0
+
+# 可选：用于更好的输出格式
+rich>=12.0.0
+colorama>=0.4.0 

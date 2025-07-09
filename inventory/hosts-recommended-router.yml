@@ -1,0 +1,202 @@
+# 推荐的 MySQL Router 部署配置
+# 基于你的 8核32G/32核64G 生产环境
+
+all:
+  children:
+    # MySQL 数据库集群 (保持不变)
+    mysql_cluster:
+      children:
+        mysql_primary:
+          hosts:
+            mysql-node1:
+              ansible_host: 192.168.1.10
+              ansible_port: 22                      # 你的SSH端口
+              ansible_user: root
+              ansible_ssh_pass: "your_password_1"
+              mysql_server_id: 1
+              mysql_role: primary
+        mysql_secondary:
+          hosts:
+            mysql-node2:
+              ansible_host: 192.168.1.11
+              ansible_port: 22                      # 你的SSH端口
+              ansible_user: root
+              ansible_ssh_pass: "your_password_2"
+              mysql_server_id: 2
+              mysql_role: secondary
+            mysql-node3:
+              ansible_host: 192.168.1.12
+              ansible_port: 22                      # 你的SSH端口
+              ansible_user: root
+              ansible_ssh_pass: "your_password_3"
+              mysql_server_id: 3
+              mysql_role: secondary
+
+    # 推荐配置: 独立 MySQL Router 集群
+    mysql_router:
+      hosts:
+        mysql-router-1:
+          ansible_host: 192.168.1.20               # 第四台服务器 (推荐)
+          ansible_port: 22                          # 你的SSH端口
+          ansible_user: root
+          ansible_ssh_pass: "router_password_1"
+          router_role: "primary"
+          router_priority: 100
+          # 硬件配置 (可以是较小的服务器，如4核8G)
+          router_cpu_cores: 4
+          router_memory: "8GB"
+          
+        mysql-router-2:
+          ansible_host: 192.168.1.21               # 第五台服务器 (推荐)
+          ansible_port: 22                          # 你的SSH端口
+          ansible_user: root
+          ansible_ssh_pass: "router_password_2"
+          router_role: "secondary"
+          router_priority: 90
+          # 硬件配置
+          router_cpu_cores: 4
+          router_memory: "8GB"
+
+    # 备选配置: 应用服务器 (如果你有应用服务器)
+    application_servers:
+      hosts:
+        app-server-1:
+          ansible_host: 192.168.1.30               # 应用服务器1
+          ansible_port: 22
+          ansible_user: root
+          ansible_ssh_pass: "app_password_1"
+          app_type: "web_frontend"
+          # 如果选择应用侧部署，在这里也部署Router
+          deploy_local_router: false                 # 设为true启用应用侧Router
+          
+        app-server-2:
+          ansible_host: 192.168.1.31               # 应用服务器2
+          ansible_port: 22
+          ansible_user: root
+          ansible_ssh_pass: "app_password_2"
+          app_type: "api_backend"
+          deploy_local_router: false
+          
+        app-server-3:
+          ansible_host: 192.168.1.32               # 应用服务器3
+          ansible_port: 22
+          ansible_user: root
+          ansible_ssh_pass: "app_password_3"
+          app_type: "worker_service"
+          deploy_local_router: false
+
+  vars:
+    # 全局SSH配置
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+    ansible_python_interpreter: /usr/bin/python3
+    
+    # MySQL Router 配置
+    mysql_router_deployment_strategy: "dedicated_cluster"  # 独立集群部署
+    
+    # 负载均衡器配置 (可选)
+    router_load_balancer:
+      enabled: true
+      vip: "192.168.1.100"                         # 虚拟IP，客户端连接这个IP
+      algorithm: "round_robin"                      # 负载均衡算法
+      health_check_interval: 5                     # 健康检查间隔(秒)
+      
+    # Router 性能配置 - 根据数据库硬件配置调整
+    mysql_router_config:
+      standard:  # 对应数据库 8核32G 配置
+        max_connections: 2000
+        connection_timeout: 30
+        read_timeout: 30
+        write_timeout: 30
+        max_connect_errors: 100
+        
+      high_performance:  # 对应数据库 32核64G 配置
+        max_connections: 4000
+        connection_timeout: 30
+        read_timeout: 30
+        write_timeout: 30
+        max_connect_errors: 100
+        
+    # 当前使用的配置 (与数据库硬件配置保持一致)
+    mysql_router_profile: "{{ mysql_hardware_profile | default('standard') }}"
+    
+    # Router 端口配置
+    mysql_router_port: 6446                        # 读写端口
+    mysql_router_ro_port: 6447                     # 只读端口
+    mysql_router_admin_port: 8443                  # 管理端口
+    
+    # 安全配置
+    mysql_router_security:
+      ssl_mode: "PREFERRED"                         # SSL模式
+      allowed_hosts:                                # 允许连接的主机
+        - "192.168.1.0/24"                         # 内网段
+        - "10.0.0.0/8"                             # 内网段
+        
+    # 监控配置
+    mysql_router_monitoring:
+      enabled: true
+      metrics_port: 8082
+      log_level: "INFO"
+      slow_query_threshold: 1000                    # 慢查询阈值(毫秒)
+
+# ===========================================
+# 不同部署场景的配置示例
+# ===========================================
+
+# 场景1: 如果你只有3台数据库服务器，没有额外服务器
+minimal_setup_on_db_servers:
+  mysql_router:
+    hosts:
+      mysql-router-on-node1:
+        ansible_host: 192.168.1.10                 # 使用mysql-node1
+        mysql_router_colocated: true                # 标记为与数据库共存
+        router_cpu_limit: "1"                      # 限制CPU使用
+        router_memory_limit: "1GB"                 # 限制内存使用
+
+# 场景2: 如果你有应用服务器，推荐应用侧部署
+application_side_setup:
+  application_servers:
+    hosts:
+      app-server-1:
+        deploy_local_router: true                   # 启用本地Router
+        router_local_config:
+          bind_address: "127.0.0.1"                # 只监听本地
+          max_connections: 500                      # 较小的连接数
+          
+# 场景3: 如果是容器化环境
+container_setup:
+  mysql_router_containers:
+    image: "mysql/mysql-router:8.0"
+    replicas: 3
+    resources:
+      requests:
+        cpu: "500m"
+        memory: "512Mi"
+      limits:
+        cpu: "1"
+        memory: "1Gi"
+
+# ===========================================
+# 推荐的连接配置
+# ===========================================
+recommended_connection_strings:
+  
+  # 如果使用独立Router集群
+  dedicated_router:
+    # 直连单个Router
+    direct: "mysql://user:password@192.168.1.20:6446/database"
+    
+    # 通过负载均衡器VIP (推荐)
+    load_balanced: "mysql://user:password@192.168.1.100:6446/database"
+    
+    # 只读连接
+    readonly: "mysql://user:password@192.168.1.100:6447/database"
+    
+  # 如果使用应用侧Router
+  application_side:
+    local: "mysql://user:password@localhost:6446/database"
+    
+  # 故障转移配置 (应用程序支持多个连接)
+  failover:
+    primary: "192.168.1.20:6446"
+    secondary: "192.168.1.21:6446"
+    backup: "192.168.1.10:3306"                    # 直连数据库作为最后备选 

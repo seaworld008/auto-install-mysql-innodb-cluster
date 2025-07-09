@@ -1,0 +1,20 @@
+[Unit]
+Description=MySQL Router
+After=syslog.target
+After=network.target
+
+[Service]
+Type=notify
+User=mysqlrouter
+Group=mysqlrouter
+
+PIDFile=/var/lib/mysqlrouter/mysqlrouter.pid
+
+ExecStart=/usr/bin/mysqlrouter -c /var/lib/mysqlrouter/mysqlrouter.conf
+
+Restart=on-failure
+
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target 

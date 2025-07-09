@@ -1,0 +1,140 @@
+---
+- name: 配置MySQL InnoDB Cluster
+  hosts: mysql_cluster
+  become: yes
+  gather_facts: yes
+  serial: 1
+  
+  tasks:
+    - name: 等待MySQL服务完全启动
+      wait_for:
+        port: "{{ mysql_port }}"
+        host: "{{ ansible_default_ipv4.address }}"
+        delay: 10
+        timeout: 300
+
+    - name: 检查MySQL实例是否准备好加入集群
+      shell: |
+        mysqlsh --uri {{ mysql_cluster_user }}:{{ mysql_cluster_password }}@{{ ansible_default_ipv4.address }}:{{ mysql_port }} \
+        --sql -e "SELECT 1" 2>/dev/null
+      register: mysql_ready
+      retries: 5
+      delay: 10
+      until: mysql_ready.rc == 0
+      ignore_errors: yes
+
+    - name: 配置实例用于InnoDB Cluster
+      shell: |
+        mysqlsh --uri {{ mysql_cluster_user }}:{{ mysql_cluster_password }}@{{ ansible_default_ipv4.address }}:{{ mysql_port }} \
+        -e "dba.configureInstance('{{ mysql_cluster_user }}:{{ mysql_cluster_password }}@{{ ansible_default_ipv4.address }}:{{ mysql_port }}', {clusterAdmin: '{{ mysql_cluster_user }}', clusterAdminPassword: '{{ mysql_cluster_password }}', restart: true})"
+      register: configure_result
+      ignore_errors: yes
+
+    - name: 重启MySQL服务以应用集群配置
+      systemd:
+        name: mysqld
+        state: restarted
+      when: configure_result.rc == 0
+
+    - name: 等待MySQL重启完成
+      wait_for:
+        port: "{{ mysql_port }}"
+        host: "{{ ansible_default_ipv4.address }}"
+        delay: 15
+        timeout: 300
+      when: configure_result.rc == 0
+
+- name: 创建InnoDB Cluster（仅在主节点执行）
+  hosts: mysql_primary
+  become: yes
+  gather_facts: yes
+  
+  tasks:
+    - name: 检查集群是否已存在
+      shell: |
+        mysqlsh --uri {{ mysql_cluster_user }}:{{ mysql_cluster_password }}@{{ ansible_default_ipv4.address }}:{{ mysql_port }} \
+        -e "try { var cluster = dba.getCluster('{{ mysql_cluster_name }}'); print('EXISTS'); } catch(err) { print('NOT_EXISTS'); }"
+      register: cluster_exists
+      changed_when: false
+
+    - name: 创建InnoDB Cluster
+      shell: |
+        mysqlsh --uri {{ mysql_cluster_user }}:{{ mysql_cluster_password }}@{{ ansible_default_ipv4.address }}:{{ mysql_port }} \
+        -e "var cluster = dba.createCluster('{{ mysql_cluster_name }}', {gtidSetIsComplete: true})"
+      when: "'NOT_EXISTS' in cluster_exists.stdout"
+      register: create_cluster_result
+
+    - name: 显示集群创建结果
+      debug:
+        var: create_cluster_result.stdout
+      when: create_cluster_result is defined
+
+- name: 将从节点加入集群
+  hosts: mysql_secondary
+  become: yes
+  gather_facts: yes
+  serial: 1
+  
+  tasks:
+    - name: 检查节点是否已在集群中
+      shell: |
+        mysqlsh --uri {{ mysql_cluster_user }}:{{ mysql_cluster_password }}@{{ hostvars[groups['mysql_primary'][0]]['ansible_default_ipv4']['address'] }}:{{ mysql_port }} \
+        -e "var cluster = dba.getCluster('{{ mysql_cluster_name }}'); var status = cluster.status(); print(JSON.stringify(status))"
+      register: cluster_status
+      delegate_to: "{{ groups['mysql_primary'][0] }}"
+      changed_when: false
+
+    - name: 将节点加入集群
+      shell: |
+        mysqlsh --uri {{ mysql_cluster_user }}:{{ mysql_cluster_password }}@{{ hostvars[groups['mysql_primary'][0]]['ansible_default_ipv4']['address'] }}:{{ mysql_port }} \
+        -e "var cluster = dba.getCluster('{{ mysql_cluster_name }}'); cluster.addInstance('{{ mysql_cluster_user }}:{{ mysql_cluster_password }}@{{ ansible_default_ipv4.address }}:{{ mysql_port }}', {recoveryMethod: 'clone'})"
+      delegate_to: "{{ groups['mysql_primary'][0] }}"
+      when: "ansible_default_ipv4.address not in cluster_status.stdout"
+      register: add_instance_result
+
+    - name: 显示节点加入结果
+      debug:
+        var: add_instance_result.stdout
+      when: add_instance_result is defined and add_instance_result.changed
+
+- name: 验证集群状态
+  hosts: mysql_primary
+  become: yes
+  gather_facts: yes
+  
+  tasks:
+    - name: 等待集群同步完成
+      pause:
+        seconds: 30
+
+    - name: 检查集群状态
+      shell: |
+        mysqlsh --uri {{ mysql_cluster_user }}:{{ mysql_cluster_password }}@{{ ansible_default_ipv4.address }}:{{ mysql_port }} \
+        -e "var cluster = dba.getCluster('{{ mysql_cluster_name }}'); cluster.status()"
+      register: final_cluster_status
+
+    - name: 显示最终集群状态
+      debug:
+        var: final_cluster_status.stdout
+
+    - name: 验证集群健康状态
+      shell: |
+        mysqlsh --uri {{ mysql_cluster_user }}:{{ mysql_cluster_password }}@{{ ansible_default_ipv4.address }}:{{ mysql_port }} \
+        -e "var cluster = dba.getCluster('{{ mysql_cluster_name }}'); print(cluster.status()['defaultReplicaSet']['status'])"
+      register: cluster_health
+
+    - name: 显示集群健康状态
+      debug:
+        msg: "集群状态: {{ cluster_health.stdout.strip() }}"
+
+    - name: 集群配置完成提示
+      debug:
+        msg: |
+          MySQL InnoDB Cluster 配置完成！
+          集群名称: {{ mysql_cluster_name }}
+          主节点: {{ inventory_hostname }} ({{ ansible_default_ipv4.address }})
+          从节点: {{ groups['mysql_secondary'] | join(', ') }}
+          
+          管理命令示例:
+          - 查看集群状态: mysqlsh --uri {{ mysql_cluster_user }}@{{ ansible_default_ipv4.address }} -e "dba.getCluster('{{ mysql_cluster_name }}').status()"
+          - 检查集群拓扑: mysqlsh --uri {{ mysql_cluster_user }}@{{ ansible_default_ipv4.address }} -e "dba.getCluster('{{ mysql_cluster_name }}').describe()" 

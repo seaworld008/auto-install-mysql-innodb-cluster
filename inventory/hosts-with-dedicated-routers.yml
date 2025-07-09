@@ -1,0 +1,245 @@
+# MySQL InnoDB Cluster + 独立 MySQL Router 部署配置
+# 3台数据库服务器 + 2台Router服务器 (4核8G)
+
+all:
+  children:
+    # MySQL 数据库集群 (现有的3台服务器)
+    mysql_cluster:
+      children:
+        mysql_primary:
+          hosts:
+            mysql-node1:
+              ansible_host: 192.168.1.10           # 你的第一台数据库服务器IP
+              ansible_port: 22                      # 替换为你的SSH端口
+              ansible_user: root                    # SSH用户名
+              ansible_ssh_pass: "your_password_1"   # 替换为你的密码
+              mysql_server_id: 1
+              mysql_role: primary
+        mysql_secondary:
+          hosts:
+            mysql-node2:
+              ansible_host: 192.168.1.11           # 你的第二台数据库服务器IP
+              ansible_port: 22                      # 替换为你的SSH端口
+              ansible_user: root                    # SSH用户名
+              ansible_ssh_pass: "your_password_2"   # 替换为你的密码
+              mysql_server_id: 2
+              mysql_role: secondary
+            mysql-node3:
+              ansible_host: 192.168.1.12           # 你的第三台数据库服务器IP
+              ansible_port: 22                      # 替换为你的SSH端口
+              ansible_user: root                    # SSH用户名
+              ansible_ssh_pass: "your_password_3"   # 替换为你的密码
+              mysql_server_id: 3
+              mysql_role: secondary
+
+    # 新增的 MySQL Router 服务器 (2台4核8G)
+    mysql_router:
+      hosts:
+        mysql-router-1:
+          ansible_host: 192.168.1.20               # 第一台Router服务器IP
+          ansible_port: 22                          # 替换为你的SSH端口
+          ansible_user: root                        # SSH用户名
+          ansible_ssh_pass: "router_password_1"     # 替换为Router服务器密码
+          router_role: "primary"                    # 主Router
+          router_priority: 100                      # 优先级
+          # 硬件规格标记
+          router_cpu_cores: 4
+          router_memory_gb: 8
+          router_disk_type: "SSD"                   # 建议使用SSD
+          
+        mysql-router-2:
+          ansible_host: 192.168.1.21               # 第二台Router服务器IP
+          ansible_port: 22                          # 替换为你的SSH端口
+          ansible_user: root                        # SSH用户名
+          ansible_ssh_pass: "router_password_2"     # 替换为Router服务器密码
+          router_role: "secondary"                  # 从Router
+          router_priority: 90                       # 优先级
+          # 硬件规格标记
+          router_cpu_cores: 4
+          router_memory_gb: 8
+          router_disk_type: "SSD"
+
+  vars:
+    # 全局SSH配置
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+    ansible_python_interpreter: /usr/bin/python3
+    
+    # MySQL Router 部署策略
+    mysql_router_deployment_strategy: "dedicated_cluster"
+    
+    # 专为4核8G优化的Router配置 - 使用8C32G优化方案
+    mysql_router_4c8g_config:
+      # 基础性能参数 - 针对实际硬件优化
+      max_connections: 30000                        # 最大连接数 (3万)
+      max_connections_per_route: 15000              # 每个路由最大连接数
+      connection_timeout: 30                        # 连接超时(秒)
+      read_timeout: 30                              # 读超时(秒)
+      write_timeout: 30                             # 写超时(秒)
+      max_connect_errors: 100                       # 最大连接错误数
+      
+      # 内存和CPU优化 - 适配4核8G硬件
+      router_threads: 6                             # Router工作线程数 (优化到6个)
+      io_threads: 4                                 # I/O线程数
+      connection_pool_size: 500                     # 连接池大小
+      memory_limit: "6GB"                           # 内存限制(为系统预留2GB)
+      
+      # 缓存配置
+      metadata_cache_ttl: 300                       # 元数据缓存TTL(秒)
+      metadata_cache_refresh: 60                    # 元数据刷新间隔(秒)
+      
+      # 路由策略
+      routing_strategy_rw: "first-available"        # 读写路由策略
+      routing_strategy_ro: "round-robin"            # 只读路由策略
+      
+    # 负载均衡器配置 (HAProxy/Keepalived)
+    router_load_balancer:
+      enabled: true
+      vip: "192.168.1.100"                         # 虚拟IP地址 (需要规划一个内网未使用的IP)
+      algorithm: "round_robin"                      # 负载均衡算法
+      health_check_interval: 5                     # 健康检查间隔(秒)
+      health_check_timeout: 3                      # 健康检查超时(秒)
+      health_check_retries: 3                      # 健康检查重试次数
+      
+    # 端口配置
+    mysql_router_port: 6446                        # MySQL读写端口
+    mysql_router_ro_port: 6447                     # MySQL只读端口
+    mysql_router_admin_port: 8443                  # 管理端口
+    mysql_router_metrics_port: 8082                # 监控指标端口
+    
+    # 安全配置
+    mysql_router_security:
+      ssl_mode: "PREFERRED"                         # SSL模式: DISABLED|PREFERRED|REQUIRED
+      ssl_cert_path: "/etc/mysql-router/ssl"       # SSL证书路径
+      # 访问控制列表
+      allowed_hosts:
+        - "192.168.1.0/24"                         # 允许整个内网段
+        - "10.0.0.0/8"                             # 允许10.x.x.x段(如果有)
+        - "172.16.0.0/12"                          # 允许172.16-31.x.x段(如果有)
+      # 禁用的主机
+      denied_hosts: []
+      
+    # 日志配置
+    mysql_router_logging:
+      level: "INFO"                                 # 日志级别: ERROR|WARNING|INFO|DEBUG
+      destination: "/var/log/mysql-router/"        # 日志目录
+      max_size: "100MB"                            # 单个日志文件最大大小
+      max_files: 5                                  # 保留的日志文件数量
+      rotate: true                                  # 启用日志轮转
+      
+    # 监控配置
+    mysql_router_monitoring:
+      enabled: true
+      prometheus_enabled: true                      # 启用Prometheus监控
+      metrics_port: 8082                           # 指标端口
+      health_check_endpoint: "/health"             # 健康检查端点
+      # 监控指标
+      collect_metrics:
+        - "connection_count"
+        - "active_connections"
+        - "connection_errors"
+        - "routing_latency"
+        - "backend_status"
+        - "memory_usage"
+        - "cpu_usage"
+      
+    # 告警阈值 - 调整以适应高并发
+    mysql_router_alerts:
+      connection_usage_warning: 70                  # 连接使用率警告阈值(%)
+      connection_usage_critical: 90                 # 连接使用率严重阈值(%)
+      memory_usage_warning: 80                      # 内存使用率警告阈值(%)
+      memory_usage_critical: 95                     # 内存使用率严重阈值(%)
+      cpu_usage_warning: 75                         # CPU使用率警告阈值(%)
+      cpu_usage_critical: 90                        # CPU使用率严重阈值(%)
+      response_time_warning: 100                    # 响应时间警告阈值(ms)
+      response_time_critical: 500                   # 响应时间严重阈值(ms)
+      
+    # 防火墙端口
+    firewall_ports:
+      # MySQL数据库端口
+      - "{{ mysql_port }}/tcp"
+      - "{{ mysql_admin_port }}/tcp"
+      - "{{ mysql_group_replication_port }}/tcp"
+      # MySQL Router端口
+      - "{{ mysql_router_port }}/tcp"
+      - "{{ mysql_router_ro_port }}/tcp"
+      - "{{ mysql_router_admin_port }}/tcp"
+      - "{{ mysql_router_metrics_port }}/tcp"
+      # 负载均衡器端口
+      - "80/tcp"                                    # HAProxy统计页面
+      - "8404/tcp"                                  # HAProxy管理端口
+      
+    # 备份Router配置
+    mysql_router_backup:
+      enabled: true
+      backup_path: "/backup/mysql-router"
+      backup_retention_days: 30
+      backup_schedule: "0 2 * * *"                 # 每天凌晨2点备份
+
+# ===========================================
+# 环境变量配置 - 调整以支持高并发
+# ===========================================
+router_environment_vars:
+  # 系统优化
+  - name: "MYSQL_ROUTER_LOG_LEVEL"
+    value: "INFO"
+  - name: "MYSQL_ROUTER_MAX_MEMORY"
+    value: "7G"
+  - name: "MYSQL_ROUTER_THREAD_STACK_SIZE"
+    value: "1M"
+  - name: "MYSQL_ROUTER_MAX_TOTAL_CONNECTIONS"
+    value: "30000"
+    
+# ===========================================
+# 系统优化配置 - 专为高并发优化
+# ===========================================
+system_optimization:
+  # 内核参数优化
+  sysctl_config:
+    # 网络优化 - 支持高并发连接
+    net.core.somaxconn: 131072                     # 增加到128K
+    net.core.netdev_max_backlog: 10000             # 增加网络设备队列
+    net.ipv4.tcp_max_syn_backlog: 131072           # 增加SYN队列大小
+    net.ipv4.tcp_fin_timeout: 10
+    net.ipv4.tcp_tw_reuse: 1
+    net.ipv4.tcp_tw_recycle: 1
+    net.ipv4.tcp_keepalive_time: 1200              # TCP keepalive时间
+    net.ipv4.tcp_keepalive_intvl: 15               # TCP keepalive间隔
+    net.ipv4.tcp_keepalive_probes: 5               # TCP keepalive探测次数
+    net.ipv4.ip_local_port_range: "10000 65535"   # 扩大端口范围
+    net.ipv4.tcp_rmem: "4096 65536 16777216"      # TCP接收缓冲区
+    net.ipv4.tcp_wmem: "4096 65536 16777216"      # TCP发送缓冲区
+    net.core.rmem_max: 16777216                    # 最大接收缓冲区
+    net.core.wmem_max: 16777216                    # 最大发送缓冲区
+    # 内存优化
+    vm.swappiness: 1
+    vm.dirty_ratio: 15
+    vm.dirty_background_ratio: 5
+    # 文件系统优化 - 支持高并发文件描述符
+    fs.file-max: 2097152                           # 增加到200万
+    
+  # 资源限制 - 大幅提升以支持3万连接
+  limits_config:
+    - domain: "mysql-router"
+      type: "soft"
+      item: "nofile"
+      value: 131072                                 # 13万文件描述符
+    - domain: "mysql-router"
+      type: "hard"
+      item: "nofile"
+      value: 131072
+    - domain: "mysql-router"
+      type: "soft"
+      item: "nproc"
+      value: 65536                                  # 6.5万进程数
+    - domain: "mysql-router"
+      type: "hard"
+      item: "nproc"
+      value: 65536
+    - domain: "root"
+      type: "soft"
+      item: "nofile"
+      value: 131072
+    - domain: "root"
+      type: "hard"
+      item: "nofile"
+      value: 131072 

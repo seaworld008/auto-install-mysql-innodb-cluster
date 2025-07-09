@@ -1,0 +1,138 @@
+# MySQL版本和下载配置
+mysql_version: "8.0.42"
+mysql_major_version: "8.0"
+
+# MySQL用户和密码配置
+mysql_root_password: "MyS3cur3P@ssw0rd!"
+mysql_cluster_user: "clusteradmin"
+mysql_cluster_password: "Clust3rP@ss!"
+mysql_replication_user: "replicator"
+mysql_replication_password: "R3pl1c@t0r!"
+
+# MySQL集群配置
+mysql_cluster_name: "prodCluster"
+mysql_group_replication_group_name: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+
+# MySQL端口配置
+mysql_port: 3306
+mysql_admin_port: 33062
+mysql_group_replication_port: 33061
+
+# MySQL数据目录
+mysql_datadir: "/data/mysql"
+mysql_logdir: "/var/log/mysql"
+mysql_tmpdir: "/tmp"
+
+# 硬件配置类型 (standard: 8核32G, high_performance: 32核64G)
+mysql_hardware_profile: "standard"  # 可选值: standard, high_performance
+
+# MySQL配置参数 - 根据硬件配置动态调整
+mysql_config_profiles:
+  standard:  # 8核32G配置
+    # InnoDB缓冲池 - 内存的75%
+    innodb_buffer_pool_size: "24G"
+    # InnoDB日志文件大小 - 缓冲池的15%
+    innodb_log_file_size: "2G"
+    # 连接数配置 - 提升到1万连接支持高并发
+    max_connections: 10000
+    # 线程缓存 - CPU核心数的4倍
+    thread_cache_size: 32
+    # 表缓存 - 增加以支持更多连接
+    table_open_cache: 16000
+    # 查询缓存大小
+    query_cache_size: "512M"
+    # 排序缓冲区
+    sort_buffer_size: "2M"
+    # 读缓冲区
+    read_buffer_size: "1M"
+    # 随机读缓冲区
+    read_rnd_buffer_size: "2M"
+    # 批量插入缓冲区
+    bulk_insert_buffer_size: "64M"
+    # 临时表大小
+    tmp_table_size: "512M"
+    max_heap_table_size: "512M"
+    # InnoDB额外配置
+    innodb_buffer_pool_instances: 8
+    innodb_io_capacity: 2000
+    innodb_io_capacity_max: 4000
+    innodb_read_io_threads: 8
+    innodb_write_io_threads: 8
+    innodb_thread_concurrency: 16
+    
+  high_performance:  # 32核64G配置
+    # InnoDB缓冲池 - 内存的70-80%
+    innodb_buffer_pool_size: "48G"
+    # InnoDB日志文件大小 - 缓冲池的25%
+    innodb_log_file_size: "4G"
+    # 连接数配置 - 提升到1万连接支持高并发
+    max_connections: 10000
+    # 线程缓存 - CPU核心数的2倍
+    thread_cache_size: 64
+    # 表缓存 - 增加以支持更多连接
+    table_open_cache: 20000
+    # 查询缓存大小
+    query_cache_size: "1G"
+    # 排序缓冲区
+    sort_buffer_size: "4M"
+    # 读缓冲区
+    read_buffer_size: "2M"
+    # 随机读缓冲区
+    read_rnd_buffer_size: "4M"
+    # 批量插入缓冲区
+    bulk_insert_buffer_size: "128M"
+    # 临时表大小
+    tmp_table_size: "1G"
+    max_heap_table_size: "1G"
+    # InnoDB额外配置
+    innodb_buffer_pool_instances: 16
+    innodb_io_capacity: 4000
+    innodb_io_capacity_max: 8000
+    innodb_read_io_threads: 16
+    innodb_write_io_threads: 16
+    innodb_thread_concurrency: 32
+
+# 当前配置（根据硬件配置文件选择）
+mysql_innodb_buffer_pool_size: "{{ mysql_config_profiles[mysql_hardware_profile].innodb_buffer_pool_size }}"
+mysql_innodb_log_file_size: "{{ mysql_config_profiles[mysql_hardware_profile].innodb_log_file_size }}"
+mysql_max_connections: "{{ mysql_config_profiles[mysql_hardware_profile].max_connections }}"
+mysql_thread_cache_size: "{{ mysql_config_profiles[mysql_hardware_profile].thread_cache_size }}"
+mysql_table_open_cache: "{{ mysql_config_profiles[mysql_hardware_profile].table_open_cache }}"
+mysql_query_cache_size: "{{ mysql_config_profiles[mysql_hardware_profile].query_cache_size }}"
+mysql_sort_buffer_size: "{{ mysql_config_profiles[mysql_hardware_profile].sort_buffer_size }}"
+mysql_read_buffer_size: "{{ mysql_config_profiles[mysql_hardware_profile].read_buffer_size }}"
+mysql_read_rnd_buffer_size: "{{ mysql_config_profiles[mysql_hardware_profile].read_rnd_buffer_size }}"
+mysql_bulk_insert_buffer_size: "{{ mysql_config_profiles[mysql_hardware_profile].bulk_insert_buffer_size }}"
+mysql_tmp_table_size: "{{ mysql_config_profiles[mysql_hardware_profile].tmp_table_size }}"
+mysql_max_heap_table_size: "{{ mysql_config_profiles[mysql_hardware_profile].max_heap_table_size }}"
+mysql_innodb_buffer_pool_instances: "{{ mysql_config_profiles[mysql_hardware_profile].innodb_buffer_pool_instances }}"
+mysql_innodb_io_capacity: "{{ mysql_config_profiles[mysql_hardware_profile].innodb_io_capacity }}"
+mysql_innodb_io_capacity_max: "{{ mysql_config_profiles[mysql_hardware_profile].innodb_io_capacity_max }}"
+mysql_innodb_read_io_threads: "{{ mysql_config_profiles[mysql_hardware_profile].innodb_read_io_threads }}"
+mysql_innodb_write_io_threads: "{{ mysql_config_profiles[mysql_hardware_profile].innodb_write_io_threads }}"
+mysql_innodb_thread_concurrency: "{{ mysql_config_profiles[mysql_hardware_profile].innodb_thread_concurrency }}"
+
+# 系统配置
+mysql_user: "mysql"
+mysql_group: "mysql"
+
+# 防火墙端口
+firewall_ports:
+  - "{{ mysql_port }}/tcp"
+  - "{{ mysql_admin_port }}/tcp"
+  - "{{ mysql_group_replication_port }}/tcp"
+
+# MySQL Router配置
+mysql_router_port: 6446
+mysql_router_admin_port: 8443
+
+# 架构检测
+mysql_architecture_map:
+  x86_64: "x86_64"
+  aarch64: "aarch64"
+  arm64: "aarch64"
+
+# CentOS版本检测
+centos_version_map:
+  "7": "el7"
+  "8": "el8" 

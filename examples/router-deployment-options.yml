@@ -1,0 +1,288 @@
+# MySQL Router 部署配置选项
+# 根据不同场景选择合适的部署方式
+
+# ===========================================
+# 选项 1: 独立服务器集群部署 (推荐用于生产环境)
+# ===========================================
+dedicated_router_cluster:
+  description: "独立的MySQL Router服务器集群，提供高可用性"
+  
+  # 标准配置 (8核32G 环境)
+  standard_setup:
+    mysql_router:
+      hosts:
+        mysql-router-1:
+          ansible_host: 192.168.1.20
+          ansible_port: 22
+          ansible_user: root
+          ansible_ssh_pass: "router_password_1"
+          router_role: "primary"
+          router_priority: 100
+          
+        mysql-router-2:
+          ansible_host: 192.168.1.21
+          ansible_port: 22
+          ansible_user: root
+          ansible_ssh_pass: "router_password_2"
+          router_role: "secondary"
+          router_priority: 90
+          
+    # 负载均衡配置
+    load_balancer:
+      enabled: true
+      vip: "192.168.1.100"
+      algorithm: "round_robin"
+      health_check_interval: 5
+      
+    # Router 性能配置
+    router_config:
+      max_connections: 2000
+      connection_timeout: 30
+      read_timeout: 30
+      cpu_cores: 2
+      memory_limit: "4GB"
+
+  # 高性能配置 (32核64G 环境)
+  high_performance_setup:
+    mysql_router:
+      hosts:
+        mysql-router-1:
+          ansible_host: 192.168.1.20
+          router_role: "primary"
+          
+        mysql-router-2:
+          ansible_host: 192.168.1.21
+          router_role: "secondary"
+          
+        mysql-router-3:
+          ansible_host: 192.168.1.22
+          router_role: "secondary"
+          
+    router_config:
+      max_connections: 4000
+      connection_timeout: 30
+      read_timeout: 30
+      cpu_cores: 4
+      memory_limit: "8GB"
+
+# ===========================================
+# 选项 2: 应用服务器端部署 (适用于微服务)
+# ===========================================
+application_side_router:
+  description: "在每个应用服务器上部署Router实例"
+  
+  mysql_router:
+    hosts:
+      app-server-1:
+        ansible_host: 192.168.1.30
+        ansible_port: 22
+        ansible_user: root
+        ansible_ssh_pass: "app_password_1"
+        router_role: "application_side"
+        app_type: "web_frontend"
+        
+      app-server-2:
+        ansible_host: 192.168.1.31
+        ansible_port: 22
+        ansible_user: root
+        ansible_ssh_pass: "app_password_2"
+        router_role: "application_side"
+        app_type: "api_backend"
+        
+      app-server-3:
+        ansible_host: 192.168.1.32
+        ansible_port: 22
+        ansible_user: root
+        ansible_ssh_pass: "app_password_3"
+        router_role: "application_side"
+        app_type: "worker_service"
+        
+  router_config:
+    max_connections: 500        # 每个实例较少连接数
+    connection_timeout: 10
+    read_timeout: 10
+    cpu_limit: "0.5"           # 限制CPU使用
+    memory_limit: "512MB"      # 限制内存使用
+    local_only: true           # 只接受本地连接
+
+# ===========================================
+# 选项 3: 混合部署 (应用侧 + 独立服务器)
+# ===========================================
+hybrid_deployment:
+  description: "混合部署：关键应用使用独立Router，其他应用使用本地Router"
+  
+  # 独立Router - 用于关键业务
+  dedicated_routers:
+    mysql_router_critical:
+      hosts:
+        mysql-router-critical-1:
+          ansible_host: 192.168.1.40
+          router_role: "critical_dedicated"
+          priority: 100
+          
+        mysql-router-critical-2:
+          ansible_host: 192.168.1.41
+          router_role: "critical_dedicated"
+          priority: 90
+          
+      config:
+        max_connections: 2000
+        ssl_enabled: true
+        monitoring_enabled: true
+        
+  # 应用侧Router - 用于一般业务
+  application_routers:
+    mysql_router_apps:
+      hosts:
+        app-server-1:
+          ansible_host: 192.168.1.30
+          router_role: "application_side"
+          
+        app-server-2:
+          ansible_host: 192.168.1.31
+          router_role: "application_side"
+          
+      config:
+        max_connections: 500
+        ssl_enabled: false
+        monitoring_enabled: false
+
+# ===========================================
+# 选项 4: 容器化部署 (Kubernetes)
+# ===========================================
+kubernetes_deployment:
+  description: "Kubernetes环境中的Router部署"
+  
+  deployment_config:
+    namespace: "mysql-router"
+    replicas: 3
+    strategy: "RollingUpdate"
+    
+    resources:
+      standard:
+        requests:
+          cpu: "500m"
+          memory: "512Mi"
+        limits:
+          cpu: "1"
+          memory: "1Gi"
+          
+      high_performance:
+        requests:
+          cpu: "1"
+          memory: "1Gi"
+        limits:
+          cpu: "2"
+          memory: "2Gi"
+          
+  service_config:
+    type: "LoadBalancer"
+    ports:
+      - name: "mysql-rw"
+        port: 6446
+        targetPort: 6446
+      - name: "mysql-ro"
+        port: 6447
+        targetPort: 6447
+        
+  ingress_config:
+    enabled: true
+    hostname: "mysql-router.example.com"
+    tls_enabled: true
+
+# ===========================================
+# 选项 5: 高可用部署 (多数据中心)
+# ===========================================
+multi_datacenter_deployment:
+  description: "跨数据中心的高可用Router部署"
+  
+  datacenter_primary:
+    location: "DC1"
+    mysql_router:
+      hosts:
+        mysql-router-dc1-1:
+          ansible_host: 10.1.1.20
+          datacenter: "DC1"
+          router_role: "primary"
+          
+        mysql-router-dc1-2:
+          ansible_host: 10.1.1.21
+          datacenter: "DC1"
+          router_role: "secondary"
+          
+  datacenter_secondary:
+    location: "DC2"
+    mysql_router:
+      hosts:
+        mysql-router-dc2-1:
+          ansible_host: 10.2.1.20
+          datacenter: "DC2"
+          router_role: "disaster_recovery"
+          
+  global_load_balancer:
+    enabled: true
+    primary_vip: "10.1.1.100"
+    secondary_vip: "10.2.1.100"
+    failover_time: 30
+
+# ===========================================
+# 推荐配置映射
+# ===========================================
+deployment_recommendations:
+  
+  # 小型项目 (< 100 并发)
+  small_scale:
+    recommended: "application_side_router"
+    reason: "简单、成本低、易于管理"
+    
+  # 中型项目 (100-1000 并发)
+  medium_scale:
+    recommended: "dedicated_router_cluster"
+    reason: "平衡性能和成本，便于监控"
+    
+  # 大型项目 (> 1000 并发)
+  large_scale:
+    recommended: "hybrid_deployment"
+    reason: "灵活性高，可针对不同业务优化"
+    
+  # 云原生项目
+  cloud_native:
+    recommended: "kubernetes_deployment"
+    reason: "自动扩缩容，容器化管理"
+    
+  # 关键业务系统
+  mission_critical:
+    recommended: "multi_datacenter_deployment"
+    reason: "最高可用性，灾难恢复能力"
+
+# ===========================================
+# 部署切换脚本
+# ===========================================
+deployment_scripts:
+  
+  # 从当前配置迁移到独立Router
+  migrate_to_dedicated:
+    steps:
+      - "备份当前配置"
+      - "部署独立Router服务器"
+      - "配置负载均衡器"
+      - "更新应用连接字符串"
+      - "测试连接"
+      - "停用原Router"
+      
+  # 从独立Router切换到应用侧
+  migrate_to_application_side:
+    steps:
+      - "在应用服务器上安装Router"
+      - "配置本地Router"
+      - "更新应用连接为localhost"
+      - "测试本地连接"
+      - "停用独立Router"
+      
+  # 扩容Router实例
+  scale_out_routers:
+    steps:
+      - "添加新Router服务器"
+      - "配置Router服务"
+      - "更新负载均衡器"
+      - "验证流量分布" 

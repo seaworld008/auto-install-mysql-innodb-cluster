@@ -1,0 +1,33 @@
+---
+- name: MySQL InnoDB Cluster 完整安装
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: 显示安装开始信息
+      debug:
+        msg: "开始安装MySQL InnoDB Cluster..."
+
+- import_playbook: install-mysql.yml
+- import_playbook: configure-cluster.yml
+- import_playbook: install-router.yml
+
+- name: MySQL InnoDB Cluster 安装完成
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: 显示安装完成信息
+      debug:
+        msg: |
+          MySQL InnoDB Cluster 安装完成！
+          
+          集群信息:
+          - 集群名称: {{ mysql_cluster_name }}
+          - 主节点: {{ groups['mysql_primary'][0] }}
+          - 从节点: {{ groups['mysql_secondary'] | join(', ') }}
+          
+          连接信息:
+          - MySQL端口: {{ mysql_port }}
+          - MySQL Router端口: {{ mysql_router_port }}
+          
+          管理命令:
+          - 查看集群状态: mysqlsh --uri {{ mysql_cluster_user }}@{{ groups['mysql_primary'][0] }} -e "dba.getCluster('{{ mysql_cluster_name }}').status()" 

@@ -1,0 +1,46 @@
+# 生产环境MySQL InnoDB Cluster配置示例
+# 复制此文件到 inventory/hosts.yml 并根据实际环境修改
+
+all:
+  children:
+    mysql_cluster:
+      children:
+        mysql_primary:
+          hosts:
+            mysql-prod-primary:
+              ansible_host: 10.10.10.10
+              mysql_server_id: 1
+              mysql_role: primary
+              # 生产环境特定配置
+              mysql_innodb_buffer_pool_size: "8G"
+              mysql_max_connections: 2000
+        mysql_secondary:
+          hosts:
+            mysql-prod-secondary1:
+              ansible_host: 10.10.10.11
+              mysql_server_id: 2
+              mysql_role: secondary
+              mysql_innodb_buffer_pool_size: "8G"
+              mysql_max_connections: 2000
+            mysql-prod-secondary2:
+              ansible_host: 10.10.10.12
+              mysql_server_id: 3
+              mysql_role: secondary
+              mysql_innodb_buffer_pool_size: "8G"
+              mysql_max_connections: 2000
+    mysql_router:
+      hosts:
+        mysql-router-prod1:
+          ansible_host: 10.10.10.20
+        mysql-router-prod2:
+          ansible_host: 10.10.10.21
+  vars:
+    # SSH连接配置
+    ansible_user: ansible
+    ansible_ssh_private_key_file: ~/.ssh/production_key
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+    
+    # 生产环境安全配置
+    mysql_root_password: "{{ vault_mysql_root_password }}"
+    mysql_cluster_password: "{{ vault_mysql_cluster_password }}"
+    mysql_replication_password: "{{ vault_mysql_replication_password }}" 

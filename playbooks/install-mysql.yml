@@ -1,0 +1,163 @@
+---
+- name: 安装MySQL服务器
+  hosts: mysql_cluster
+  become: yes
+  gather_facts: yes
+  
+  tasks:
+    - name: 检测系统架构和版本
+      set_fact:
+        mysql_arch: "{{ mysql_architecture_map[ansible_architecture] | default('x86_64') }}"
+        centos_version: "{{ ansible_distribution_major_version }}"
+        centos_release: "{{ centos_version_map[ansible_distribution_major_version] | default('el7') }}"
+
+    - name: 显示系统信息
+      debug:
+        msg: |
+          主机: {{ inventory_hostname }}
+          系统: {{ ansible_distribution }} {{ ansible_distribution_version }}
+          架构: {{ ansible_architecture }} -> {{ mysql_arch }}
+          CentOS版本: {{ centos_release }}
+
+    - name: 停止并禁用MariaDB服务（如果存在）
+      systemd:
+        name: mariadb
+        state: stopped
+        enabled: no
+      ignore_errors: yes
+
+    - name: 卸载MariaDB相关包
+      yum:
+        name:
+          - mariadb
+          - mariadb-server
+          - mariadb-libs
+        state: absent
+      ignore_errors: yes
+
+    - name: 安装必要的系统包
+      yum:
+        name:
+          - wget
+          - curl
+          - libaio
+          - numactl
+          - net-tools
+          - python3
+          - python3-pip
+        state: present
+
+    - name: 安装PyMySQL模块
+      pip:
+        name: PyMySQL
+        state: present
+
+    - name: 下载MySQL官方YUM仓库
+      get_url:
+        url: "https://dev.mysql.com/get/mysql80-community-release-{{ centos_release }}-1.noarch.rpm"
+        dest: "/tmp/mysql80-community-release-{{ centos_release }}-1.noarch.rpm"
+        mode: '0644'
+
+    - name: 安装MySQL YUM仓库
+      yum:
+        name: "/tmp/mysql80-community-release-{{ centos_release }}-1.noarch.rpm"
+        state: present
+        disable_gpg_check: yes
+
+    - name: 禁用MySQL 5.7仓库，启用MySQL 8.0仓库
+      ini_file:
+        path: /etc/yum.repos.d/mysql-community.repo
+        section: "{{ item.section }}"
+        option: enabled
+        value: "{{ item.enabled }}"
+      loop:
+        - { section: "mysql57-community", enabled: "0" }
+        - { section: "mysql80-community", enabled: "1" }
+
+    - name: 安装MySQL服务器和客户端
+      yum:
+        name:
+          - mysql-community-server
+          - mysql-community-client
+          - mysql-shell
+        state: present
+
+    - name: 创建MySQL日志目录
+      file:
+        path: "{{ mysql_logdir }}"
+        state: directory
+        owner: "{{ mysql_user }}"
+        group: "{{ mysql_group }}"
+        mode: '0755'
+
+    - name: 创建MySQL数据目录
+      file:
+        path: "{{ mysql_datadir }}"
+        state: directory
+        owner: "{{ mysql_user }}"
+        group: "{{ mysql_group }}"
+        mode: '0750'
+
+    - name: 配置MySQL配置文件
+      template:
+        src: ../roles/mysql-server/templates/my.cnf.j2
+        dest: /etc/my.cnf
+        owner: root
+        group: root
+        mode: '0644'
+        backup: yes
+      notify: restart mysql
+
+    - name: 启动并启用MySQL服务
+      systemd:
+        name: mysqld
+        state: started
+        enabled: yes
+
+    - name: 获取MySQL临时root密码
+      shell: grep 'temporary password' /var/log/mysqld.log | awk '{print $NF}' | tail -1
+      register: mysql_temp_password
+      changed_when: false
+
+    - name: 设置MySQL root密码
+      shell: |
+        mysql -u root -p'{{ mysql_temp_password.stdout }}' --connect-expired-password -e "
+        ALTER USER 'root'@'localhost' IDENTIFIED BY '{{ mysql_root_password }}';
+        FLUSH PRIVILEGES;"
+      when: mysql_temp_password.stdout != ""
+      ignore_errors: yes
+
+    - name: 配置防火墙规则
+      firewalld:
+        port: "{{ item }}"
+        permanent: yes
+        state: enabled
+        immediate: yes
+      loop: "{{ firewall_ports }}"
+      ignore_errors: yes
+
+    - name: 创建集群管理用户
+      mysql_user:
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+        name: "{{ mysql_cluster_user }}"
+        password: "{{ mysql_cluster_password }}"
+        host: "%"
+        priv: "*.*:ALL,GRANT"
+        state: present
+
+    - name: 创建复制用户
+      mysql_user:
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+        name: "{{ mysql_replication_user }}"
+        password: "{{ mysql_replication_password }}"
+        host: "%"
+        priv: "*.*:REPLICATION SLAVE"
+        state: present
+
+  handlers:
+    - name: restart mysql
+      systemd:
+        name: mysqld
+        state: restarted 
