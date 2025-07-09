@@ -27,7 +27,7 @@
 ```bash
 # 克隆项目
 git clone <this-repo>
-cd 09-auto-install-mysql-innodb-cluster
+cd auto-install-mysql-innodb-cluster
 
 # 配置服务器信息
 vim inventory/hosts-with-dedicated-routers.yml
