@@ -76,14 +76,10 @@ innodb_io_capacity_max = 4000
 innodb_flush_method = O_DIRECT
 innodb_file_per_table = ON
 innodb_flush_log_at_trx_commit = 1
-innodb_log_file_size = 2G
-innodb_log_files_in_group = 2
-innodb_undo_logs = 128
-innodb_undo_tablespaces = 3
+innodb_redo_log_capacity = 4G
+# innodb_log_files_in_group 已由 MySQL 8.0.30+ 自动管理
 
-# 查询缓存配置
-query_cache_type = 0                   # 禁用查询缓存
-query_cache_size = 0
+# 查询缓存在 MySQL 8.0 中已移除，无需配置
 
 # 慢查询日志
 slow_query_log = ON
@@ -95,7 +91,7 @@ log-bin = mysql-bin
 binlog_cache_size = 2M
 max_binlog_cache_size = 1G
 max_binlog_size = 1G
-expire_logs_days = 7
+binlog_expire_logs_seconds = 604800
 
 # Group Replication配置
 loose-group_replication_group_name = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
@@ -179,7 +175,7 @@ innodb_purge_threads = 8
 # InnoDB配置 - 高性能优化
 innodb_io_capacity = 4000
 innodb_io_capacity_max = 8000
-innodb_log_file_size = 4G
+innodb_redo_log_capacity = 8G
 ```
 
 #### Router服务器配置
