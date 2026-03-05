@@ -146,7 +146,7 @@ mysql_router_4c8g_config:
 mysql_hardware_profile: "optimized_8c32g"
 max_connections: 4000                   # 安全的连接数
 innodb_buffer_pool_size: "20G"        # 为连接预留12GB内存
-innodb_log_file_size: "3G"            # 日志文件适当增大
+innodb_redo_log_capacity: "6G"       # MySQL 8.0.30+ 推荐总Redo容量
 
 # Router配置优化
 router_threads: 6                       # 4核×1.5倍线程

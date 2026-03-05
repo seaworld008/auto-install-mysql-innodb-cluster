@@ -62,6 +62,32 @@ sudo ./scripts/optimize_mysql_kernel_stable.sh --verify-only
 ./scripts/config_manager.sh --switch 8c32g-optimized
 ```
 
+
+## 🧱 高可用拓扑（Router + HAProxy）
+
+当前仓库已支持并默认按最小高可用拓扑检查：
+
+- MySQL: 3 节点
+- MySQL Router: 2 节点（可扩至3）
+- HAProxy: 2 节点（可扩至3）
+
+推荐参考清单：
+- 参考Inventory：`inventory/hosts-ha-reference.yml`
+- 部署蓝图（中文）：`docs/DEPLOYMENT_HA_BLUEPRINT_ZH.md`
+- 一键HA部署脚本：`scripts/deploy-ha-stack.sh`
+
+- VIP高可用（Keepalived）: `playbooks/install-keepalived.yml`
+- Router扩容脚本: `scripts/scale-router.sh`
+- HAProxy扩容脚本: `scripts/scale-haproxy.sh`
+- 一键健康检查: `scripts/health-check-ha.sh`
+- 发布清单: `docs/RELEASE_CHECKLIST_ZH.md`
+
+快速执行：
+
+```bash
+./scripts/deploy-ha-stack.sh inventory/hosts-ha-reference.yml
+```
+
 ## 📋 硬件要求
 
 ### MySQL 服务器 (3台)

@@ -1,0 +1,40 @@
+---
+- name: HA 预检查（拓扑与最小高可用节点）
+  hosts: localhost
+  gather_facts: false
+  vars:
+    mysql_nodes_count: "{{ groups['mysql_cluster'] | default([]) | length }}"
+    router_nodes_count: "{{ groups['mysql_router'] | default([]) | length }}"
+    haproxy_nodes_count: "{{ groups['haproxy_lb'] | default([]) | length }}"
+  tasks:
+    - name: 检查 MySQL InnoDB Cluster 最小 HA 节点数
+      assert:
+        that:
+          - mysql_nodes_count | int >= mysql_ha_min_nodes
+        fail_msg: "MySQL 集群节点数不足：当前 {{ mysql_nodes_count }}，最小高可用要求 {{ mysql_ha_min_nodes }}（建议3）"
+        success_msg: "MySQL 集群节点数满足高可用要求：{{ mysql_nodes_count }}"
+
+    - name: 检查 Router 最小 HA 节点数（启用时）
+      assert:
+        that:
+          - router_nodes_count | int >= router_ha_min_nodes
+        fail_msg: "MySQL Router 节点数不足：当前 {{ router_nodes_count }}，最小高可用要求 {{ router_ha_min_nodes }}"
+        success_msg: "MySQL Router 节点数满足高可用要求：{{ router_nodes_count }}"
+      when: router_ha_required | bool
+
+    - name: 检查 HAProxy 最小 HA 节点数（启用时）
+      assert:
+        that:
+          - haproxy_nodes_count | int >= haproxy_ha_min_nodes
+        fail_msg: "HAProxy 节点数不足：当前 {{ haproxy_nodes_count }}，最小高可用要求 {{ haproxy_ha_min_nodes }}"
+        success_msg: "HAProxy 节点数满足高可用要求：{{ haproxy_nodes_count }}"
+      when: haproxy_ha_required | bool
+
+    - name: 输出 HA 预检查总结
+      debug:
+        msg: |
+          HA 预检查通过。
+          - MySQL 节点: {{ mysql_nodes_count }}
+          - Router 节点: {{ router_nodes_count }}
+          - HAProxy 节点: {{ haproxy_nodes_count }}
+          - Router后端目标: {{ haproxy_backend_target }}

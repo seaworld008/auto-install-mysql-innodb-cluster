@@ -1,0 +1,53 @@
+---
+- name: 安装和配置 Keepalived（HAProxy VIP 漂移）
+  hosts: haproxy_lb
+  become: yes
+  gather_facts: yes
+  tasks:
+    - name: 安装 keepalived
+      yum:
+        name: keepalived
+        state: present
+
+    - name: 计算 keepalived 角色
+      set_fact:
+        keepalived_node_role: "{{ 'master' if (inventory_hostname == groups['haproxy_lb'][0]) else 'backup' }}"
+        keepalived_priority: "{{ hostvars[inventory_hostname].keepalived_priority | default(150 if inventory_hostname == groups['haproxy_lb'][0] else 100) }}"
+
+    - name: 渲染 keepalived 配置
+      template:
+        src: ../roles/keepalived/templates/keepalived.conf.j2
+        dest: /etc/keepalived/keepalived.conf
+        owner: root
+        group: root
+        mode: '0644'
+      notify: restart keepalived
+
+    - name: 开放 VRRP 协议（协议112）
+      firewalld:
+        rich_rule: 'rule protocol value="vrrp" accept'
+        permanent: yes
+        state: enabled
+        immediate: yes
+      ignore_errors: yes
+
+    - name: 启动并启用 keepalived
+      systemd:
+        name: keepalived
+        state: started
+        enabled: yes
+
+    - name: 输出 Keepalived 配置摘要
+      debug:
+        msg: |
+          Keepalived 已配置：
+          - 节点: {{ inventory_hostname }}
+          - 角色: {{ keepalived_node_role }}
+          - 优先级: {{ keepalived_priority }}
+          - VIP: {{ keepalived_vip }}/{{ keepalived_vip_cidr }}
+
+  handlers:
+    - name: restart keepalived
+      systemd:
+        name: keepalived
+        state: restarted

@@ -2,6 +2,9 @@
 mysql_version: "8.0.42"
 mysql_major_version: "8.0"
 
+# 默认字符集排序规则（兼容历史应用，可按需改为 utf8mb4_0900_ai_ci）
+mysql_collation_server: "utf8mb4_general_ci"
+
 # MySQL用户和密码配置
 mysql_root_password: "MyS3cur3P@ssw0rd!"
 mysql_cluster_user: "clusteradmin"
@@ -14,6 +17,8 @@ mysql_cluster_name: "prodCluster"
 mysql_group_replication_group_name: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
 
 # MySQL端口配置
+mysql_group_replication_ip_allowlist: "127.0.0.1/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+
 mysql_port: 3306
 mysql_admin_port: 33062
 mysql_group_replication_port: 33061
@@ -31,16 +36,14 @@ mysql_config_profiles:
   optimized_8c32g:  # 8核32G优化配置
     # InnoDB缓冲池 - 占用20G内存，为连接预留空间
     innodb_buffer_pool_size: "20G"
-    # InnoDB日志文件大小 - 缓冲池的15%
-    innodb_log_file_size: "3G"
+    # InnoDB Redo日志容量（MySQL 8.0.30+推荐使用）
+    innodb_redo_log_capacity: "6G"
     # 连接数配置 - 4000连接，内存安全
     max_connections: 4000
     # 线程缓存 - CPU核心数的4倍
     thread_cache_size: 32
     # 表缓存 - 适配4K连接
     table_open_cache: 8000
-    # 查询缓存大小
-    query_cache_size: "256M"
     # 排序缓冲区
     sort_buffer_size: "2M"
     # 读缓冲区
@@ -67,11 +70,10 @@ mysql_config_profiles:
     
 # 当前配置（根据硬件配置文件选择）
 mysql_innodb_buffer_pool_size: "{{ mysql_config_profiles[mysql_hardware_profile].innodb_buffer_pool_size }}"
-mysql_innodb_log_file_size: "{{ mysql_config_profiles[mysql_hardware_profile].innodb_log_file_size }}"
+mysql_innodb_redo_log_capacity: "{{ mysql_config_profiles[mysql_hardware_profile].innodb_redo_log_capacity }}"
 mysql_max_connections: "{{ mysql_config_profiles[mysql_hardware_profile].max_connections }}"
 mysql_thread_cache_size: "{{ mysql_config_profiles[mysql_hardware_profile].thread_cache_size }}"
 mysql_table_open_cache: "{{ mysql_config_profiles[mysql_hardware_profile].table_open_cache }}"
-mysql_query_cache_size: "{{ mysql_config_profiles[mysql_hardware_profile].query_cache_size }}"
 mysql_sort_buffer_size: "{{ mysql_config_profiles[mysql_hardware_profile].sort_buffer_size }}"
 mysql_read_buffer_size: "{{ mysql_config_profiles[mysql_hardware_profile].read_buffer_size }}"
 mysql_read_rnd_buffer_size: "{{ mysql_config_profiles[mysql_hardware_profile].read_rnd_buffer_size }}"
@@ -95,8 +97,39 @@ firewall_ports:
   - "{{ mysql_admin_port }}/tcp"
   - "{{ mysql_group_replication_port }}/tcp"
 
+# 高可用最小节点要求（默认按生产最佳实践）
+mysql_ha_min_nodes: 3
+router_ha_required: true
+router_ha_min_nodes: 2
+haproxy_ha_required: true
+haproxy_ha_min_nodes: 2
+
+# HAProxy 配置（默认接入 Router 层；如无 Router 可改为 mysql）
+haproxy_backend_target: "router"   # 可选: router, mysql
+haproxy_bind_address: "0.0.0.0"
+haproxy_balance_algorithm: "leastconn"
+haproxy_health_check_interval_ms: 2000
+haproxy_mysql_rw_port: 3307
+haproxy_mysql_ro_port: 3308
+haproxy_stats_port: 8404
+haproxy_stats_uri: "/stats"
+haproxy_global_maxconn: 100000
+haproxy_timeout_connect: "10s"
+haproxy_timeout_client: "1m"
+haproxy_timeout_server: "1m"
+haproxy_retries: 3
+
+# Keepalived VIP 配置（HAProxy 高可用漂移）
+keepalived_enabled: true
+keepalived_interface: "eth0"
+keepalived_virtual_router_id: 51
+keepalived_auth_pass: "MySQLHApass"
+keepalived_vip: "192.168.1.100"
+keepalived_vip_cidr: 24
+
 # MySQL Router配置 - 针对4核8G优化
 mysql_router_port: 6446
+mysql_router_ro_port: 6447
 mysql_router_admin_port: 8443
 
 # 4核8G Router优化配置

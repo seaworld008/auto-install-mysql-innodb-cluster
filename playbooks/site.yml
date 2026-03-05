@@ -7,9 +7,12 @@
       debug:
         msg: "开始安装MySQL InnoDB Cluster..."
 
+- import_playbook: preflight-ha.yml
 - import_playbook: install-mysql.yml
 - import_playbook: configure-cluster.yml
 - import_playbook: install-router.yml
+- import_playbook: install-haproxy.yml
+- import_playbook: install-keepalived.yml
 
 - name: MySQL InnoDB Cluster 安装完成
   hosts: localhost

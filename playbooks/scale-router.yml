@@ -1,0 +1,9 @@
+---
+- name: 扩容/重配 MySQL Router 节点
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - debug:
+        msg: "将对 --limit 指定的 mysql_router 节点执行 Router 安装/引导"
+
+- import_playbook: install-router.yml
