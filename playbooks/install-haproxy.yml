@@ -1,0 +1,59 @@
+---
+- name: 安装和配置 HAProxy（MySQL 入口负载均衡）
+  hosts: haproxy_lb
+  become: yes
+  gather_facts: yes
+  tasks:
+    - name: 安装 HAProxy
+      yum:
+        name: haproxy
+        state: present
+
+    - name: 渲染 HAProxy 配置
+      template:
+        src: ../roles/haproxy/templates/haproxy.cfg.j2
+        dest: /etc/haproxy/haproxy.cfg
+        owner: root
+        group: root
+        mode: '0644'
+      notify: restart haproxy
+
+    - name: 开放 HAProxy 端口
+      firewalld:
+        port: "{{ item }}/tcp"
+        permanent: yes
+        state: enabled
+        immediate: yes
+      loop:
+        - "{{ haproxy_mysql_rw_port }}"
+        - "{{ haproxy_mysql_ro_port }}"
+        - "{{ haproxy_stats_port }}"
+      ignore_errors: yes
+
+    - name: 启动并设置开机自启
+      systemd:
+        name: haproxy
+        state: started
+        enabled: yes
+
+    - name: 等待 HAProxy 监听读写端口
+      wait_for:
+        host: "{{ ansible_default_ipv4.address }}"
+        port: "{{ haproxy_mysql_rw_port }}"
+        timeout: 60
+
+    - name: 输出部署结果
+      debug:
+        msg: |
+          HAProxy 部署完成：
+          - 节点: {{ inventory_hostname }} ({{ ansible_default_ipv4.address }})
+          - RW: {{ haproxy_mysql_rw_port }}
+          - RO: {{ haproxy_mysql_ro_port }}
+          - Stats: http://{{ ansible_default_ipv4.address }}:{{ haproxy_stats_port }}{{ haproxy_stats_uri }}
+          - 后端目标: {{ haproxy_backend_target }}
+
+  handlers:
+    - name: restart haproxy
+      systemd:
+        name: haproxy
+        state: restarted

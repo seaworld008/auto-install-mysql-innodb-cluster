@@ -1,0 +1,60 @@
+global
+    log /dev/log local0
+    log /dev/log local1 notice
+    daemon
+    maxconn {{ haproxy_global_maxconn }}
+
+
+defaults
+    log     global
+    mode    tcp
+    option  tcplog
+    timeout connect {{ haproxy_timeout_connect }}
+    timeout client  {{ haproxy_timeout_client }}
+    timeout server  {{ haproxy_timeout_server }}
+    retries {{ haproxy_retries }}
+
+frontend mysql_rw
+    bind {{ haproxy_bind_address }}:{{ haproxy_mysql_rw_port }}
+    default_backend {{ 'mysql_router_rw_backend' if haproxy_backend_target == 'router' else 'mysql_rw_backend' }}
+
+frontend mysql_ro
+    bind {{ haproxy_bind_address }}:{{ haproxy_mysql_ro_port }}
+    default_backend {{ 'mysql_router_ro_backend' if haproxy_backend_target == 'router' else 'mysql_ro_backend' }}
+
+{% if haproxy_backend_target == 'router' %}
+backend mysql_router_rw_backend
+    balance {{ haproxy_balance_algorithm }}
+    option tcp-check
+{% for host in groups['mysql_router'] %}
+    server {{ host }} {{ hostvars[host]['ansible_host'] | default(hostvars[host]['ansible_default_ipv4']['address']) }}:{{ mysql_router_port }} check inter {{ haproxy_health_check_interval_ms }} rise 2 fall 3
+{% endfor %}
+
+backend mysql_router_ro_backend
+    balance {{ haproxy_balance_algorithm }}
+    option tcp-check
+{% for host in groups['mysql_router'] %}
+    server {{ host }} {{ hostvars[host]['ansible_host'] | default(hostvars[host]['ansible_default_ipv4']['address']) }}:{{ mysql_router_ro_port }} check inter {{ haproxy_health_check_interval_ms }} rise 2 fall 3
+{% endfor %}
+{% else %}
+backend mysql_rw_backend
+    balance {{ haproxy_balance_algorithm }}
+    option tcp-check
+{% for host in groups['mysql_primary'] %}
+    server {{ host }} {{ hostvars[host]['ansible_host'] | default(hostvars[host]['ansible_default_ipv4']['address']) }}:{{ mysql_port }} check inter {{ haproxy_health_check_interval_ms }} rise 2 fall 3
+{% endfor %}
+
+backend mysql_ro_backend
+    balance {{ haproxy_balance_algorithm }}
+    option tcp-check
+{% for host in groups['mysql_secondary'] %}
+    server {{ host }} {{ hostvars[host]['ansible_host'] | default(hostvars[host]['ansible_default_ipv4']['address']) }}:{{ mysql_port }} check inter {{ haproxy_health_check_interval_ms }} rise 2 fall 3
+{% endfor %}
+{% endif %}
+
+listen stats
+    bind {{ haproxy_bind_address }}:{{ haproxy_stats_port }}
+    mode http
+    stats enable
+    stats uri {{ haproxy_stats_uri }}
+    stats refresh 10s

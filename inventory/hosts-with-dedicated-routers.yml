@@ -59,6 +59,21 @@ all:
           router_memory_gb: 8
           router_disk_type: "SSD"
 
+    haproxy_lb:
+      hosts:
+        haproxy-1:
+          ansible_host: 192.168.1.30
+          ansible_port: 22
+          ansible_user: root
+          ansible_ssh_pass: "haproxy_password_1"
+          keepalived_priority: 150
+        haproxy-2:
+          ansible_host: 192.168.1.31
+          ansible_port: 22
+          ansible_user: root
+          ansible_ssh_pass: "haproxy_password_2"
+          keepalived_priority: 100
+
   vars:
     # 全局SSH配置
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'

@@ -97,8 +97,39 @@ firewall_ports:
   - "{{ mysql_admin_port }}/tcp"
   - "{{ mysql_group_replication_port }}/tcp"
 
+# 高可用最小节点要求（默认按生产最佳实践）
+mysql_ha_min_nodes: 3
+router_ha_required: true
+router_ha_min_nodes: 2
+haproxy_ha_required: true
+haproxy_ha_min_nodes: 2
+
+# HAProxy 配置（默认接入 Router 层；如无 Router 可改为 mysql）
+haproxy_backend_target: "router"   # 可选: router, mysql
+haproxy_bind_address: "0.0.0.0"
+haproxy_balance_algorithm: "leastconn"
+haproxy_health_check_interval_ms: 2000
+haproxy_mysql_rw_port: 3307
+haproxy_mysql_ro_port: 3308
+haproxy_stats_port: 8404
+haproxy_stats_uri: "/stats"
+haproxy_global_maxconn: 100000
+haproxy_timeout_connect: "10s"
+haproxy_timeout_client: "1m"
+haproxy_timeout_server: "1m"
+haproxy_retries: 3
+
+# Keepalived VIP 配置（HAProxy 高可用漂移）
+keepalived_enabled: true
+keepalived_interface: "eth0"
+keepalived_virtual_router_id: 51
+keepalived_auth_pass: "MySQLHApass"
+keepalived_vip: "192.168.1.100"
+keepalived_vip_cidr: 24
+
 # MySQL Router配置 - 针对4核8G优化
 mysql_router_port: 6446
+mysql_router_ro_port: 6447
 mysql_router_admin_port: 8443
 
 # 4核8G Router优化配置

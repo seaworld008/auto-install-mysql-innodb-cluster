@@ -1,0 +1,60 @@
+# 生产级高可用参考拓扑（中文）
+# - MySQL InnoDB Cluster: 3 节点（最小 HA）
+# - MySQL Router: 2 节点（最小 HA，可扩到3）
+# - HAProxy: 2 节点（最小 HA，可扩到3）
+
+all:
+  children:
+    mysql_cluster:
+      children:
+        mysql_primary:
+          hosts:
+            mysql-node1:
+              ansible_host: 192.168.1.10
+              ansible_user: root
+              ansible_ssh_pass: "your_password_1"
+              mysql_server_id: 1
+        mysql_secondary:
+          hosts:
+            mysql-node2:
+              ansible_host: 192.168.1.11
+              ansible_user: root
+              ansible_ssh_pass: "your_password_2"
+              mysql_server_id: 2
+            mysql-node3:
+              ansible_host: 192.168.1.12
+              ansible_user: root
+              ansible_ssh_pass: "your_password_3"
+              mysql_server_id: 3
+
+    mysql_router:
+      hosts:
+        router-1:
+          ansible_host: 192.168.1.20
+          ansible_user: root
+          ansible_ssh_pass: "router_password_1"
+        router-2:
+          ansible_host: 192.168.1.21
+          ansible_user: root
+          ansible_ssh_pass: "router_password_2"
+        # router-3:
+        #   ansible_host: 192.168.1.22
+
+    haproxy_lb:
+      hosts:
+        haproxy-1:
+          ansible_host: 192.168.1.30
+          ansible_user: root
+          ansible_ssh_pass: "haproxy_password_1"
+          keepalived_priority: 150
+        haproxy-2:
+          ansible_host: 192.168.1.31
+          ansible_user: root
+          ansible_ssh_pass: "haproxy_password_2"
+          keepalived_priority: 100
+        # haproxy-3:
+        #   ansible_host: 192.168.1.32
+
+  vars:
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+    ansible_python_interpreter: /usr/bin/python3

@@ -1,0 +1,11 @@
+---
+- name: 扩容/重配 HAProxy + Keepalived 节点
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: 提示执行扩容流程
+      debug:
+        msg: "将对指定 haproxy_lb 节点执行 install-haproxy + install-keepalived"
+
+- import_playbook: install-haproxy.yml
+- import_playbook: install-keepalived.yml

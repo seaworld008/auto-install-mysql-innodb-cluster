@@ -1,0 +1,33 @@
+name: ansible-ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install ansible-core
+          ansible-galaxy collection install community.general
+      - name: Syntax check
+        run: |
+          ansible-playbook -i inventory/hosts.yml playbooks/site.yml --syntax-check
+          ansible-playbook -i inventory/hosts-ha-reference.yml playbooks/site.yml --syntax-check
+      - name: Inventory validation
+        run: |
+          ansible-inventory -i inventory/hosts.yml --list >/tmp/inv1.json
+          python -m json.tool /tmp/inv1.json >/dev/null
+          ansible-inventory -i inventory/hosts-ha-reference.yml --list >/tmp/inv2.json
+          python -m json.tool /tmp/inv2.json >/dev/null
+      - name: Deprecated option guard
+        run: |
+          ! rg -n "innodb_log_file_size|query_cache|NO_AUTO_CREATE_USER|expire_logs_days|log_slave_updates|slave_parallel|slave_preserve" roles/mysql-server/templates/my.cnf.j2 inventory/group_vars examples/hardware_profiles.yml
