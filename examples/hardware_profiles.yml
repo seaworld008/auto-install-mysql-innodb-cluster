@@ -8,11 +8,13 @@ standard_config: &standard
   mysql_hardware_profile: "standard"
   
   # 主要配置参数
+  mysql_collation_server: "utf8mb4_general_ci"  # 稳妥兼容，按需切换到 utf8mb4_0900_ai_ci
   mysql_innodb_buffer_pool_size: "24G"      # 内存的75%
-  mysql_innodb_log_file_size: "2G"          # 缓冲池的8.3%
+  mysql_innodb_redo_log_capacity: "4G"     # MySQL 8.0.30+ 推荐总Redo容量
   mysql_max_connections: 2000               # 适中的连接数
   mysql_thread_cache_size: 16               # CPU核心数的2倍
   mysql_table_open_cache: 8000              # 表缓存
+  mysql_group_replication_ip_allowlist: "127.0.0.1/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
   
   # InnoDB 性能参数
   mysql_innodb_buffer_pool_instances: 8     # 每个实例3G
@@ -37,11 +39,13 @@ high_performance_config: &high_performance
   mysql_hardware_profile: "high_performance"
   
   # 主要配置参数
+  mysql_collation_server: "utf8mb4_general_ci"  # 稳妥兼容，按需切换到 utf8mb4_0900_ai_ci
   mysql_innodb_buffer_pool_size: "48G"      # 内存的75%
-  mysql_innodb_log_file_size: "4G"          # 缓冲池的8.3%
+  mysql_innodb_redo_log_capacity: "8G"     # MySQL 8.0.30+ 推荐总Redo容量
   mysql_max_connections: 4000               # 高并发连接数
   mysql_thread_cache_size: 64               # CPU核心数的2倍
   mysql_table_open_cache: 16000             # 表缓存
+  mysql_group_replication_ip_allowlist: "127.0.0.1/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
   
   # InnoDB 性能参数
   mysql_innodb_buffer_pool_instances: 16    # 每个实例3G

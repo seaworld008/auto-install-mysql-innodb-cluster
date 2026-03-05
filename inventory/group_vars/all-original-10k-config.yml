@@ -2,6 +2,9 @@
 mysql_version: "8.0.42"
 mysql_major_version: "8.0"
 
+# 默认字符集排序规则（兼容历史应用，可按需改为 utf8mb4_0900_ai_ci）
+mysql_collation_server: "utf8mb4_general_ci"
+
 # MySQL用户和密码配置
 mysql_root_password: "MyS3cur3P@ssw0rd!"
 mysql_cluster_user: "clusteradmin"
@@ -14,6 +17,8 @@ mysql_cluster_name: "prodCluster"
 mysql_group_replication_group_name: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
 
 # MySQL端口配置
+mysql_group_replication_ip_allowlist: "127.0.0.1/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+
 mysql_port: 3306
 mysql_admin_port: 33062
 mysql_group_replication_port: 33061
@@ -31,16 +36,14 @@ mysql_config_profiles:
   standard:  # 8核32G配置
     # InnoDB缓冲池 - 内存的75%
     innodb_buffer_pool_size: "24G"
-    # InnoDB日志文件大小 - 缓冲池的15%
-    innodb_log_file_size: "2G"
+    # InnoDB Redo日志容量（MySQL 8.0.30+推荐使用）
+    innodb_redo_log_capacity: "4G"
     # 连接数配置 - 提升到1万连接支持高并发
     max_connections: 10000
     # 线程缓存 - CPU核心数的4倍
     thread_cache_size: 32
     # 表缓存 - 增加以支持更多连接
     table_open_cache: 16000
-    # 查询缓存大小
-    query_cache_size: "512M"
     # 排序缓冲区
     sort_buffer_size: "2M"
     # 读缓冲区
@@ -63,16 +66,14 @@ mysql_config_profiles:
   high_performance:  # 32核64G配置
     # InnoDB缓冲池 - 内存的70-80%
     innodb_buffer_pool_size: "48G"
-    # InnoDB日志文件大小 - 缓冲池的25%
-    innodb_log_file_size: "4G"
+    # InnoDB Redo日志容量（MySQL 8.0.30+推荐使用）
+    innodb_redo_log_capacity: "8G"
     # 连接数配置 - 提升到1万连接支持高并发
     max_connections: 10000
     # 线程缓存 - CPU核心数的2倍
     thread_cache_size: 64
     # 表缓存 - 增加以支持更多连接
     table_open_cache: 20000
-    # 查询缓存大小
-    query_cache_size: "1G"
     # 排序缓冲区
     sort_buffer_size: "4M"
     # 读缓冲区
@@ -94,11 +95,10 @@ mysql_config_profiles:
 
 # 当前配置（根据硬件配置文件选择）
 mysql_innodb_buffer_pool_size: "{{ mysql_config_profiles[mysql_hardware_profile].innodb_buffer_pool_size }}"
-mysql_innodb_log_file_size: "{{ mysql_config_profiles[mysql_hardware_profile].innodb_log_file_size }}"
+mysql_innodb_redo_log_capacity: "{{ mysql_config_profiles[mysql_hardware_profile].innodb_redo_log_capacity }}"
 mysql_max_connections: "{{ mysql_config_profiles[mysql_hardware_profile].max_connections }}"
 mysql_thread_cache_size: "{{ mysql_config_profiles[mysql_hardware_profile].thread_cache_size }}"
 mysql_table_open_cache: "{{ mysql_config_profiles[mysql_hardware_profile].table_open_cache }}"
-mysql_query_cache_size: "{{ mysql_config_profiles[mysql_hardware_profile].query_cache_size }}"
 mysql_sort_buffer_size: "{{ mysql_config_profiles[mysql_hardware_profile].sort_buffer_size }}"
 mysql_read_buffer_size: "{{ mysql_config_profiles[mysql_hardware_profile].read_buffer_size }}"
 mysql_read_rnd_buffer_size: "{{ mysql_config_profiles[mysql_hardware_profile].read_rnd_buffer_size }}"
