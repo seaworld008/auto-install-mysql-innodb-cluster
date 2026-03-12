@@ -36,7 +36,6 @@
       yum:
         name: "/tmp/mysql80-community-release-{{ centos_release }}-1.noarch.rpm"
         state: present
-        disable_gpg_check: yes
       when: not mysql_repo_exists.stat.exists
 
     - name: 安装MySQL Router
