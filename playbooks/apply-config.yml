@@ -1,0 +1,20 @@
+---
+- name: 配置滚动应用说明
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - debug:
+        msg: |
+          将按当前主配置滚动应用配置到：
+          - mysql_cluster
+          - mysql_router
+          - haproxy_lb
+          
+          说明：
+          - MySQL / Router / HAProxy / Keepalived 都复用现有安装 playbook
+          - 运行时主配置仅来自 inventory/group_vars/all.yml
+
+- import_playbook: install-mysql.yml
+- import_playbook: install-router.yml
+- import_playbook: install-haproxy.yml
+- import_playbook: install-keepalived.yml

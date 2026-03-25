@@ -3,9 +3,10 @@
   hosts: haproxy_lb
   become: yes
   gather_facts: yes
+  serial: 1
   tasks:
     - name: 安装 keepalived
-      yum:
+      package:
         name: keepalived
         state: present
 
@@ -24,11 +25,12 @@
       notify: restart keepalived
 
     - name: 开放 VRRP 协议（协议112）
-      firewalld:
+      ansible.posix.firewalld:
         rich_rule: 'rule protocol value="vrrp" accept'
         permanent: yes
         state: enabled
         immediate: yes
+      when: ansible_service_mgr == 'systemd' and ansible_os_family == 'RedHat'
       ignore_errors: yes
 
     - name: 启动并启用 keepalived

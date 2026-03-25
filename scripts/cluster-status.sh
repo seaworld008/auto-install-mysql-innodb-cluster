@@ -3,10 +3,11 @@
 # MySQL InnoDB Cluster 状态检查脚本
 # 使用方法: ./cluster-status.sh [primary_host] [cluster_user] [cluster_password]
 
-PRIMARY_HOST=${1:-"192.168.1.10"}
-CLUSTER_USER=${2:-"clusteradmin"}
-CLUSTER_PASSWORD=${3:-"Clust3rP@ss!"}
-CLUSTER_NAME=${4:-"prodCluster"}
+PRIMARY_HOST="${1:-${MYSQL_PRIMARY_HOST:-192.168.1.10}}"
+CLUSTER_USER="${2:-${MYSQL_CLUSTER_USER:-clusteradmin}}"
+CLUSTER_PASSWORD="${3:-${MYSQL_CLUSTER_PASSWORD:-CHANGE_ME_CLUSTER_PASSWORD}}"
+CLUSTER_NAME="${4:-${MYSQL_CLUSTER_NAME:-prodCluster}}"
+MEMBER_HOSTS="${MYSQL_CLUSTER_MEMBERS:-$PRIMARY_HOST,192.168.1.11,192.168.1.12}"
 
 echo "=== MySQL InnoDB Cluster 状态检查 ==="
 echo "主节点: $PRIMARY_HOST"
@@ -31,7 +32,8 @@ mysqlsh --uri ${CLUSTER_USER}:${CLUSTER_PASSWORD}@${PRIMARY_HOST}:3306 \
 
 echo
 echo "4. 各节点连接测试:"
-for host in 192.168.1.10 192.168.1.11 192.168.1.12; do
+IFS=',' read -r -a CLUSTER_MEMBERS <<< "$MEMBER_HOSTS"
+for host in "${CLUSTER_MEMBERS[@]}"; do
     echo -n "测试 $host:3306 ... "
     if mysql -h $host -P 3306 -u ${CLUSTER_USER} -p${CLUSTER_PASSWORD} -e "SELECT 1" >/dev/null 2>&1; then
         echo "连接正常"
@@ -41,4 +43,4 @@ for host in 192.168.1.10 192.168.1.11 192.168.1.12; do
 done
 
 echo
-echo "=== 检查完成 ===" 
+echo "=== 检查完成 ==="

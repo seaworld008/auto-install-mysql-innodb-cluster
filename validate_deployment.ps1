@@ -134,6 +134,7 @@ Write-Info "1. 检查核心文件结构"
 Test-FileExists "deploy.sh" "主部署脚本"
 Test-FileExists "ansible.cfg" "Ansible配置文件"
 Test-FileExists "requirements.txt" "Python依赖文件"
+Test-FileExists "collections/requirements.yml" "Ansible Collection依赖文件"
 
 # 2. 检查目录结构
 Write-Info "2. 检查目录结构"
@@ -148,6 +149,12 @@ Test-FileExists "playbooks/site.yml" "主playbook文件"
 Test-FileExists "playbooks/install-mysql.yml" "MySQL安装playbook"
 Test-FileExists "playbooks/configure-cluster.yml" "集群配置playbook"
 Test-FileExists "playbooks/install-router.yml" "Router安装playbook"
+Test-FileExists "playbooks/scale-mysql.yml" "MySQL扩容playbook"
+Test-FileExists "playbooks/shrink-mysql.yml" "MySQL缩容playbook"
+Test-FileExists "playbooks/shrink-router.yml" "Router缩容playbook"
+Test-FileExists "playbooks/shrink-haproxy.yml" "HAProxy缩容playbook"
+Test-FileExists "playbooks/apply-config.yml" "配置滚动应用playbook"
+Test-FileExists "playbooks/backup.yml" "逻辑备份playbook"
 
 # 4. 检查inventory文件
 Write-Info "4. 检查Inventory配置文件"
@@ -159,10 +166,13 @@ Test-FileExists "inventory/group_vars/all.yml" "全局变量文件"
 # 5. 检查roles结构
 Write-Info "5. 检查Roles结构"
 Test-DirectoryExists "roles/mysql-server" "MySQL服务器角色"
-Test-DirectoryExists "roles/mysql-cluster" "MySQL集群角色"
+Test-DirectoryExists "roles/haproxy" "HAProxy角色"
+Test-DirectoryExists "roles/keepalived" "Keepalived角色"
 Test-DirectoryExists "roles/mysql-router" "MySQL Router角色"
 Test-FileExists "roles/mysql-server/templates/my.cnf.j2" "MySQL配置模板"
 Test-FileExists "roles/mysql-router/templates/mysqlrouter.service.j2" "Router服务模板"
+Test-FileExists "playbooks/templates/mysql-kernel-optimization-stable.conf.j2" "内核优化模板"
+Test-FileExists "playbooks/templates/optimization-report-stable.txt.j2" "优化报告模板"
 
 # 6. 检查脚本文件
 Write-Info "6. 检查脚本文件"
@@ -170,6 +180,14 @@ Test-FileExists "scripts/cluster-status.sh" "集群状态检查脚本"
 Test-FileExists "scripts/setup-servers.sh" "服务器设置脚本"
 Test-FileExists "scripts/failover-test.sh" "故障转移测试脚本"
 Test-FileExists "scripts/config_manager.sh" "配置管理脚本"
+Test-FileExists "scripts/deploy_dedicated_routers.sh" "生产部署入口脚本"
+Test-FileExists "scripts/health-check-ha.sh" "HA健康检查脚本"
+Test-FileExists "scripts/scale-mysql.sh" "MySQL扩容脚本"
+Test-FileExists "scripts/shrink-mysql.sh" "MySQL缩容脚本"
+Test-FileExists "scripts/shrink-router.sh" "Router缩容脚本"
+Test-FileExists "scripts/shrink-haproxy.sh" "HAProxy缩容脚本"
+Test-FileExists "scripts/apply-config.sh" "配置应用脚本"
+Test-FileExists "scripts/backup.sh" "备份脚本"
 
 # 7. 检查YAML语法
 Write-Info "7. 检查YAML文件语法"
@@ -279,7 +297,7 @@ foreach ($doc in $docFiles) {
 
 # 14. 检查配置文件一致性
 Write-Info "14. 检查配置文件一致性"
-$configFiles = @("inventory/group_vars/all.yml", "inventory/group_vars/all-8c32g-optimized.yml")
+$configFiles = @("inventory/group_vars/all.yml")
 
 foreach ($config in $configFiles) {
     if (Test-Path $config) {
@@ -292,6 +310,19 @@ foreach ($config in $configFiles) {
             Write-Warning "集群名称一致性: $config 使用了不同的集群名称"
         }
     }
+}
+
+$script:TotalChecks++
+try {
+    $yaml = Get-Content "inventory/group_vars/all.yml" -Raw
+    $profileLine = ($yaml -split "`n") | Where-Object { $_ -match "^mysql_hardware_profile:" } | Select-Object -First 1
+    if ($profileLine) {
+        Write-Success "Profile一致性: mysql_hardware_profile 已定义"
+    } else {
+        Write-Error "Profile一致性: mysql_hardware_profile 未定义"
+    }
+} catch {
+    Write-Error "Profile一致性: 无法读取 all.yml"
 }
 
 # 15. 检查模板文件
@@ -360,4 +391,4 @@ if ($script:FailedChecks -eq 0) {
     Write-Host "`n❌ 项目验证失败，有 $script:FailedChecks 个严重问题需要修复" -ForegroundColor Red
     Write-Host "请修复所有失败项目后再进行部署"
     exit 2
-} 
+}

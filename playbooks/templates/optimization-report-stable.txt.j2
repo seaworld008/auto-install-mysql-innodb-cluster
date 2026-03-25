@@ -1,0 +1,35 @@
+MySQL 数据库服务器内核优化报告 - 行业最佳实践版本
+====================================================================
+生成时间: {{ ansible_date_time.iso8601 }}
+服务器: {{ inventory_hostname }}
+操作系统: {{ ansible_distribution }} {{ ansible_distribution_version }}
+内核版本: {{ ansible_kernel }}
+系统规格: {{ cpu_cores }}核 {{ total_memory_gb }}GB
+脚本版本: {{ script_version }}
+优化级别: {{ optimization_level }}
+
+关键参数
+--------------------------------------------------------------------
+连接队列: {{ mysql_kernel_params_stable['net.core.somaxconn'] }}
+文件描述符: {{ mysql_kernel_params_stable['fs.file-max'] }}
+swappiness: {{ mysql_kernel_params_stable['vm.swappiness'] }}
+脏页比例: {{ mysql_kernel_params_stable['vm.dirty_ratio'] }}
+TCP 拥塞控制: {{ mysql_kernel_params_stable['net.ipv4.tcp_congestion_control'] }}
+
+透明大页
+--------------------------------------------------------------------
+{{ thp_status.stdout | default('N/A') }}
+
+磁盘调度器
+--------------------------------------------------------------------
+{{ scheduler_status.stdout | default('N/A') }}
+
+配置文件
+--------------------------------------------------------------------
+/etc/sysctl.d/99-mysql-stable-optimization.conf
+/etc/systemd/system/disable-thp-stable.service
+/etc/systemd/system/optimize-io-stable.service
+
+备份目录
+--------------------------------------------------------------------
+{{ backup_dir }}

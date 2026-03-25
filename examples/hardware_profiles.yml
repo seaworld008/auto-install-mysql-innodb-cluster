@@ -1,144 +1,24 @@
-# MySQL 硬件配置示例文件
-# 用于快速切换不同的硬件配置
+# 硬件 profile 示例
+# 当前仓库运行时只认 inventory/group_vars/all.yml 中的 mysql_config_profiles
+# 这里仅给出 profile 选择与容量说明示例，不再维护独立运行配置
 
-# ===========================================
-# 标准配置 (8核32G) - 日常使用
-# ===========================================
-standard_config: &standard
-  mysql_hardware_profile: "standard"
-  
-  # 主要配置参数
-  mysql_collation_server: "utf8mb4_general_ci"  # 稳妥兼容，按需切换到 utf8mb4_0900_ai_ci
-  mysql_innodb_buffer_pool_size: "24G"      # 内存的75%
-  mysql_innodb_redo_log_capacity: "4G"     # MySQL 8.0.30+ 推荐总Redo容量
-  mysql_max_connections: 2000               # 适中的连接数
-  mysql_thread_cache_size: 16               # CPU核心数的2倍
-  mysql_table_open_cache: 8000              # 表缓存
-  mysql_group_replication_ip_allowlist: "127.0.0.1/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
-  
-  # InnoDB 性能参数
-  mysql_innodb_buffer_pool_instances: 8     # 每个实例3G
-  mysql_innodb_io_capacity: 2000            # 标准SSD性能
-  mysql_innodb_io_capacity_max: 4000        # 最大I/O能力
-  mysql_innodb_read_io_threads: 8           # 读线程数
-  mysql_innodb_write_io_threads: 8          # 写线程数
-  mysql_innodb_thread_concurrency: 16       # 并发线程数
-  
-  # 缓冲区配置
-  mysql_sort_buffer_size: "2M"              # 排序缓冲区
-  mysql_read_buffer_size: "1M"              # 读缓冲区
-  mysql_read_rnd_buffer_size: "2M"          # 随机读缓冲区
-  mysql_bulk_insert_buffer_size: "64M"      # 批量插入缓冲区
-  mysql_tmp_table_size: "512M"              # 临时表大小
-  mysql_max_heap_table_size: "512M"         # 内存表大小
+profiles:
+  optimized_8c32g:
+    mysql_hardware_profile: "optimized_8c32g"
+    mysql_max_connections: 2500
+    mysql_innodb_buffer_pool_size: "18G"
+    suitable_for: "8核32G生产默认"
 
-# ===========================================
-# 高性能配置 (32核64G) - 业务高峰期
-# ===========================================
-high_performance_config: &high_performance
-  mysql_hardware_profile: "high_performance"
-  
-  # 主要配置参数
-  mysql_collation_server: "utf8mb4_general_ci"  # 稳妥兼容，按需切换到 utf8mb4_0900_ai_ci
-  mysql_innodb_buffer_pool_size: "48G"      # 内存的75%
-  mysql_innodb_redo_log_capacity: "8G"     # MySQL 8.0.30+ 推荐总Redo容量
-  mysql_max_connections: 4000               # 高并发连接数
-  mysql_thread_cache_size: 64               # CPU核心数的2倍
-  mysql_table_open_cache: 16000             # 表缓存
-  mysql_group_replication_ip_allowlist: "127.0.0.1/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
-  
-  # InnoDB 性能参数
-  mysql_innodb_buffer_pool_instances: 16    # 每个实例3G
-  mysql_innodb_io_capacity: 4000            # 高性能SSD
-  mysql_innodb_io_capacity_max: 8000        # 最大I/O能力
-  mysql_innodb_read_io_threads: 16          # 读线程数
-  mysql_innodb_write_io_threads: 16         # 写线程数
-  mysql_innodb_thread_concurrency: 32       # 并发线程数
-  
-  # 缓冲区配置
-  mysql_sort_buffer_size: "4M"              # 排序缓冲区
-  mysql_read_buffer_size: "2M"              # 读缓冲区
-  mysql_read_rnd_buffer_size: "4M"          # 随机读缓冲区
-  mysql_bulk_insert_buffer_size: "128M"     # 批量插入缓冲区
-  mysql_tmp_table_size: "1G"                # 临时表大小
-  mysql_max_heap_table_size: "1G"           # 内存表大小
+  original_10k:
+    mysql_hardware_profile: "original_10k"
+    mysql_max_connections: 10000
+    mysql_innodb_buffer_pool_size: "24G"
+    suitable_for: "历史高连接场景，仅在明确容量评估后使用"
 
-# ===========================================
-# 使用示例
-# ===========================================
-
-# 示例1: 使用标准配置部署
-deploy_standard:
-  hosts: mysql_cluster
-  vars:
-    <<: *standard
-  tasks:
-    - name: 部署MySQL集群 - 标准配置
-      include_role:
-        name: mysql-server
-
-# 示例2: 使用高性能配置部署
-deploy_high_performance:
-  hosts: mysql_cluster
-  vars:
-    <<: *high_performance
-  tasks:
-    - name: 部署MySQL集群 - 高性能配置
-      include_role:
-        name: mysql-server
-
-# ===========================================
-# 快速切换命令示例
-# ===========================================
-
-# 1. 检查当前配置
-# ansible mysql_cluster -m debug -a "var=mysql_hardware_profile"
-
-# 2. 升级到高性能配置
-# ansible-playbook -i inventory/hosts.yml playbooks/deploy.yml --extra-vars "mysql_hardware_profile=high_performance" --tags "mysql-config"
-
-# 3. 回滚到标准配置
-# ansible-playbook -i inventory/hosts.yml playbooks/deploy.yml --extra-vars "mysql_hardware_profile=standard" --tags "mysql-config"
-
-# 4. 使用升级脚本（推荐）
-# ./scripts/upgrade_hardware_profile.sh --profile high_performance mysql-node1
-
-# ===========================================
-# 性能对比预期
-# ===========================================
-
-performance_comparison:
-  standard_8c32g:
-    concurrent_connections: "1500-2000"
-    queries_per_second: "15000-25000"
-    buffer_pool_hit_rate: ">99%"
-    avg_query_time: "1-5ms"
-    suitable_for: "日常业务负载"
-    
-  high_performance_32c64g:
-    concurrent_connections: "3000-4000"
-    queries_per_second: "50000-80000"
-    buffer_pool_hit_rate: ">99.5%"
-    avg_query_time: "0.5-2ms"
-    suitable_for: "高峰期业务负载"
-
-# ===========================================
-# 监控告警阈值
-# ===========================================
-
-monitoring_thresholds:
-  standard:
-    cpu_warning: 70
-    cpu_critical: 85
-    memory_warning: 80
-    memory_critical: 90
-    connections_warning: 1400  # 70% of max_connections
-    connections_critical: 1800 # 90% of max_connections
-    
-  high_performance:
-    cpu_warning: 75
-    cpu_critical: 90
-    memory_warning: 85
-    memory_critical: 95
-    connections_warning: 2800  # 70% of max_connections
-    connections_critical: 3600 # 90% of max_connections 
+usage_examples:
+  switch_profile:
+    command: "./scripts/config_manager.sh --switch optimized_8c32g"
+  apply_profile:
+    command: "./scripts/deploy_dedicated_routers.sh --apply-config -i inventory/hosts-with-dedicated-routers.yml"
+  backup:
+    command: "./scripts/deploy_dedicated_routers.sh --backup -i inventory/hosts-with-dedicated-routers.yml"

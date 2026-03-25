@@ -5,8 +5,8 @@
 ## 🎯 项目特色
 
 ✅ **基于行业最佳实践** - Oracle MySQL、Percona、MariaDB官方推荐  
-✅ **智能连接管理** - 前端60K连接，后端12K连接，5:1高效复用  
-✅ **内存安全配置** - 4000连接/MySQL节点，100%内存利用，无超载风险  
+✅ **智能连接管理** - 前端60K连接，后端7.5K连接，保守复用比设计
+✅ **生产安全余量** - 默认 2500 连接/MySQL 节点，预留 2-4GB 峰值缓冲
 ✅ **生产级高可用** - 自动故障转移，99.9%+可用性  
 ✅ **稳定内核优化** - 动态参数调整，保守且通用的企业级配置  
 ✅ **一键部署** - Ansible自动化，企业级运维体验
@@ -15,10 +15,10 @@
 
 | 组件 | 规格 | 连接数 | 内存使用 | 优化策略 |
 |------|------|--------|----------|----------|
-| **MySQL集群** | 3×8核32G | 4000/节点 | 32GB/台 | ✅ 内存安全 |
+| **MySQL集群** | 3×8核32G | 2500/节点 | 保留安全余量 | ✅ 生产默认 |
 | **Router集群** | 2×4核8G | 30000/台 | 6GB/台 | ✅ 高效路由 |
 | **内核优化** | 全服务器 | 动态调整 | 平衡配置 | ✅ **行业最佳实践** |
-| **总体能力** | 5台服务器 | 60K前端+12K后端 | - | ✅ 企业级 |
+| **总体能力** | 5台服务器 | 60K前端+7.5K后端 | - | ✅ 企业级 |
 
 ## 🚀 快速开始
 
@@ -62,6 +62,11 @@ sudo ./scripts/optimize_mysql_kernel_stable.sh --verify-only
 ./scripts/config_manager.sh --switch 8c32g-optimized
 ```
 
+说明:
+- `inventory/group_vars/all.yml` 是当前唯一生效的主配置文件。
+- `config_manager.sh` 现在只切换 `mysql_hardware_profile`，不再整文件覆盖主配置。
+- `all-8c32g-optimized.yml`、`all-original-10k-config.yml` 保留为历史快照参考，不是运行时真相源。
+
 
 ## 🧱 高可用拓扑（Router + HAProxy）
 
@@ -95,14 +100,14 @@ sudo ./scripts/optimize_mysql_kernel_stable.sh --verify-only
 - **内存**: 32GB
 - **存储**: SSD推荐
 - **网络**: 千兆内网
-- **内核**: CentOS 8+ / RHEL 8+
+- **系统**: Ubuntu 22.04 / 24.04 / 25.10，或 RHEL/Rocky/Alma 8/9/10
 
 ### MySQL Router 服务器 (2台)  
 - **CPU**: 4核
 - **内存**: 8GB
 - **存储**: 100GB
 - **网络**: 千兆内网
-- **内核**: CentOS 8+ / RHEL 8+
+- **系统**: Ubuntu 22.04 / 24.04 / 25.10，或 RHEL/Rocky/Alma 8/9/10
 
 ## 🔧 配置选项
 
@@ -110,16 +115,14 @@ sudo ./scripts/optimize_mysql_kernel_stable.sh --verify-only
 
 | 配置名称 | 适用硬件 | MySQL连接 | 说明 |
 |----------|----------|-----------|------|
-| **8c32g-optimized** | **8C32G+4C8G** | **4000/节点** | **默认推荐配置** |
+| **8c32g-optimized** | **8C32G+4C8G** | **2500/节点** | **默认推荐配置（生产余量版）** |
 | original-10k | 32C64G+4C8G | 10000/节点 | 高内存需求配置 |
-| standard | 4C16G | 1000/节点 | 小规模部署 |
-| high-performance | 32C64G | 10000/节点 | 峰期升级配置 |
 
 ### 配置切换
 
 ```bash
-# 当前是8C32G配置，如果要升级到32C64G硬件
-./scripts/config_manager.sh --switch high-performance
+# 当前是8C32G配置，如需切换到历史高连接配置
+./scripts/config_manager.sh --switch original-10k
 
 # 备份当前配置
 ./scripts/config_manager.sh --backup
@@ -220,10 +223,10 @@ ansible-playbook -i inventory/hosts-with-dedicated-routers.yml playbooks/kernel-
 
 ```
 前端连接: 60000 (2台Router × 30000)
-后端连接: 12000 (3台MySQL × 4000)  
-连接复用: 5:1 (高效复用，降低数据库压力)
+后端连接: 7500 (3台MySQL × 2500)
+连接复用: 8:1 左右（保守后端容量设计）
 响应时间: <10ms (内网环境)
-吞吐量: 200K QPS (读多写少场景)
+吞吐量: 100K-150K QPS (读多写少场景)
 ```
 
 ### 内核优化效果 - 基于行业最佳实践
@@ -242,10 +245,10 @@ ansible-playbook -i inventory/hosts-with-dedicated-routers.yml playbooks/kernel-
 
 ```
 MySQL单台内存分配:
-├── InnoDB Buffer Pool: 20GB (62.5%)
-├── 连接内存: 8GB (4000×2MB)
-├── 系统内存: 4GB (12.5%)
-└── 总计: 32GB (100%充分利用)
+├── InnoDB Buffer Pool: 18GB
+├── 连接与会话内存: 4-6GB
+├── 系统与页缓存: 6GB+
+└── 安全余量: 2-4GB
 
 Router单台内存分配:
 ├── 基础内存: 1.5GB
@@ -303,6 +306,31 @@ curl http://192.168.1.100:8404/stats
 sudo ./scripts/optimize_mysql_kernel_stable.sh --verify-only
 ```
 
+### 扩容、缩容、配置升级与备份
+
+```bash
+# MySQL 扩容（目标主机需先加入 inventory）
+./scripts/deploy_dedicated_routers.sh --scale-mysql-add --limit mysql-node4 -i inventory/hosts-with-dedicated-routers.yml
+
+# MySQL 缩容（缩容当前主节点时需指定新主节点）
+./scripts/deploy_dedicated_routers.sh --scale-mysql-remove --target mysql-node3 --new-primary mysql-node2 -i inventory/hosts-with-dedicated-routers.yml
+
+# Router / HAProxy 缩容（执行后请把目标主机从 inventory 中移除）
+./scripts/deploy_dedicated_routers.sh --shrink-router --limit mysql-router-2 -i inventory/hosts-with-dedicated-routers.yml
+./scripts/deploy_dedicated_routers.sh --shrink-lb --limit haproxy-2 -i inventory/hosts-with-dedicated-routers.yml
+
+# 按当前主配置滚动应用到现有节点
+./scripts/deploy_dedicated_routers.sh --apply-config -i inventory/hosts-with-dedicated-routers.yml
+
+# 可选逻辑备份（默认关闭，需先在 all.yml 中启用 backup_config.enabled=true）
+./scripts/deploy_dedicated_routers.sh --backup -i inventory/hosts-with-dedicated-routers.yml
+```
+
+备份目标支持：
+- 本地目录
+- 挂载目录（NFS）
+- SSH + rsync 到远端目录
+
 ### 内核优化管理
 
 ```bash
@@ -345,14 +373,14 @@ sudo ./scripts/optimize_mysql_kernel_stable.sh --verify-only
 当业务增长，需要升级到32核64G时：
 
 ```bash
-# 切换到高性能配置
-./scripts/config_manager.sh --switch high-performance
+# 切换到历史高连接配置
+./scripts/config_manager.sh --switch original-10k
 
-# 应用新配置
-ansible-playbook -i inventory/hosts-with-dedicated-routers.yml playbooks/site.yml
+# 滚动应用新配置
+./scripts/deploy_dedicated_routers.sh --apply-config -i inventory/hosts-with-dedicated-routers.yml
 
-# 使用滚动升级脚本
-./scripts/upgrade_hardware_profile.sh --profile high_performance
+# 或使用统一升级脚本
+./scripts/upgrade_hardware_profile.sh --profile original-10k --apply
 ```
 
 ## 🎉 部署完成
@@ -368,7 +396,8 @@ ansible-playbook -i inventory/hosts-with-dedicated-routers.yml playbooks/site.ym
 
 ### 连接信息
 
-- **应用连接**: `192.168.1.100:6446` (读写) / `192.168.1.100:6447` (只读)
+- **HAProxy VIP（推荐应用入口）**: `192.168.1.100:3307` (读写) / `192.168.1.100:3308` (只读)
+- **直连 Router**: `router-ip:6446` (读写) / `router-ip:6447` (只读)
 - **监控页面**: http://192.168.1.100:8404/stats
 - **配置管理**: `./scripts/config_manager.sh --help`
 - **稳定内核优化**: `sudo ./scripts/optimize_mysql_kernel_stable.sh --help`

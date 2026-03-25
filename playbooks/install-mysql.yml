@@ -3,21 +3,55 @@
   hosts: mysql_cluster
   become: yes
   gather_facts: yes
-  
+  serial: "{{ scale_policy.rolling_apply_batch_size | default(1) }}"
+  vars:
+    mysql_service_name: "{{ 'mysqld' if ansible_os_family == 'RedHat' else 'mysql' }}"
+    mysql_config_file: "{{ '/etc/my.cnf' if ansible_os_family == 'RedHat' else '/etc/mysql/mysql.conf.d/zz-innodb-cluster.cnf' }}"
+    mysql_socket_path: "{{ mysql_datadir }}/mysql.sock"
+    mysql_error_log_path: "{{ '/var/log/mysqld.log' if ansible_os_family == 'RedHat' else '/var/log/mysql/error.log' }}"
+    mysql_common_packages_redhat:
+      - wget
+      - curl
+      - libaio
+      - numactl
+      - python3
+      - python3-pip
+    mysql_common_packages_debian:
+      - wget
+      - curl
+      - libaio1
+      - numactl
+      - gnupg
+      - python3
+      - python3-pip
+    mysql_server_packages_redhat:
+      - mysql-community-server
+      - mysql-community-client
+      - mysql-shell
+    mysql_server_packages_debian:
+      - mysql-server
+      - mysql-shell
   tasks:
-    - name: 检测系统架构和版本
-      set_fact:
-        mysql_arch: "{{ mysql_architecture_map[ansible_architecture] | default('x86_64') }}"
-        centos_version: "{{ ansible_distribution_major_version }}"
-        centos_release: "{{ centos_version_map[ansible_distribution_major_version] | default('el7') }}"
+    - name: 验证目标操作系统受支持
+      assert:
+        that:
+          - >
+            (ansible_os_family == 'RedHat' and ansible_distribution_major_version in mysql_supported_redhat_major_versions)
+            or
+            (ansible_distribution == 'Ubuntu' and ansible_distribution_release in mysql_supported_ubuntu_releases)
+            or
+            (ansible_distribution == 'Debian' and ansible_distribution_release in mysql_supported_debian_releases)
+        fail_msg: "当前系统 {{ ansible_distribution }} {{ ansible_distribution_version }} 不在已验证矩阵中。当前仓库已验证 Ubuntu 22.04/24.04/25.10 与 RedHat 家族 8/9/10。"
+        success_msg: "目标操作系统在已验证矩阵内"
 
     - name: 显示系统信息
       debug:
         msg: |
           主机: {{ inventory_hostname }}
           系统: {{ ansible_distribution }} {{ ansible_distribution_version }}
-          架构: {{ ansible_architecture }} -> {{ mysql_arch }}
-          CentOS版本: {{ centos_release }}
+          架构: {{ ansible_architecture }}
+          服务名: {{ mysql_service_name }}
+          配置文件: {{ mysql_config_file }}
 
     - name: 停止并禁用MariaDB服务（如果存在）
       systemd:
@@ -26,61 +60,121 @@
         enabled: no
       ignore_errors: yes
 
-    - name: 卸载MariaDB相关包
-      yum:
+    - name: 卸载MariaDB相关包（RedHat）
+      package:
         name:
           - mariadb
           - mariadb-server
           - mariadb-libs
         state: absent
+      when: ansible_os_family == 'RedHat'
       ignore_errors: yes
 
-    - name: 安装必要的系统包
-      yum:
+    - name: 卸载MariaDB相关包（Debian）
+      apt:
         name:
-          - wget
-          - curl
-          - libaio
-          - numactl
-          - net-tools
-          - python3
-          - python3-pip
+          - mariadb-server
+          - mariadb-client
+          - mariadb-common
+        state: absent
+        purge: yes
+        autoremove: yes
+      when: ansible_os_family == 'Debian'
+      ignore_errors: yes
+
+    - name: 安装必要的系统包（RedHat）
+      package:
+        name: "{{ mysql_common_packages_redhat }}"
         state: present
+      when: ansible_os_family == 'RedHat'
+
+    - name: 安装必要的系统包（Debian）
+      apt:
+        name: "{{ mysql_common_packages_debian }}"
+        state: present
+        update_cache: yes
+      when: ansible_os_family == 'Debian'
 
     - name: 安装PyMySQL模块
       pip:
         name: PyMySQL
         state: present
 
-    - name: 下载MySQL官方YUM仓库
-      get_url:
-        url: "https://dev.mysql.com/get/mysql80-community-release-{{ centos_release }}-1.noarch.rpm"
-        dest: "/tmp/mysql80-community-release-{{ centos_release }}-1.noarch.rpm"
-        mode: '0644'
-
-    - name: 安装MySQL YUM仓库
-      yum:
-        name: "/tmp/mysql80-community-release-{{ centos_release }}-1.noarch.rpm"
-        state: present
-        disable_gpg_check: yes
-
-    - name: 禁用MySQL 5.7仓库，启用MySQL 8.0仓库
-      ini_file:
-        path: /etc/yum.repos.d/mysql-community.repo
-        section: "{{ item.section }}"
-        option: enabled
-        value: "{{ item.enabled }}"
+    - name: 配置 MySQL YUM 仓库（RedHat）
+      yum_repository:
+        name: "{{ item.name }}"
+        description: "{{ item.description }}"
+        baseurl: "{{ item.baseurl }}"
+        enabled: yes
+        gpgcheck: yes
+        repo_gpgcheck: no
+        gpgkey: "{{ mysql_repo_gpg_keys | join('\n') }}"
       loop:
-        - { section: "mysql57-community", enabled: "0" }
-        - { section: "mysql80-community", enabled: "1" }
+        - name: mysql-84-lts-community
+          description: MySQL {{ mysql_repo_series }} Server
+          baseurl: "https://repo.mysql.com/yum/mysql-8.4-community/el/{{ ansible_distribution_major_version }}/$basearch/"
+        - name: mysql-tools-84-lts-community
+          description: MySQL {{ mysql_repo_series }} Tools
+          baseurl: "https://repo.mysql.com/yum/mysql-tools-8.4-community/el/{{ ansible_distribution_major_version }}/$basearch/"
+      when: ansible_os_family == 'RedHat'
 
-    - name: 安装MySQL服务器和客户端
-      yum:
-        name:
-          - mysql-community-server
-          - mysql-community-client
-          - mysql-shell
+    - name: 禁用 RedHat 系统自带 MySQL 模块
+      command: "dnf -y module disable mysql"
+      when: ansible_os_family == 'RedHat'
+      register: dnf_module_disable
+      changed_when: "'Nothing to do.' not in (dnf_module_disable.stdout | default(''))"
+      failed_when: false
+
+    - name: 下载 MySQL APT 仓库密钥
+      get_url:
+        url: "{{ mysql_repo_gpg_keys[-1] }}"
+        dest: /tmp/mysql.gpg
+        mode: '0644'
+      when: ansible_os_family == 'Debian'
+
+    - name: 安装 MySQL APT keyring
+      shell: |
+        set -euo pipefail
+        gpg --dearmor --yes --output /usr/share/keyrings/mysql.gpg /tmp/mysql.gpg
+      args:
+        creates: /usr/share/keyrings/mysql.gpg
+      when: ansible_os_family == 'Debian'
+
+    - name: 配置 MySQL APT 仓库
+      copy:
+        dest: /etc/apt/sources.list.d/mysql.list
+        mode: '0644'
+        content: |
+          deb [signed-by=/usr/share/keyrings/mysql.gpg] http://repo.mysql.com/apt/{{ ansible_distribution | lower }} {{ ansible_distribution_release }} mysql-8.4-lts mysql-tools
+      when: ansible_os_family == 'Debian'
+
+    - name: 更新 APT 缓存
+      apt:
+        update_cache: yes
+      when: ansible_os_family == 'Debian'
+
+    - name: 安装 MySQL 服务端组件（RedHat）
+      package:
+        name: "{{ mysql_server_packages_redhat }}"
         state: present
+      when: ansible_os_family == 'RedHat'
+
+    - name: 安装 MySQL 服务端组件（Debian/Ubuntu）
+      apt:
+        name: "{{ mysql_server_packages_debian }}"
+        state: present
+        update_cache: no
+      environment:
+        DEBIAN_FRONTEND: noninteractive
+      when: ansible_os_family == 'Debian'
+
+    - name: 创建 MySQL 运行目录
+      file:
+        path: /var/run/mysqld
+        state: directory
+        owner: "{{ mysql_user }}"
+        group: "{{ mysql_group }}"
+        mode: '0755'
 
     - name: 创建MySQL日志目录
       file:
@@ -98,10 +192,52 @@
         group: "{{ mysql_group }}"
         mode: '0750'
 
+    - name: 确保 Debian MySQL 配置目录存在
+      file:
+        path: /etc/mysql/mysql.conf.d
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+      when: ansible_os_family == 'Debian'
+
+    - name: 检查 AppArmor MySQL 配置文件（Debian/Ubuntu）
+      stat:
+        path: /etc/apparmor.d/usr.sbin.mysqld
+      register: mysql_apparmor_profile
+      when: ansible_os_family == 'Debian'
+
+    - name: 确保 AppArmor local 目录存在（Debian/Ubuntu）
+      file:
+        path: /etc/apparmor.d/local
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+      when:
+        - ansible_os_family == 'Debian'
+        - mysql_apparmor_profile.stat.exists | default(false)
+
+    - name: 配置 AppArmor 允许自定义 datadir（Debian/Ubuntu）
+      copy:
+        dest: /etc/apparmor.d/local/usr.sbin.mysqld
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          {{ mysql_datadir }}/ r,
+          {{ mysql_datadir }}/** rwk,
+          {{ mysql_logdir }}/ r,
+          {{ mysql_logdir }}/** rw,
+      notify: reload apparmor
+      when:
+        - ansible_os_family == 'Debian'
+        - mysql_apparmor_profile.stat.exists | default(false)
+
     - name: 配置MySQL配置文件
       template:
         src: ../roles/mysql-server/templates/my.cnf.j2
-        dest: /etc/my.cnf
+        dest: "{{ mysql_config_file }}"
         owner: root
         group: root
         mode: '0644'
@@ -110,36 +246,59 @@
 
     - name: 启动并启用MySQL服务
       systemd:
-        name: mysqld
+        name: "{{ mysql_service_name }}"
         state: started
         enabled: yes
 
-    - name: 获取MySQL临时root密码
-      shell: grep 'temporary password' /var/log/mysqld.log | awk '{print $NF}' | tail -1
+    - name: 等待 MySQL 服务可用
+      wait_for:
+        port: "{{ mysql_port }}"
+        host: "{{ ansible_default_ipv4.address }}"
+        delay: 5
+        timeout: 180
+
+    - name: 获取 MySQL 临时 root 密码（RedHat）
+      shell: grep 'temporary password' {{ mysql_error_log_path }} | awk '{print $NF}' | tail -1
       register: mysql_temp_password
       changed_when: false
+      failed_when: false
+      when: ansible_os_family == 'RedHat'
 
-    - name: 设置MySQL root密码
+    - name: 设置 MySQL root 密码（RedHat 临时密码流程）
       shell: |
         mysql -u root -p'{{ mysql_temp_password.stdout }}' --connect-expired-password -e "
         ALTER USER 'root'@'localhost' IDENTIFIED BY '{{ mysql_root_password }}';
         FLUSH PRIVILEGES;"
-      when: mysql_temp_password.stdout != ""
-      ignore_errors: yes
+      when:
+        - ansible_os_family == 'RedHat'
+        - mysql_temp_password.stdout | length > 0
 
-    - name: 配置防火墙规则
-      firewalld:
+    - name: 设置 MySQL root 密码（Debian/Ubuntu socket 流程）
+      community.mysql.mysql_user:
+        check_implicit_admin: true
+        login_unix_socket: "{{ mysql_socket_path }}"
+        name: root
+        host: localhost
+        password: "{{ mysql_root_password }}"
+        state: present
+      when: ansible_os_family == 'Debian'
+
+    - name: 配置防火墙规则（firewalld 可用时）
+      ansible.posix.firewalld:
         port: "{{ item }}"
         permanent: yes
         state: enabled
         immediate: yes
       loop: "{{ firewall_ports }}"
+      when: ansible_service_mgr == 'systemd' and ansible_os_family == 'RedHat'
       ignore_errors: yes
 
     - name: 创建集群管理用户
-      mysql_user:
+      community.mysql.mysql_user:
         login_user: root
         login_password: "{{ mysql_root_password }}"
+        login_unix_socket: "{{ mysql_socket_path if ansible_os_family == 'Debian' else omit }}"
+        check_implicit_admin: "{{ true if ansible_os_family == 'Debian' else omit }}"
         name: "{{ mysql_cluster_user }}"
         password: "{{ mysql_cluster_password }}"
         host: "%"
@@ -147,9 +306,11 @@
         state: present
 
     - name: 创建复制用户
-      mysql_user:
+      community.mysql.mysql_user:
         login_user: root
         login_password: "{{ mysql_root_password }}"
+        login_unix_socket: "{{ mysql_socket_path if ansible_os_family == 'Debian' else omit }}"
+        check_implicit_admin: "{{ true if ansible_os_family == 'Debian' else omit }}"
         name: "{{ mysql_replication_user }}"
         password: "{{ mysql_replication_password }}"
         host: "%"
@@ -159,5 +320,10 @@
   handlers:
     - name: restart mysql
       systemd:
-        name: mysqld
-        state: restarted 
+        name: "{{ mysql_service_name }}"
+        state: restarted
+
+    - name: reload apparmor
+      systemd:
+        name: apparmor
+        state: reloaded

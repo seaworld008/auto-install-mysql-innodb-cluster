@@ -4,6 +4,8 @@
   become: yes
   gather_facts: yes
   serial: 1
+  vars:
+    mysql_service_name: "{{ 'mysqld' if ansible_os_family == 'RedHat' else 'mysql' }}"
   
   tasks:
     - name: 等待MySQL服务完全启动
@@ -23,16 +25,22 @@
       until: mysql_ready.rc == 0
       ignore_errors: yes
 
+    - name: 预检查实例配置是否满足 InnoDB Cluster 要求
+      shell: |
+        mysqlsh --uri {{ mysql_cluster_user }}:{{ mysql_cluster_password }}@{{ ansible_default_ipv4.address }}:{{ mysql_port }} \
+        -e "dba.checkInstanceConfiguration('{{ mysql_cluster_user }}:{{ mysql_cluster_password }}@{{ ansible_default_ipv4.address }}:{{ mysql_port }}')"
+      register: check_instance_config
+      changed_when: false
+
     - name: 配置实例用于InnoDB Cluster
       shell: |
         mysqlsh --uri {{ mysql_cluster_user }}:{{ mysql_cluster_password }}@{{ ansible_default_ipv4.address }}:{{ mysql_port }} \
         -e "dba.configureInstance('{{ mysql_cluster_user }}:{{ mysql_cluster_password }}@{{ ansible_default_ipv4.address }}:{{ mysql_port }}', {clusterAdmin: '{{ mysql_cluster_user }}', clusterAdminPassword: '{{ mysql_cluster_password }}', restart: true})"
       register: configure_result
-      ignore_errors: yes
 
     - name: 重启MySQL服务以应用集群配置
       systemd:
-        name: mysqld
+        name: "{{ mysql_service_name }}"
         state: restarted
       when: configure_result.rc == 0
 
@@ -87,7 +95,7 @@
     - name: 将节点加入集群
       shell: |
         mysqlsh --uri {{ mysql_cluster_user }}:{{ mysql_cluster_password }}@{{ hostvars[groups['mysql_primary'][0]]['ansible_default_ipv4']['address'] }}:{{ mysql_port }} \
-        -e "var cluster = dba.getCluster('{{ mysql_cluster_name }}'); cluster.addInstance('{{ mysql_cluster_user }}:{{ mysql_cluster_password }}@{{ ansible_default_ipv4.address }}:{{ mysql_port }}', {recoveryMethod: 'clone'})"
+        -e "var cluster = dba.getCluster('{{ mysql_cluster_name }}'); cluster.addInstance('{{ mysql_cluster_user }}:{{ mysql_cluster_password }}@{{ ansible_default_ipv4.address }}:{{ mysql_port }}', {recoveryMethod: '{{ mysql_cluster_recovery_method }}'})"
       delegate_to: "{{ groups['mysql_primary'][0] }}"
       when: "ansible_default_ipv4.address not in cluster_status.stdout"
       register: add_instance_result
@@ -137,4 +145,4 @@
           
           管理命令示例:
           - 查看集群状态: mysqlsh --uri {{ mysql_cluster_user }}@{{ ansible_default_ipv4.address }} -e "dba.getCluster('{{ mysql_cluster_name }}').status()"
-          - 检查集群拓扑: mysqlsh --uri {{ mysql_cluster_user }}@{{ ansible_default_ipv4.address }} -e "dba.getCluster('{{ mysql_cluster_name }}').describe()" 
+          - 检查集群拓扑: mysqlsh --uri {{ mysql_cluster_user }}@{{ ansible_default_ipv4.address }} -e "dba.getCluster('{{ mysql_cluster_name }}').describe()"

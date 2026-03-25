@@ -6,13 +6,76 @@
     mysql_nodes_count: "{{ groups['mysql_cluster'] | default([]) | length }}"
     router_nodes_count: "{{ groups['mysql_router'] | default([]) | length }}"
     haproxy_nodes_count: "{{ groups['haproxy_lb'] | default([]) | length }}"
+    mysql_password_placeholders:
+      - ""
+      - "CHANGE_ME_ROOT_PASSWORD"
+      - "CHANGE_ME_CLUSTER_PASSWORD"
+      - "CHANGE_ME_REPLICATION_PASSWORD"
+      - "your_password"
+      - "your_password_1"
+      - "your_password_2"
+      - "your_password_3"
+      - "router_password_1"
+      - "router_password_2"
+      - "haproxy_password_1"
+      - "haproxy_password_2"
   tasks:
+    - name: 检查 MySQL 业务密码是否已配置
+      assert:
+        that:
+          - mysql_root_password is defined
+          - mysql_cluster_password is defined
+          - mysql_replication_password is defined
+          - (mysql_root_password | string | trim) not in mysql_password_placeholders
+          - (mysql_cluster_password | string | trim) not in mysql_password_placeholders
+          - (mysql_replication_password | string | trim) not in mysql_password_placeholders
+        fail_msg: "MySQL 密码未正确配置。允许明文，但不能留空，也不能使用 CHANGE_ME/your_password 这类占位值。"
+        success_msg: "MySQL 密码已配置（支持明文）"
+
+    - name: 检查 Inventory 中 SSH 密码是否仍为示例值
+      assert:
+        that:
+          - (hostvars[item].ansible_ssh_pass | default(hostvars[item].ansible_password | default('')) | string | trim) not in mysql_password_placeholders
+        fail_msg: "主机 {{ item }} 的 SSH 密码仍是示例值或空值，请先在 inventory 中改成真实密码。"
+        success_msg: "主机 {{ item }} 的 SSH 密码已配置"
+      loop: "{{ groups['all'] | default([]) }}"
+      when:
+        - hostvars[item].ansible_ssh_pass is defined or hostvars[item].ansible_password is defined
+
     - name: 检查 MySQL InnoDB Cluster 最小 HA 节点数
       assert:
         that:
           - mysql_nodes_count | int >= mysql_ha_min_nodes
         fail_msg: "MySQL 集群节点数不足：当前 {{ mysql_nodes_count }}，最小高可用要求 {{ mysql_ha_min_nodes }}（建议3）"
         success_msg: "MySQL 集群节点数满足高可用要求：{{ mysql_nodes_count }}"
+
+    - name: 检查每台 MySQL 主机都定义了 server_id
+      assert:
+        that:
+          - hostvars[item].mysql_server_id is defined
+          - hostvars[item].mysql_server_id | int > 0
+        fail_msg: "主机 {{ item }} 缺少合法的 mysql_server_id。"
+        success_msg: "主机 {{ item }} 的 mysql_server_id 合法"
+      loop: "{{ groups['mysql_cluster'] | default([]) }}"
+
+    - name: 检查 MySQL server_id 唯一性
+      assert:
+        that:
+          - (groups['mysql_cluster'] | default([]) | map('extract', hostvars, 'mysql_server_id') | list | length)
+            ==
+            (groups['mysql_cluster'] | default([]) | map('extract', hostvars, 'mysql_server_id') | list | unique | length)
+        fail_msg: "mysql_server_id 存在重复或非法值，请确保 mysql_cluster 中每台主机都有唯一且大于0的 server_id。"
+        success_msg: "MySQL server_id 配置唯一"
+
+    - name: 检查备份配置（启用时）
+      assert:
+        that:
+          - backup_config.base_dir | length > 0
+          - backup_config.type in ['local', 'nfs', 'rsync']
+          - (backup_config.type != 'rsync') or (backup_config.remote_host | length > 0 and backup_config.remote_dir | length > 0)
+        fail_msg: "备份配置不完整。启用备份时请检查 backup_config.type/base_dir/remote_host/remote_dir。"
+        success_msg: "备份配置检查通过"
+      when: backup_config.enabled | bool
 
     - name: 检查 Router 最小 HA 节点数（启用时）
       assert:
@@ -38,3 +101,15 @@
           - Router 节点: {{ router_nodes_count }}
           - HAProxy 节点: {{ haproxy_nodes_count }}
           - Router后端目标: {{ haproxy_backend_target }}
+
+- name: Keepalived 运行环境校验
+  hosts: haproxy_lb
+  gather_facts: true
+  become: yes
+  tasks:
+    - name: 检查 Keepalived 网卡名是否存在
+      assert:
+        that:
+          - keepalived_interface in ansible_interfaces
+        fail_msg: "主机 {{ inventory_hostname }} 上未找到 Keepalived 网卡 {{ keepalived_interface }}，请改成真实网卡名。"
+        success_msg: "主机 {{ inventory_hostname }} 的 Keepalived 网卡存在"

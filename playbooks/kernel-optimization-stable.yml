@@ -96,7 +96,7 @@
       "net.ipv4.tcp_sack": 1
       
       # 内存管理优化 - MySQL官方最佳实践
-      "vm.swappiness": 1
+      "vm.swappiness": 0
       "vm.dirty_ratio": 10
       "vm.dirty_background_ratio": 3
       "vm.dirty_expire_centisecs": 3000
@@ -262,7 +262,7 @@
 
     # 系统资源限制优化
     - name: 更新系统资源限制
-      pam_limits:
+      community.general.pam_limits:
         domain: "{{ item.domain }}"
         limit_type: "{{ item.type }}"
         limit_item: "{{ item.item }}"
@@ -502,4 +502,4 @@
         daemon_reload: yes
 
     - name: 应用sysctl参数
-      shell: sysctl -p /etc/sysctl.d/99-mysql-stable-optimization.conf 
+      shell: sysctl -p /etc/sysctl.d/99-mysql-stable-optimization.conf

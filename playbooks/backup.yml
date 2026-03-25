@@ -1,0 +1,102 @@
+---
+- name: 备份配置预检查
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: 检查是否启用备份
+      assert:
+        that:
+          - backup_config.enabled | bool
+        fail_msg: "备份功能默认关闭。请先在 all.yml 中将 backup_config.enabled 设置为 true。"
+        success_msg: "备份功能已启用"
+
+    - name: 检查备份类型是否合法
+      assert:
+        that:
+          - backup_config.type in ['local', 'nfs', 'rsync']
+          - backup_config.base_dir | length > 0
+        fail_msg: "backup_config.type 仅支持 local/nfs/rsync，且必须配置 base_dir。"
+        success_msg: "备份类型配置通过"
+
+    - name: 检查 rsync 远端参数
+      assert:
+        that:
+          - backup_config.remote_host | length > 0
+          - backup_config.remote_dir | length > 0
+        fail_msg: "启用 rsync 备份时，必须配置 remote_host 和 remote_dir。"
+        success_msg: "rsync 远端参数配置通过"
+      when: backup_config.type == 'rsync'
+
+- name: 在备份执行节点上运行逻辑备份
+  hosts: "{{ backup_config.run_on_host_group }}"
+  gather_facts: true
+  become: yes
+  vars:
+    backup_timestamp: "{{ ansible_date_time.date }}-{{ ansible_date_time.time | replace(':', '') }}"
+    backup_run_root: "{{ backup_config.base_dir }}/{{ mysql_cluster_name }}/{{ backup_timestamp }}/{{ inventory_hostname }}"
+    backup_manifest_path: "{{ backup_run_root }}/manifest.txt"
+  tasks:
+    - name: 安装备份依赖
+      package:
+        name:
+          - rsync
+        state: present
+      when: backup_config.type == 'rsync'
+
+    - name: 创建备份目录
+      file:
+        path: "{{ backup_run_root }}"
+        state: directory
+        mode: '0750'
+
+    - name: 执行逻辑备份（mysqlsh util.dumpInstance）
+      shell: |
+        mysqlsh --uri {{ mysql_cluster_user }}:{{ mysql_cluster_password }}@127.0.0.1:{{ mysql_port }} --js <<'EOF'
+        util.dumpInstance("{{ backup_run_root | replace('\\', '\\\\') }}", {
+          threads: {{ backup_config.threads }},
+          consistent: {{ 'true' if backup_config.consistent else 'false' }},
+          showProgress: false
+        })
+        EOF
+      args:
+        executable: /bin/bash
+      register: backup_dump_result
+
+    - name: 生成备份清单
+      copy:
+        dest: "{{ backup_manifest_path }}"
+        mode: '0640'
+        content: |
+          cluster_name={{ mysql_cluster_name }}
+          backup_type={{ backup_config.type }}
+          host={{ inventory_hostname }}
+          mysql_port={{ mysql_port }}
+          backup_dir={{ backup_run_root }}
+          timestamp={{ backup_timestamp }}
+          tool={{ backup_config.logical_tool }}
+      when: backup_config.create_manifest | bool
+
+    - name: 同步备份到远端目录（rsync）
+      shell: |
+        export RSYNC_RSH="ssh{% if backup_config.ssh_key_path | length > 0 %} -i {{ backup_config.ssh_key_path }}{% endif %} -o StrictHostKeyChecking=no"
+        ssh {% if backup_config.ssh_key_path | length > 0 %}-i {{ backup_config.ssh_key_path }} {% endif %}-o StrictHostKeyChecking=no {{ backup_config.remote_user }}@{{ backup_config.remote_host }} "mkdir -p {{ backup_config.remote_dir }}/{{ mysql_cluster_name }}/{{ backup_timestamp }}/{{ inventory_hostname }}/"
+        rsync {{ backup_config.rsync_opts }} "{{ backup_run_root }}/" "{{ backup_config.remote_user }}@{{ backup_config.remote_host }}:{{ backup_config.remote_dir }}/{{ mysql_cluster_name }}/{{ backup_timestamp }}/{{ inventory_hostname }}/"
+      args:
+        executable: /bin/bash
+      when: backup_config.type == 'rsync'
+
+    - name: 删除过期备份（local/nfs）
+      shell: |
+        find "{{ backup_config.base_dir }}/{{ mysql_cluster_name }}" -mindepth 1 -maxdepth 1 -type d -mtime +{{ backup_config.retention_days }} -exec rm -rf {} +
+      args:
+        executable: /bin/bash
+      when: backup_config.type in ['local', 'nfs']
+      failed_when: false
+
+    - name: 显示备份结果
+      debug:
+        msg: |
+          备份完成：
+          - 节点: {{ inventory_hostname }}
+          - 类型: {{ backup_config.type }}
+          - 目录: {{ backup_run_root }}

@@ -1,0 +1,26 @@
+---
+- name: Router 节点缩容说明
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - debug:
+        msg: |
+          将对 --limit 指定的 mysql_router 节点执行：
+          1. 停止并禁用 mysqlrouter
+          2. 保留数据目录供人工确认
+          3. 完成后请从 inventory 的 mysql_router 组移除该主机
+
+- name: Router 节点缩容执行
+  hosts: mysql_router
+  gather_facts: true
+  become: yes
+  tasks:
+    - name: 停止 Router 服务
+      systemd:
+        name: mysqlrouter
+        state: stopped
+        enabled: no
+
+    - name: 输出缩容提示
+      debug:
+        msg: "Router 节点 {{ inventory_hostname }} 已停服，请从 inventory 中移除后再执行健康检查。"

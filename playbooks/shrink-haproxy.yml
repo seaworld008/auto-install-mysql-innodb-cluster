@@ -1,0 +1,33 @@
+---
+- name: HAProxy/Keepalived 节点缩容说明
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - debug:
+        msg: |
+          将对 --limit 指定的 haproxy_lb 节点执行：
+          1. 停止并禁用 keepalived
+          2. 停止并禁用 haproxy
+          3. 完成后请从 inventory 的 haproxy_lb 组移除该主机
+
+- name: HAProxy/Keepalived 节点缩容执行
+  hosts: haproxy_lb
+  gather_facts: true
+  become: yes
+  tasks:
+    - name: 停止 Keepalived
+      systemd:
+        name: keepalived
+        state: stopped
+        enabled: no
+      failed_when: false
+
+    - name: 停止 HAProxy
+      systemd:
+        name: haproxy
+        state: stopped
+        enabled: no
+
+    - name: 输出缩容提示
+      debug:
+        msg: "HAProxy 节点 {{ inventory_hostname }} 已停服，请从 inventory 中移除后再执行健康检查。"

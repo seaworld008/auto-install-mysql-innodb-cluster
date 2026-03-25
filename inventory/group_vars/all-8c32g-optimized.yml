@@ -1,3 +1,7 @@
+# 历史快照：8c32g profile 的旧独立副本
+# 当前运行时主配置请以 inventory/group_vars/all.yml 为准。
+# 本文件仅作为历史参考，不建议直接复制覆盖 all.yml。
+
 # MySQL版本和下载配置
 mysql_version: "8.0.42"
 mysql_major_version: "8.0"
@@ -15,6 +19,7 @@ mysql_replication_password: "R3pl1c@t0r!"
 # MySQL集群配置
 mysql_cluster_name: "prodCluster"
 mysql_group_replication_group_name: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+mysql_cluster_recovery_method: "clone"
 
 # MySQL端口配置
 mysql_group_replication_ip_allowlist: "127.0.0.1/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
@@ -34,39 +39,41 @@ mysql_hardware_profile: "optimized_8c32g"
 # MySQL配置参数 - 专为8核32G内存优化
 mysql_config_profiles:
   optimized_8c32g:  # 8核32G优化配置
-    # InnoDB缓冲池 - 占用20G内存，为连接预留空间
-    innodb_buffer_pool_size: "20G"
+    # InnoDB缓冲池 - 生产默认保留更多OS与峰值余量
+    innodb_buffer_pool_size: "18G"
     # InnoDB Redo日志容量（MySQL 8.0.30+推荐使用）
     innodb_redo_log_capacity: "6G"
-    # 连接数配置 - 4000连接，内存安全
-    max_connections: 4000
-    # 线程缓存 - CPU核心数的4倍
-    thread_cache_size: 32
-    # 表缓存 - 适配4K连接
-    table_open_cache: 8000
+    # 连接数配置 - 生产默认收敛到更安全的并发上限
+    max_connections: 2500
+    thread_cache_size: 64
+    table_open_cache: 4000
     # 排序缓冲区
-    sort_buffer_size: "2M"
+    sort_buffer_size: "512K"
     # 读缓冲区
-    read_buffer_size: "1M"
+    read_buffer_size: "256K"
     # 随机读缓冲区
-    read_rnd_buffer_size: "2M"
+    read_rnd_buffer_size: "512K"
     # 批量插入缓冲区
-    bulk_insert_buffer_size: "64M"
+    bulk_insert_buffer_size: "16M"
     # 临时表大小
-    tmp_table_size: "512M"
-    max_heap_table_size: "512M"
+    tmp_table_size: "64M"
+    max_heap_table_size: "64M"
     # InnoDB额外配置
     innodb_buffer_pool_instances: 8
     innodb_io_capacity: 2000
     innodb_io_capacity_max: 4000
     innodb_read_io_threads: 8
     innodb_write_io_threads: 8
-    innodb_thread_concurrency: 16
+    innodb_thread_concurrency: 0
     # 高并发优化参数
-    back_log: 400                        # 连接队列，10%的max_connections
-    thread_stack: 512K
+    back_log: 1024
+    thread_stack: 256K
     table_open_cache_instances: 8
-    open_files_limit: 20000              # 连接数的5倍
+    open_files_limit: 65535
+    join_buffer_size: "512K"
+    max_allowed_packet: "64M"
+    wait_timeout: 600
+    interactive_timeout: 600
     
 # 当前配置（根据硬件配置文件选择）
 mysql_innodb_buffer_pool_size: "{{ mysql_config_profiles[mysql_hardware_profile].innodb_buffer_pool_size }}"
@@ -86,6 +93,14 @@ mysql_innodb_io_capacity_max: "{{ mysql_config_profiles[mysql_hardware_profile].
 mysql_innodb_read_io_threads: "{{ mysql_config_profiles[mysql_hardware_profile].innodb_read_io_threads }}"
 mysql_innodb_write_io_threads: "{{ mysql_config_profiles[mysql_hardware_profile].innodb_write_io_threads }}"
 mysql_innodb_thread_concurrency: "{{ mysql_config_profiles[mysql_hardware_profile].innodb_thread_concurrency }}"
+mysql_back_log: "{{ mysql_config_profiles[mysql_hardware_profile].back_log }}"
+mysql_thread_stack: "{{ mysql_config_profiles[mysql_hardware_profile].thread_stack }}"
+mysql_table_open_cache_instances: "{{ mysql_config_profiles[mysql_hardware_profile].table_open_cache_instances }}"
+mysql_open_files_limit: "{{ mysql_config_profiles[mysql_hardware_profile].open_files_limit }}"
+mysql_join_buffer_size: "{{ mysql_config_profiles[mysql_hardware_profile].join_buffer_size }}"
+mysql_max_allowed_packet: "{{ mysql_config_profiles[mysql_hardware_profile].max_allowed_packet }}"
+mysql_wait_timeout: "{{ mysql_config_profiles[mysql_hardware_profile].wait_timeout }}"
+mysql_interactive_timeout: "{{ mysql_config_profiles[mysql_hardware_profile].interactive_timeout }}"
 
 # 系统配置
 mysql_user: "mysql"
@@ -121,7 +136,7 @@ haproxy_retries: 3
 
 # Keepalived VIP 配置（HAProxy 高可用漂移）
 keepalived_enabled: true
-keepalived_interface: "eth0"
+keepalived_interface: "{{ ansible_default_ipv4.interface | default('eth0') }}"
 keepalived_virtual_router_id: 51
 keepalived_auth_pass: "MySQLHApass"
 keepalived_vip: "192.168.1.100"
@@ -162,19 +177,32 @@ mysql_architecture_map:
   aarch64: "aarch64"
   arm64: "aarch64"
 
-# CentOS版本检测
-centos_version_map:
-  "7": "el7"
-  "8": "el8"
+# 官方 MySQL 仓库与支持矩阵
+mysql_repo_series: "8.4-lts"
+mysql_repo_gpg_keys:
+  - "https://repo.mysql.com/RPM-GPG-KEY-mysql-2023"
+  - "https://repo.mysql.com/RPM-GPG-KEY-mysql-2025"
+mysql_supported_redhat_major_versions:
+  - "8"
+  - "9"
+  - "10"
+mysql_supported_ubuntu_releases:
+  - "jammy"
+  - "noble"
+  - "plucky"
+  - "questing"
+mysql_supported_debian_releases:
+  - "bookworm"
+  - "trixie"
 
 # 内存使用分析（8核32G配置）
 memory_analysis_8c32g:
   total_memory: "32GB"
-  innodb_buffer_pool: "20GB"           # 62.5%
-  connection_memory: "8GB"             # 4000 × 2MB
-  system_memory: "4GB"                 # 12.5%
-  safety_margin: "0GB"                # 刚好用完
-  max_safe_connections: 4000
+  innodb_buffer_pool: "18GB"
+  connection_memory: "4-6GB"
+  system_memory: "6GB+"
+  safety_margin: "2-4GB"
+  max_safe_connections: 2500
   
 # Router内存使用分析（4核8G配置）
 memory_analysis_4c8g_router:
@@ -190,13 +218,13 @@ memory_analysis_4c8g_router:
 # 性能预期
 performance_expectations:
   mysql_cluster:
-    total_backend_connections: 12000   # 3 × 4000
-    estimated_qps: "150K-200K"        # 读多写少场景
-    memory_efficiency: "100%"         # 充分利用32G内存
+    total_backend_connections: 7500    # 3 × 2500
+    estimated_qps: "100K-150K"
+    memory_efficiency: "Safer headroom"
     
   router_cluster:
     total_frontend_connections: 60000  # 2 × 30000
-    connection_reuse_ratio: "5:1"     # 60K前端 → 12K后端
+    connection_reuse_ratio: "8:1"     # 60K前端 → 7.5K后端
     estimated_throughput: "300K QPS"  # Router层吞吐量
     cpu_efficiency: "75%"             # 4核使用率
     
@@ -204,4 +232,4 @@ performance_expectations:
     scalability: "Enterprise Ready"
     high_availability: "99.9%+"
     operational_complexity: "Low"
-    maintenance_window: "<30min" 
+    maintenance_window: "<30min>"

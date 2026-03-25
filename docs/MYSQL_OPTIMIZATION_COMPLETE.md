@@ -486,10 +486,10 @@ SELECT * FROM information_schema.INNODB_LOCK_WAITS;
 # 使用配置管理器
 ./scripts/config_manager.sh --list                    # 查看可用配置
 ./scripts/config_manager.sh --current                 # 查看当前配置
-./scripts/config_manager.sh --switch high-performance # 切换到高性能配置
+./scripts/config_manager.sh --switch original-10k # 切换到历史高连接配置
 
 # 硬件升级
-./scripts/upgrade_hardware_profile.sh --profile high_performance
+./scripts/upgrade_hardware_profile.sh --profile original-10k --apply
 
 # 应用配置
 ansible-playbook -i inventory/hosts-with-dedicated-routers.yml playbooks/site.yml
@@ -552,4 +552,4 @@ router_max_connections: 30000
 读取：InnoDB Cluster (从) + 只读实例
 ```
 
-现在你拥有了完整的MySQL高并发优化配置方案！结合 **[内核优化最佳实践](MYSQL_KERNEL_BEST_PRACTICES.md)** 文档，可以实现完整的生产级优化部署。🚀 
+现在你拥有了完整的MySQL高并发优化配置方案！结合 **[内核优化最佳实践](MYSQL_KERNEL_BEST_PRACTICES.md)** 文档，可以实现完整的生产级优化部署。🚀

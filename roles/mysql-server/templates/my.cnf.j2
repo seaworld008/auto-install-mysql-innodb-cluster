@@ -22,20 +22,20 @@ collation_server = {{ mysql_collation_server }}
 max_connections = {{ mysql_max_connections }}
 max_user_connections = {{ mysql_max_connections - 100 }}    # 为管理连接预留100个
 max_connect_errors = 100000
-back_log = {{ (mysql_max_connections * 0.1) | int }}        # 连接队列大小，10%的max_connections
+back_log = {{ mysql_back_log }}
 thread_cache_size = {{ mysql_thread_cache_size }}
-thread_stack = 512K                                         # 增加线程栈大小支持高并发
+thread_stack = {{ mysql_thread_stack }}
 table_open_cache = {{ mysql_table_open_cache }}
 table_definition_cache = {{ (mysql_table_open_cache * 0.5) | int }}
-table_open_cache_instances = 16                             # 分片table cache减少锁竞争
-open_files_limit = {{ mysql_max_connections * 5 }}          # 文件描述符限制，连接数的5倍
-max_allowed_packet = 1073741824                            # 1GB，支持大数据包
+table_open_cache_instances = {{ mysql_table_open_cache_instances }}
+open_files_limit = {{ mysql_open_files_limit }}
+max_allowed_packet = {{ mysql_max_allowed_packet }}
 net_buffer_length = 32768                                  # 网络缓冲区大小
 thread_handling = one-thread-per-connection                # 一线程一连接模式
 
 # Connection Timeout Settings
-interactive_timeout = 3600
-wait_timeout = 3600
+interactive_timeout = {{ mysql_interactive_timeout }}
+wait_timeout = {{ mysql_wait_timeout }}
 connect_timeout = 10
 net_read_timeout = 30
 net_write_timeout = 60
@@ -45,7 +45,7 @@ sort_buffer_size = {{ mysql_sort_buffer_size }}
 read_buffer_size = {{ mysql_read_buffer_size }}
 read_rnd_buffer_size = {{ mysql_read_rnd_buffer_size }}
 bulk_insert_buffer_size = {{ mysql_bulk_insert_buffer_size }}
-join_buffer_size = {{ mysql_sort_buffer_size }}
+join_buffer_size = {{ mysql_join_buffer_size }}
 
 # Temporary Table Settings
 tmp_table_size = {{ mysql_tmp_table_size }}

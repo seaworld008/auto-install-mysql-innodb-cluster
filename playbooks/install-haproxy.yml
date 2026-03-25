@@ -3,9 +3,10 @@
   hosts: haproxy_lb
   become: yes
   gather_facts: yes
+  serial: 1
   tasks:
     - name: 安装 HAProxy
-      yum:
+      package:
         name: haproxy
         state: present
 
@@ -19,7 +20,7 @@
       notify: restart haproxy
 
     - name: 开放 HAProxy 端口
-      firewalld:
+      ansible.posix.firewalld:
         port: "{{ item }}/tcp"
         permanent: yes
         state: enabled
@@ -28,6 +29,7 @@
         - "{{ haproxy_mysql_rw_port }}"
         - "{{ haproxy_mysql_ro_port }}"
         - "{{ haproxy_stats_port }}"
+      when: ansible_service_mgr == 'systemd' and ansible_os_family == 'RedHat'
       ignore_errors: yes
 
     - name: 启动并设置开机自启

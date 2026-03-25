@@ -3,45 +3,108 @@
   hosts: mysql_router
   become: yes
   gather_facts: yes
-  
+  serial: 1
+  vars:
+    mysql_router_service_name: "mysqlrouter"
+    mysql_router_package_name_redhat: "mysql-router-community"
+    mysql_router_package_name_debian: "mysql-router"
+    mysql_router_packages_redhat:
+      - wget
+      - curl
+      - python3
+      - python3-pip
+    mysql_router_packages_debian:
+      - wget
+      - curl
+      - gnupg
+      - python3
+      - python3-pip
   tasks:
-    - name: 检测系统架构和版本
-      set_fact:
-        mysql_arch: "{{ mysql_architecture_map[ansible_architecture] | default('x86_64') }}"
-        centos_version: "{{ ansible_distribution_major_version }}"
-        centos_release: "{{ centos_version_map[ansible_distribution_major_version] | default('el7') }}"
+    - name: 验证目标操作系统受支持
+      assert:
+        that:
+          - >
+            (ansible_os_family == 'RedHat' and ansible_distribution_major_version in mysql_supported_redhat_major_versions)
+            or
+            (ansible_distribution == 'Ubuntu' and ansible_distribution_release in mysql_supported_ubuntu_releases)
+            or
+            (ansible_distribution == 'Debian' and ansible_distribution_release in mysql_supported_debian_releases)
+        fail_msg: "当前系统 {{ ansible_distribution }} {{ ansible_distribution_version }} 不在已验证矩阵中。当前仓库已验证 Ubuntu 22.04/24.04/25.10 与 RedHat 家族 8/9/10。"
+        success_msg: "目标操作系统在已验证矩阵内"
 
-    - name: 安装必要的系统包
-      yum:
-        name:
-          - wget
-          - curl
-          - python3
-          - python3-pip
+    - name: 安装 Router 依赖和软件包（RedHat）
+      package:
+        name: "{{ mysql_router_packages_redhat[:-1] }}"
         state: present
+      when: ansible_os_family == 'RedHat'
 
-    - name: 检查MySQL YUM仓库是否已安装
-      stat:
-        path: /etc/yum.repos.d/mysql-community.repo
-      register: mysql_repo_exists
+    - name: 配置 MySQL YUM 仓库（RedHat）
+      yum_repository:
+        name: "{{ item.name }}"
+        description: "{{ item.description }}"
+        baseurl: "{{ item.baseurl }}"
+        enabled: yes
+        gpgcheck: yes
+        repo_gpgcheck: no
+        gpgkey: "{{ mysql_repo_gpg_keys | join('\n') }}"
+      loop:
+        - name: mysql-84-lts-community
+          description: MySQL {{ mysql_repo_series }} Router
+          baseurl: "https://repo.mysql.com/yum/mysql-8.4-community/el/{{ ansible_distribution_major_version }}/$basearch/"
+        - name: mysql-tools-84-lts-community
+          description: MySQL {{ mysql_repo_series }} Tools
+          baseurl: "https://repo.mysql.com/yum/mysql-tools-8.4-community/el/{{ ansible_distribution_major_version }}/$basearch/"
+      when: ansible_os_family == 'RedHat'
 
-    - name: 下载MySQL官方YUM仓库
+    - name: 禁用 RedHat 系统自带 MySQL 模块
+      command: "dnf -y module disable mysql"
+      when: ansible_os_family == 'RedHat'
+      register: dnf_module_disable
+      changed_when: "'Nothing to do.' not in (dnf_module_disable.stdout | default(''))"
+      failed_when: false
+
+    - name: 下载 MySQL APT 仓库密钥
       get_url:
-        url: "https://dev.mysql.com/get/mysql80-community-release-{{ centos_release }}-1.noarch.rpm"
-        dest: "/tmp/mysql80-community-release-{{ centos_release }}-1.noarch.rpm"
+        url: "{{ mysql_repo_gpg_keys[-1] }}"
+        dest: /tmp/mysql.gpg
         mode: '0644'
-      when: not mysql_repo_exists.stat.exists
+      when: ansible_os_family == 'Debian'
 
-    - name: 安装MySQL YUM仓库
-      yum:
-        name: "/tmp/mysql80-community-release-{{ centos_release }}-1.noarch.rpm"
-        state: present
-      when: not mysql_repo_exists.stat.exists
+    - name: 安装 MySQL APT keyring
+      shell: |
+        set -euo pipefail
+        gpg --dearmor --yes --output /usr/share/keyrings/mysql.gpg /tmp/mysql.gpg
+      args:
+        creates: /usr/share/keyrings/mysql.gpg
+      when: ansible_os_family == 'Debian'
 
-    - name: 安装MySQL Router
-      yum:
-        name: mysql-router
+    - name: 配置 MySQL APT 仓库
+      copy:
+        dest: /etc/apt/sources.list.d/mysql.list
+        mode: '0644'
+        content: |
+          deb [signed-by=/usr/share/keyrings/mysql.gpg] http://repo.mysql.com/apt/{{ ansible_distribution | lower }} {{ ansible_distribution_release }} mysql-8.4-lts mysql-tools
+      when: ansible_os_family == 'Debian'
+
+    - name: 更新 APT 缓存
+      apt:
+        update_cache: yes
+      when: ansible_os_family == 'Debian'
+
+    - name: 安装 Router 依赖和软件包（Debian/Ubuntu）
+      apt:
+        name: "{{ mysql_router_packages_debian + [mysql_router_package_name_debian] }}"
         state: present
+        update_cache: no
+      environment:
+        DEBIAN_FRONTEND: noninteractive
+      when: ansible_os_family == 'Debian'
+
+    - name: 安装 MySQL Router（RedHat）
+      package:
+        name: "{{ mysql_router_package_name_redhat }}"
+        state: present
+      when: ansible_os_family == 'RedHat'
 
     - name: 创建MySQL Router配置目录
       file:
@@ -67,6 +130,11 @@
         group: mysqlrouter
         mode: '0755'
 
+    - name: 检查 Router 是否已完成 bootstrap
+      stat:
+        path: /var/lib/mysqlrouter/mysqlrouter.conf
+      register: mysqlrouter_bootstrap_conf
+
     - name: 配置MySQL Router
       shell: |
         mysqlrouter --bootstrap {{ mysql_cluster_user }}:{{ mysql_cluster_password }}@{{ hostvars[groups['mysql_primary'][0]]['ansible_default_ipv4']['address'] }}:{{ mysql_port }} \
@@ -77,6 +145,7 @@
         --force
       register: router_bootstrap
       become_user: mysqlrouter
+      when: mysql_router_rebootstrap | bool or not mysqlrouter_bootstrap_conf.stat.exists
 
     - name: 显示Router配置结果
       debug:
@@ -91,20 +160,22 @@
         mode: '0644'
       notify: reload systemd
 
-    - name: 配置防火墙规则（MySQL Router端口）
-      firewalld:
+    - name: 配置防火墙规则（firewalld 可用时）
+      ansible.posix.firewalld:
         port: "{{ item }}"
         permanent: yes
         state: enabled
         immediate: yes
       loop:
         - "{{ mysql_router_port }}/tcp"
+        - "{{ mysql_router_ro_port }}/tcp"
         - "{{ mysql_router_admin_port }}/tcp"
+      when: ansible_service_mgr == 'systemd' and ansible_os_family == 'RedHat'
       ignore_errors: yes
 
     - name: 启动并启用MySQL Router服务
       systemd:
-        name: mysqlrouter
+        name: "{{ mysql_router_service_name }}"
         state: started
         enabled: yes
         daemon_reload: yes
@@ -116,34 +187,46 @@
         delay: 5
         timeout: 60
 
-    - name: 测试MySQL Router连接
+    - name: 测试MySQL Router读写端口
       shell: |
         mysql -h {{ ansible_default_ipv4.address }} -P {{ mysql_router_port }} -u {{ mysql_cluster_user }} -p{{ mysql_cluster_password }} -e "SELECT @@hostname, @@port"
-      register: router_test
+      register: router_rw_test
       ignore_errors: yes
 
-    - name: 显示Router连接测试结果
+    - name: 测试MySQL Router只读端口
+      shell: |
+        mysql -h {{ ansible_default_ipv4.address }} -P {{ mysql_router_ro_port }} -u {{ mysql_cluster_user }} -p{{ mysql_cluster_password }} -e "SELECT @@hostname, @@port, @@read_only"
+      register: router_ro_test
+      ignore_errors: yes
+
+    - name: 显示 Router 连接测试结果
       debug:
-        var: router_test.stdout
-      when: router_test.rc == 0
+        msg: |
+          RW:
+          {{ router_rw_test.stdout | default('') }}
+
+          RO:
+          {{ router_ro_test.stdout | default('') }}
+      when: router_rw_test.rc == 0 or router_ro_test.rc == 0
 
     - name: MySQL Router安装完成提示
       debug:
         msg: |
           MySQL Router 安装配置完成！
-          
+
           连接信息:
           - Router地址: {{ ansible_default_ipv4.address }}
           - 读写端口: {{ mysql_router_port }}
+          - 只读端口: {{ mysql_router_ro_port }}
           - 管理端口: {{ mysql_router_admin_port }}
-          
+
           应用连接示例:
           mysql -h {{ ansible_default_ipv4.address }} -P {{ mysql_router_port }} -u your_user -p
-          
+
           Router状态检查:
-          systemctl status mysqlrouter
+          systemctl status {{ mysql_router_service_name }}
 
   handlers:
     - name: reload systemd
       systemd:
-        daemon_reload: yes 
+        daemon_reload: yes

@@ -1,5 +1,5 @@
 # 推荐的 MySQL Router 部署配置
-# 基于你的 8核32G/32核64G 生产环境
+# 基于当前主配置中的 profile 模型（optimized_8c32g / original_10k）
 
 all:
   children:
@@ -117,14 +117,14 @@ all:
       
     # Router 性能配置 - 根据数据库硬件配置调整
     mysql_router_config:
-      standard:  # 对应数据库 8核32G 配置
+      optimized_8c32g:  # 对应数据库 8核32G 生产默认配置
         max_connections: 2000
         connection_timeout: 30
         read_timeout: 30
         write_timeout: 30
         max_connect_errors: 100
         
-      high_performance:  # 对应数据库 32核64G 配置
+      original_10k:  # 对应高连接 profile
         max_connections: 4000
         connection_timeout: 30
         read_timeout: 30
@@ -132,7 +132,7 @@ all:
         max_connect_errors: 100
         
     # 当前使用的配置 (与数据库硬件配置保持一致)
-    mysql_router_profile: "{{ mysql_hardware_profile | default('standard') }}"
+    mysql_router_profile: "{{ mysql_hardware_profile | default('optimized_8c32g') }}"
     
     # Router 端口配置
     mysql_router_port: 6446                        # 读写端口
@@ -201,10 +201,10 @@ recommended_connection_strings:
     direct: "mysql://user:password@192.168.1.20:6446/database"
     
     # 通过负载均衡器VIP (推荐)
-    load_balanced: "mysql://user:password@192.168.1.100:6446/database"
+    load_balanced: "mysql://user:password@192.168.1.100:3307/database"
     
     # 只读连接
-    readonly: "mysql://user:password@192.168.1.100:6447/database"
+    readonly: "mysql://user:password@192.168.1.100:3308/database"
     
   # 如果使用应用侧Router
   application_side:
@@ -214,4 +214,4 @@ recommended_connection_strings:
   failover:
     primary: "192.168.1.20:6446"
     secondary: "192.168.1.21:6446"
-    backup: "192.168.1.10:3306"                    # 直连数据库作为最后备选 
+    backup: "192.168.1.10:3306"                    # 直连数据库作为最后备选

@@ -39,20 +39,15 @@ CONFIG_DIR="inventory/group_vars"
 CURRENT_CONFIG="$CONFIG_DIR/all.yml"
 BACKUP_DIR="$CONFIG_DIR/backups"
 
-# 可用的配置文件
+# 单一真相源中的可切换 profile
 declare -A CONFIGS=(
-    ["8c32g-optimized"]="$CONFIG_DIR/all-8c32g-optimized.yml"
-    ["original-10k"]="$CONFIG_DIR/all-original-10k-config.yml"
-    ["standard"]="$CONFIG_DIR/all-standard.yml"
-    ["high-performance"]="$CONFIG_DIR/all-high-performance.yml"
+    ["8c32g-optimized"]="optimized_8c32g"
+    ["original-10k"]="original_10k"
 )
 
-# 配置描述
 declare -A CONFIG_DESCRIPTIONS=(
-    ["8c32g-optimized"]="8核32G+4核8G优化配置（默认推荐）- MySQL 4000连接/节点"
-    ["original-10k"]="原始高连接配置 - MySQL 10000连接/节点（需大内存）"
-    ["standard"]="标准配置 - 适用于小规模部署"
-    ["high-performance"]="高性能配置 - 适用于32核64G硬件"
+    ["8c32g-optimized"]="8核32G+4核8G优化配置（默认推荐）- MySQL 2500连接/节点（生产余量版）"
+    ["original-10k"]="历史高连接配置 - MySQL 10000连接/节点（仅建议高峰专项场景使用）"
 )
 
 # 显示帮助信息
@@ -73,10 +68,8 @@ MySQL 配置管理脚本
     -h, --help              显示此帮助信息
 
 可用配置:
-    8c32g-optimized         8核32G+4核8G优化配置（默认推荐）
-    original-10k            原始高连接配置
-    standard                标准配置
-    high-performance        高性能配置
+    8c32g-optimized         切换 mysql_hardware_profile=optimized_8c32g
+    original-10k            切换 mysql_hardware_profile=original_10k
 
 示例:
     $0 --list                           # 列出所有配置
@@ -99,18 +92,12 @@ list_configs() {
     log_step "可用配置列表:"
     echo
     for config in "${!CONFIGS[@]}"; do
-        local file="${CONFIGS[$config]}"
+        local profile="${CONFIGS[$config]}"
         local desc="${CONFIG_DESCRIPTIONS[$config]}"
-        local status=""
-        
-        if [[ -f "$file" ]]; then
-            status="${GREEN}✅ 可用${NC}"
-        else
-            status="${RED}❌ 缺失${NC}"
-        fi
-        
+        local status="${GREEN}✅ 可用${NC}"
+
         echo -e "  ${BLUE}$config${NC}: $desc"
-        echo -e "    文件: $file"
+        echo -e "    Profile: $profile"
         echo -e "    状态: $status"
         echo
     done
@@ -122,12 +109,25 @@ show_current() {
     echo
     
     if [[ -f "$CURRENT_CONFIG" ]]; then
-        # 读取硬件配置类型
-        local profile=$(grep "mysql_hardware_profile:" "$CURRENT_CONFIG" | cut -d'"' -f2 2>/dev/null || echo "unknown")
-        # 读取MySQL连接数
-        local mysql_conn=$(grep -A 20 "mysql_config_profiles:" "$CURRENT_CONFIG" | grep "max_connections:" | head -1 | awk '{print $2}' 2>/dev/null || echo "unknown")
-        # 读取Router连接数
-        local router_conn=$(grep -A 10 "mysql_router.*optimized:" "$CURRENT_CONFIG" | grep "max_connections:" | head -1 | awk '{print $2}' 2>/dev/null || echo "unknown")
+        local profile=$(python - << 'PY'
+import yaml, pathlib
+data = yaml.safe_load(pathlib.Path("inventory/group_vars/all.yml").read_text(encoding="utf-8"))
+print(data.get("mysql_hardware_profile", "unknown"))
+PY
+)
+        local mysql_conn=$(python - << 'PY'
+import yaml, pathlib
+data = yaml.safe_load(pathlib.Path("inventory/group_vars/all.yml").read_text(encoding="utf-8"))
+profile = data.get("mysql_hardware_profile")
+print(data.get("mysql_config_profiles", {}).get(profile, {}).get("max_connections", "unknown"))
+PY
+)
+        local router_conn=$(python - << 'PY'
+import yaml, pathlib
+data = yaml.safe_load(pathlib.Path("inventory/group_vars/all.yml").read_text(encoding="utf-8"))
+print(data.get("mysql_router_4c8g_optimized", {}).get("max_connections", "unknown"))
+PY
+)
         
         echo "  硬件配置文件: $profile"
         echo "  MySQL连接数: $mysql_conn"
@@ -173,20 +173,24 @@ switch_config() {
         return 1
     fi
     
-    local source_file="${CONFIGS[$target_config]}"
-    
-    if [[ ! -f "$source_file" ]]; then
-        log_error "配置文件不存在: $source_file"
-        return 1
-    fi
+    local target_profile="${CONFIGS[$target_config]}"
     
     # 备份当前配置
     log_info "备份当前配置..."
     backup_current
     
-    # 切换配置
-    log_info "切换到配置: $target_config"
-    cp "$source_file" "$CURRENT_CONFIG"
+    # 切换 profile
+    log_info "切换到配置: $target_config -> mysql_hardware_profile=$target_profile"
+    python - "$CURRENT_CONFIG" "$target_profile" << 'PY'
+import sys, pathlib, re
+path = pathlib.Path(sys.argv[1])
+target = sys.argv[2]
+text = path.read_text(encoding="utf-8")
+new_text, count = re.subn(r'^(mysql_hardware_profile:\s*").*(".*)$', rf'\1{target}\2', text, flags=re.M)
+if count != 1:
+    raise SystemExit("未找到唯一的 mysql_hardware_profile 配置项")
+path.write_text(new_text, encoding="utf-8", newline="\n")
+PY
     
     log_success "配置切换完成!"
     echo
@@ -195,7 +199,7 @@ switch_config() {
     
     echo
     log_warning "建议运行以下命令应用新配置:"
-    echo "  ansible-playbook -i inventory/hosts-with-dedicated-routers.yml playbooks/site.yml"
+    echo "  ./scripts/deploy_dedicated_routers.sh --production-ready -i inventory/hosts-with-dedicated-routers.yml"
 }
 
 # 恢复备份
@@ -325,4 +329,4 @@ if [[ ! -f "ansible.cfg" ]]; then
 fi
 
 # 执行主函数
-main "$@" 
+main "$@"

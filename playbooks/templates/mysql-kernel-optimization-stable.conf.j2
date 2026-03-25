@@ -1,0 +1,9 @@
+# MySQL 数据库服务器内核优化配置 - 行业最佳实践版本
+# 版本: {{ script_version }}
+# 生成时间: {{ ansible_date_time.iso8601 }}
+# 系统规格: {{ cpu_cores }}核 {{ total_memory_gb }}GB
+# 基于: Oracle MySQL, Percona, MariaDB 官方推荐
+
+{% for item in mysql_kernel_params_stable | dict2items %}
+{{ item.key }} = {{ item.value }}
+{% endfor %}

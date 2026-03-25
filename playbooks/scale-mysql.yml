@@ -1,0 +1,19 @@
+---
+- name: MySQL 节点扩容预检查
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: 输出扩容提示
+      debug:
+        msg: |
+          将对 --limit 指定的 MySQL 节点执行：
+          1. 安装/更新 MySQL
+          2. 校验实例配置
+          3. 将新节点加入 InnoDB Cluster
+          
+          注意：
+          - 目标主机必须已经加入 inventory
+          - 目标主机应属于 {{ scale_policy.mysql_scale_target_group }}
+
+- import_playbook: install-mysql.yml
+- import_playbook: configure-cluster.yml

@@ -113,6 +113,7 @@ log_info "1. 检查核心文件结构"
 check_file_exists "deploy.sh" "主部署脚本"
 check_file_exists "ansible.cfg" "Ansible配置文件"
 check_file_exists "requirements.txt" "Python依赖文件"
+check_file_exists "collections/requirements.yml" "Ansible Collection依赖文件"
 
 # 2. 检查目录结构
 log_info "2. 检查目录结构"
@@ -127,6 +128,12 @@ check_file_exists "playbooks/site.yml" "主playbook文件"
 check_file_exists "playbooks/install-mysql.yml" "MySQL安装playbook"
 check_file_exists "playbooks/configure-cluster.yml" "集群配置playbook"
 check_file_exists "playbooks/install-router.yml" "Router安装playbook"
+check_file_exists "playbooks/scale-mysql.yml" "MySQL扩容playbook"
+check_file_exists "playbooks/shrink-mysql.yml" "MySQL缩容playbook"
+check_file_exists "playbooks/shrink-router.yml" "Router缩容playbook"
+check_file_exists "playbooks/shrink-haproxy.yml" "HAProxy缩容playbook"
+check_file_exists "playbooks/apply-config.yml" "配置滚动应用playbook"
+check_file_exists "playbooks/backup.yml" "逻辑备份playbook"
 
 # 4. 检查inventory文件
 log_info "4. 检查Inventory配置文件"
@@ -138,10 +145,13 @@ check_file_exists "inventory/group_vars/all.yml" "全局变量文件"
 # 5. 检查roles结构
 log_info "5. 检查Roles结构"
 check_dir_exists "roles/mysql-server" "MySQL服务器角色"
-check_dir_exists "roles/mysql-cluster" "MySQL集群角色"
+check_dir_exists "roles/haproxy" "HAProxy角色"
+check_dir_exists "roles/keepalived" "Keepalived角色"
 check_dir_exists "roles/mysql-router" "MySQL Router角色"
 check_file_exists "roles/mysql-server/templates/my.cnf.j2" "MySQL配置模板"
 check_file_exists "roles/mysql-router/templates/mysqlrouter.service.j2" "Router服务模板"
+check_file_exists "playbooks/templates/mysql-kernel-optimization-stable.conf.j2" "内核优化模板"
+check_file_exists "playbooks/templates/optimization-report-stable.txt.j2" "优化报告模板"
 
 # 6. 检查脚本文件
 log_info "6. 检查脚本文件"
@@ -149,6 +159,14 @@ check_file_exists "scripts/cluster-status.sh" "集群状态检查脚本"
 check_file_exists "scripts/setup-servers.sh" "服务器设置脚本"
 check_file_exists "scripts/failover-test.sh" "故障转移测试脚本"
 check_file_exists "scripts/config_manager.sh" "配置管理脚本"
+check_file_exists "scripts/deploy_dedicated_routers.sh" "生产部署入口脚本"
+check_file_exists "scripts/health-check-ha.sh" "HA健康检查脚本"
+check_file_exists "scripts/scale-mysql.sh" "MySQL扩容脚本"
+check_file_exists "scripts/shrink-mysql.sh" "MySQL缩容脚本"
+check_file_exists "scripts/shrink-router.sh" "Router缩容脚本"
+check_file_exists "scripts/shrink-haproxy.sh" "HAProxy缩容脚本"
+check_file_exists "scripts/apply-config.sh" "配置应用脚本"
+check_file_exists "scripts/backup.sh" "备份脚本"
 
 # 7. 检查YAML语法
 log_info "7. 检查YAML文件语法"
@@ -173,7 +191,7 @@ for script in deploy.sh scripts/*.sh; do
         # 检查脚本语法（如果有bash）
         if command -v bash >/dev/null 2>&1; then
             ((TOTAL_CHECKS++))
-            if bash -n "$script" >/dev/null 2>&1; then
+            if tr -d '\r' < "$script" | bash -n >/dev/null 2>&1; then
                 log_success "语法检查: $script"
             else
                 log_error "语法检查: $script 有语法错误"
@@ -259,7 +277,7 @@ done
 
 # 14. 检查配置文件一致性
 log_info "14. 检查配置文件一致性"
-config_files=("inventory/group_vars/all.yml" "inventory/group_vars/all-8c32g-optimized.yml")
+config_files=("inventory/group_vars/all.yml")
 for config in "${config_files[@]}"; do
     if [ -f "$config" ]; then
         ((TOTAL_CHECKS++))
@@ -271,6 +289,20 @@ for config in "${config_files[@]}"; do
         fi
     fi
 done
+
+((TOTAL_CHECKS++))
+if python3 - <<'PY' >/dev/null 2>&1
+import yaml, pathlib, sys
+data = yaml.safe_load(pathlib.Path("inventory/group_vars/all.yml").read_text(encoding="utf-8"))
+profile = data.get("mysql_hardware_profile")
+profiles = data.get("mysql_config_profiles", {})
+sys.exit(0 if profile in profiles else 1)
+PY
+then
+    log_success "Profile一致性: mysql_hardware_profile 在 all.yml 中可解析"
+else
+    log_error "Profile一致性: mysql_hardware_profile 未在 all.yml 的 mysql_config_profiles 中定义"
+fi
 
 # 15. 检查模板文件
 log_info "15. 检查模板文件完整性"
@@ -325,4 +357,4 @@ else
     echo -e "\n${RED}❌ 项目验证失败，有 $FAILED_CHECKS 个严重问题需要修复${NC}"
     echo "请修复所有失败项目后再进行部署"
     exit 2
-fi 
+fi

@@ -1,3 +1,7 @@
+# 历史快照：original-10k profile 的旧独立副本
+# 当前运行时主配置请以 inventory/group_vars/all.yml 为准。
+# 本文件仅作为历史参考，不建议直接复制覆盖 all.yml。
+
 # MySQL版本和下载配置
 mysql_version: "8.0.42"
 mysql_major_version: "8.0"
@@ -166,4 +170,4 @@ mysql_architecture_map:
 # CentOS版本检测
 centos_version_map:
   "7": "el7"
-  "8": "el8" 
+  "8": "el8"

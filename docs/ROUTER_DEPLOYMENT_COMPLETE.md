@@ -29,7 +29,7 @@ MySQL Router是MySQL InnoDB Cluster的关键组件，负责将客户端连接路
 HAProxy VIP (192.168.1.100)
     ↓
 Router集群 (192.168.1.20-21) - 2×4核8G
-    ↓ (后端12K连接)
+    ↓ (后端7.5K连接)
 MySQL集群 (192.168.1.10-12) - 3×8核32G
 ```
 
@@ -51,8 +51,8 @@ MySQL集群 (192.168.1.10-12) - 3×8核32G
 
 | 组件 | 前端连接 | 后端连接 | 连接复用比 |
 |------|----------|----------|------------|
-| **Router集群** | 60000 (30K/台) | 12000 (6K/台) | 5:1 |
-| **MySQL集群** | 12000 (4K/台) | - | - |
+| **Router集群** | 60000 (30K/台) | 7500 (约3.75K/台) | 8:1 左右 |
+| **MySQL集群** | 7500 (2.5K/台) | - | - |
 
 ## 🚀 快速部署
 
@@ -108,7 +108,10 @@ ansible-playbook -i inventory/hosts-with-dedicated-routers.yml playbooks/configu
 
 ```bash
 # 安装HAProxy
-sudo yum install -y haproxy
+# RHEL/Rocky/Alma:
+sudo dnf install -y haproxy
+# Ubuntu/Debian:
+sudo apt-get install -y haproxy
 
 # 配置文件示例
 cat > /etc/haproxy/haproxy.cfg << 'EOF'
@@ -129,9 +132,9 @@ defaults
     timeout client 50000ms
     timeout server 50000ms
 
-# MySQL读写端口 (6446)
+# HAProxy VIP 读写入口 (3307)
 frontend mysql_read_write
-    bind *:6446
+    bind *:3307
     default_backend mysql_read_write_servers
 
 backend mysql_read_write_servers
@@ -139,9 +142,9 @@ backend mysql_read_write_servers
     server router1 192.168.1.20:6446 check
     server router2 192.168.1.21:6446 check
 
-# MySQL只读端口 (6447)
+# HAProxy VIP 只读入口 (3308)
 frontend mysql_readonly
-    bind *:6447
+    bind *:3308
     default_backend mysql_readonly_servers
 
 backend mysql_readonly_servers
@@ -330,8 +333,8 @@ netstat -i
 
 ```bash
 # 当需要升级到32核64G时
-./scripts/config_manager.sh --switch high-performance
-./scripts/upgrade_hardware_profile.sh --profile high_performance
+./scripts/config_manager.sh --switch original-10k
+./scripts/upgrade_hardware_profile.sh --profile original-10k --apply
 
 # 应用新配置
 ansible-playbook -i inventory/hosts-with-dedicated-routers.yml playbooks/site.yml
@@ -341,7 +344,7 @@ ansible-playbook -i inventory/hosts-with-dedicated-routers.yml playbooks/site.ym
 
 | 硬件规格 | Router连接数 | MySQL连接数 | 总前端连接 |
 |----------|-------------|-------------|-----------|
-| **当前** (8C32G+4C8G) | 30K/台 | 4K/台 | 60K |
+| **当前** (8C32G+4C8G) | 30K/台 | 2.5K/台 | 60K |
 | **升级** (32C64G+8C16G) | 50K/台 | 10K/台 | 100K |
 
-现在你的Router集群已经准备就绪，可以支持高并发的生产环境部署！🚀 
+现在你的Router集群已经准备就绪，可以支持高并发的生产环境部署！🚀

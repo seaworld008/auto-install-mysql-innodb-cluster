@@ -1,0 +1,95 @@
+---
+- name: MySQL 节点缩容预检查与集群摘除
+  hosts: localhost
+  gather_facts: false
+  vars:
+    mysql_primary_host: "{{ groups['mysql_primary'][0] }}"
+    mysql_shrink_target_address: "{{ hostvars[mysql_shrink_target].ansible_host | default(hostvars[mysql_shrink_target].ansible_default_ipv4.address) }}"
+    mysql_shrink_new_primary_address: "{{ (mysql_shrink_new_primary is defined and mysql_shrink_new_primary | length > 0) | ternary(hostvars[mysql_shrink_new_primary].ansible_host | default(hostvars[mysql_shrink_new_primary].ansible_default_ipv4.address), '') }}"
+  tasks:
+    - name: 检查缩容目标参数
+      assert:
+        that:
+          - mysql_shrink_target is defined
+          - mysql_shrink_target in groups['mysql_cluster']
+          - (groups['mysql_cluster'] | length) > (scale_policy.mysql_min_nodes | int)
+        fail_msg: "缩容参数非法，或当前节点数已达到最小限制，不能继续缩容。"
+        success_msg: "缩容参数检查通过"
+
+    - name: 获取当前集群主节点
+      shell: |
+        mysqlsh --uri {{ mysql_cluster_user }}:{{ mysql_cluster_password }}@{{ hostvars[mysql_primary_host].ansible_host | default(hostvars[mysql_primary_host].ansible_default_ipv4.address) }}:{{ mysql_port }} \
+        -e "var s=dba.getCluster('{{ mysql_cluster_name }}').status(); for (var k in s.defaultReplicaSet.topology) { if (s.defaultReplicaSet.topology[k].mode == 'R/W') { print(k); break; } }"
+      register: mysql_current_primary
+      changed_when: false
+
+    - name: 主节点缩容前要求指定新主节点
+      assert:
+        that:
+          - mysql_shrink_new_primary is defined
+          - mysql_shrink_new_primary | length > 0
+          - mysql_shrink_new_primary in groups['mysql_cluster']
+          - mysql_shrink_new_primary != mysql_shrink_target
+        fail_msg: "当前缩容目标是集群主节点，请先指定 mysql_shrink_new_primary。"
+        success_msg: "主节点切换参数已提供"
+      when:
+        - scale_policy.require_primary_switchover_before_removal | bool
+        - mysql_shrink_target_address in mysql_current_primary.stdout
+
+    - name: 主节点切换
+      shell: |
+        mysqlsh --uri {{ mysql_cluster_user }}:{{ mysql_cluster_password }}@{{ hostvars[mysql_primary_host].ansible_host | default(hostvars[mysql_primary_host].ansible_default_ipv4.address) }}:{{ mysql_port }} \
+        -e "var c=dba.getCluster('{{ mysql_cluster_name }}'); c.setPrimaryInstance('{{ mysql_shrink_new_primary_address }}:{{ mysql_port }}')"
+      when:
+        - mysql_shrink_new_primary is defined
+        - mysql_shrink_new_primary | length > 0
+        - mysql_shrink_target_address in mysql_current_primary.stdout
+
+    - name: 将节点从集群中移除
+      shell: |
+        mysqlsh --uri {{ mysql_cluster_user }}:{{ mysql_cluster_password }}@{{ hostvars[mysql_primary_host].ansible_host | default(hostvars[mysql_primary_host].ansible_default_ipv4.address) }}:{{ mysql_port }} \
+        -e "var c=dba.getCluster('{{ mysql_cluster_name }}'); c.removeInstance('{{ mysql_shrink_target_address }}:{{ mysql_port }}')"
+      register: mysql_remove_result
+
+    - name: 显示缩容结果
+      debug:
+        var: mysql_remove_result.stdout
+
+- name: MySQL 节点缩容后的服务处理
+  hosts: "{{ mysql_shrink_target }}"
+  gather_facts: true
+  become: yes
+  vars:
+    mysql_service_name: "{{ 'mysqld' if ansible_os_family == 'RedHat' else 'mysql' }}"
+  tasks:
+    - name: 停止 MySQL 服务
+      systemd:
+        name: "{{ mysql_service_name }}"
+        state: stopped
+        enabled: no
+      when: scale_policy.mysql_remove_stop_service | bool
+
+    - name: 可选清理 MySQL 数据目录
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ mysql_datadir }}"
+        - "{{ mysql_logdir }}"
+      when: scale_policy.mysql_remove_cleanup_data | bool
+
+- name: 缩容后集群状态复核
+  hosts: mysql_primary
+  gather_facts: true
+  become: yes
+  tasks:
+    - name: 检查集群状态
+      shell: |
+        mysqlsh --uri {{ mysql_cluster_user }}:{{ mysql_cluster_password }}@{{ ansible_default_ipv4.address }}:{{ mysql_port }} \
+        -e "var c=dba.getCluster('{{ mysql_cluster_name }}'); print(c.status()['defaultReplicaSet']['status'])"
+      register: mysql_shrink_cluster_health
+      changed_when: false
+
+    - name: 输出缩容后状态
+      debug:
+        msg: "缩容后集群状态: {{ mysql_shrink_cluster_health.stdout | trim }}"
