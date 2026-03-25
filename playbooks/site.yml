@@ -8,6 +8,7 @@
         msg: "开始安装MySQL InnoDB Cluster..."
 
 - import_playbook: preflight-ha.yml
+- import_playbook: kernel-optimization-stable.yml
 - import_playbook: install-mysql.yml
 - import_playbook: configure-cluster.yml
 - import_playbook: install-router.yml
@@ -33,4 +34,4 @@
           - MySQL Router端口: {{ mysql_router_port }}
           
           管理命令:
-          - 查看集群状态: mysqlsh --uri {{ mysql_cluster_user }}@{{ groups['mysql_primary'][0] }} -e "dba.getCluster('{{ mysql_cluster_name }}').status()" 
+          - 查看集群状态: mysqlsh --uri {{ mysql_cluster_user }}@{{ groups['mysql_primary'][0] }} -e "dba.getCluster('{{ mysql_cluster_name }}').status()"

@@ -7,6 +7,7 @@ set -euo pipefail
 
 DEFAULT_INVENTORY="inventory/hosts-with-dedicated-routers.yml"
 INVENTORY="${MYSQL_CLUSTER_INVENTORY:-$DEFAULT_INVENTORY}"
+SKIP_KERNEL_OPTIMIZATION=false
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -45,6 +46,7 @@ MySQL InnoDB Cluster 生产部署入口
     --status                查看当前 HA 状态
     --rollback              停止入口层服务（不删除数据库数据）
     -i, --inventory <file>  指定 inventory 文件
+    --skip-kernel-optimization  跳过内核优化（默认不跳过）
     --limit <group|host>    指定扩容/重配目标
     --target <host>         指定缩容目标主机
     --new-primary <host>    缩容当前主节点前先切换到新主节点
@@ -120,6 +122,7 @@ check_prerequisites() {
 }
 
 deploy_mysql_cluster() {
+    apply_kernel_optimization "mysql_cluster"
     log_step "部署 MySQL Server"
     ansible-playbook -i "$INVENTORY" playbooks/install-mysql.yml
 
@@ -128,11 +131,13 @@ deploy_mysql_cluster() {
 }
 
 deploy_routers() {
+    apply_kernel_optimization "mysql_router"
     log_step "部署 MySQL Router"
     ansible-playbook -i "$INVENTORY" playbooks/install-router.yml
 }
 
 deploy_load_balancers() {
+    apply_kernel_optimization "haproxy_lb"
     log_step "部署 HAProxy"
     ansible-playbook -i "$INVENTORY" playbooks/install-haproxy.yml
 
@@ -142,6 +147,7 @@ deploy_load_balancers() {
 
 apply_config() {
     check_prerequisites
+    apply_kernel_optimization "mysql_cluster:mysql_router:haproxy_lb"
     log_step "滚动应用当前主配置"
     ansible-playbook -i "$INVENTORY" playbooks/apply-config.yml
     health_check
@@ -154,6 +160,7 @@ scale_mysql_add() {
         exit 1
     fi
     check_prerequisites
+    apply_kernel_optimization "$limit"
     log_step "扩容 MySQL 节点: $limit"
     ansible-playbook -i "$INVENTORY" playbooks/scale-mysql.yml --limit "$limit"
     health_check
@@ -201,6 +208,16 @@ shrink_lb() {
 run_backup() {
     log_step "执行逻辑备份"
     ansible-playbook -i "$INVENTORY" playbooks/backup.yml
+}
+
+apply_kernel_optimization() {
+    local limit="$1"
+    if [[ "$SKIP_KERNEL_OPTIMIZATION" == "true" ]]; then
+        log_warning "已显式跳过内核优化"
+        return 0
+    fi
+    log_step "执行内核优化: $limit"
+    ansible-playbook -i "$INVENTORY" playbooks/kernel-optimization-stable.yml --limit "$limit"
 }
 
 health_check() {
@@ -257,6 +274,10 @@ main() {
                 INVENTORY="$2"
                 shift 2
                 ;;
+            --skip-kernel-optimization)
+                SKIP_KERNEL_OPTIMIZATION=true
+                shift
+                ;;
             --limit)
                 limit="$2"
                 shift 2
@@ -296,7 +317,16 @@ main() {
 
     case "$action" in
         --production-ready)
+            if [[ "$SKIP_KERNEL_OPTIMIZATION" == "true" ]]; then
+                check_prerequisites
+                log_step "执行全量部署"
+                ansible-playbook -i "$INVENTORY" playbooks/site.yml --skip-tags kernel_optimization
+                health_check
+                show_connection_summary
+                log_success "生产部署流程执行完成"
+            else
             production_ready_deploy
+            fi
             ;;
         --mysql-only)
             check_prerequisites
@@ -329,6 +359,7 @@ main() {
             run_backup
             ;;
         --full-deploy)
+            apply_kernel_optimization "mysql_router:haproxy_lb"
             full_deploy
             ;;
         --check-prereq)

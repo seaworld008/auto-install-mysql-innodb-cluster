@@ -9,6 +9,12 @@
 5. 执行健康检查
 6. 根据需要执行扩容、缩容、配置滚动应用或可选备份
 
+说明：
+
+- 走主入口脚本执行完整部署或单独部署时，默认会对对应目标节点执行内核优化。
+- 缩容与备份不会额外触发内核优化。
+- 如需跳过，可在主入口脚本中使用 `--skip-kernel-optimization`。
+
 ## 推荐入口
 
 - 主入口脚本：`./scripts/deploy_dedicated_routers.sh`
@@ -28,6 +34,12 @@
 # 滚动应用当前配置
 ./scripts/deploy_dedicated_routers.sh --apply-config -i inventory/hosts-with-dedicated-routers.yml
 
+# 仅部署 Router
+./scripts/deploy_dedicated_routers.sh --install-routers -i inventory/hosts-with-dedicated-routers.yml
+
+# 仅部署 HAProxy + Keepalived
+./scripts/deploy_dedicated_routers.sh --configure-lb -i inventory/hosts-with-dedicated-routers.yml
+
 # MySQL 扩容
 ./scripts/deploy_dedicated_routers.sh --scale-mysql-add --limit mysql-node4 -i inventory/hosts-with-dedicated-routers.yml
 
@@ -40,8 +52,12 @@
 
 ## 连接模型
 
-- HAProxy VIP（推荐应用入口）：`3307` 读写 / `3308` 只读
-- 直连 Router：`6446` 读写 / `6447` 只读
+- HAProxy VIP 自动读写分离：`3309`
+- HAProxy VIP 强制读写：`3307`
+- HAProxy VIP 强制只读：`3308`
+- 直连 Router 自动读写分离：`6450`
+- 直连 Router 强制读写：`6446`
+- 直连 Router 强制只读：`6447`
 
 ## 详细文档
 

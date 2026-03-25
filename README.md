@@ -370,6 +370,11 @@ curl http://192.168.1.100:8404/stats
 sudo ./scripts/optimize_mysql_kernel_stable.sh --verify-only
 ```
 
+说明：
+- 走主入口脚本执行完整部署或单独部署时，默认会对对应目标节点执行内核优化。
+- 如需显式跳过，可在主入口脚本中使用 `--skip-kernel-optimization`。
+- 如果你直接手工运行底层 playbook，则不会自动附带内核优化，需要自行决定是否先执行 `playbooks/kernel-optimization-stable.yml`。
+
 ### 扩容、缩容、配置升级与备份
 
 ```bash
@@ -385,6 +390,12 @@ sudo ./scripts/optimize_mysql_kernel_stable.sh --verify-only
 
 # 按当前主配置滚动应用到现有节点
 ./scripts/deploy_dedicated_routers.sh --apply-config -i inventory/hosts-with-dedicated-routers.yml
+
+# 只安装 / 重配 Router（默认会对 mysql_router 目标组执行内核优化）
+./scripts/deploy_dedicated_routers.sh --install-routers -i inventory/hosts-with-dedicated-routers.yml
+
+# 只安装 / 重配 HAProxy + Keepalived（默认会对 haproxy_lb 目标组执行内核优化）
+./scripts/deploy_dedicated_routers.sh --configure-lb -i inventory/hosts-with-dedicated-routers.yml
 
 # 可选备份（默认关闭，需先在 all.yml 中启用 backup_config.enabled=true）
 ./scripts/deploy_dedicated_routers.sh --backup -i inventory/hosts-with-dedicated-routers.yml
