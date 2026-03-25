@@ -11,6 +11,11 @@
 
 一套面向生产环境的 MySQL InnoDB Cluster 自动化部署与运维方案：基于 Ansible 集成 MySQL Router、HAProxy、Keepalived、扩缩容流程与可选逻辑备份，默认针对 **8核32G MySQL + 4核8G Router** 场景优化。
 
+当前主线：
+- 默认以 **MySQL 8.4 LTS** 为主
+- 同时兼容 **MySQL 8.0.x**
+- 备份模式可按版本选择逻辑备份或 XtraBackup 物理备份
+
 ## ✨ 一句话介绍
 
 如果你想从零搭一套 **可维护、可扩展、可继续自动化演进** 的 MySQL 高可用主线，而不是只拼出一套一次性脚本，这个仓库就是为此准备的。
@@ -372,6 +377,12 @@ sudo ./scripts/optimize_mysql_kernel_stable.sh --verify-only
 备份模式支持：
 - `logical`：默认，使用 MySQL Shell Dump
 - `xtrabackup`：可选，使用 Percona XtraBackup 物理备份，适合大数据量场景
+
+版本兼容说明：
+- `MySQL 8.4` → `Percona XtraBackup 8.4`
+- `MySQL 8.0` → `Percona XtraBackup 8.0`
+- 默认主线使用 `MySQL 8.4 LTS`
+- 如需降低对写流量影响，建议将物理备份执行节点切到 `mysql_secondary`
 
 超时与长任务说明：
 - Router 当前显式设置的是连接建立与路由层超时，不会因为 SQL 执行时间长而主动中断正常长查询。

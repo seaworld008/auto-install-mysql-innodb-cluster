@@ -67,6 +67,15 @@
         fail_msg: "mysql_server_id 存在重复或非法值，请确保 mysql_cluster 中每台主机都有唯一且大于0的 server_id。"
         success_msg: "MySQL server_id 配置唯一"
 
+    - name: 检查 MySQL 发行线配置一致性
+      assert:
+        that:
+          - mysql_release_line in mysql_supported_release_lines
+          - mysql_major_version == mysql_release_line
+          - mysql_repo_series == mysql_repo_series_map[mysql_release_line]
+        fail_msg: "MySQL 发行线配置不一致，请检查 mysql_release_line / mysql_major_version / mysql_repo_series。"
+        success_msg: "MySQL 发行线配置一致"
+
     - name: 检查备份配置（启用时）
       assert:
         that:
@@ -81,9 +90,9 @@
     - name: 检查 XtraBackup 与主线版本兼容性
       assert:
         that:
-          - mysql_major_version == '8.4'
-          - mysql_repo_series == '8.4-lts'
-        fail_msg: "当前主线版本不是 MySQL 8.4 LTS，不能启用 Percona XtraBackup 8.4。请先统一主线版本。"
+          - mysql_release_line in ['8.0', '8.4']
+          - mysql_major_version == mysql_release_line
+        fail_msg: "当前主线版本不是受支持的 8.0 / 8.4 发行线，不能启用 XtraBackup。"
         success_msg: "XtraBackup 与当前主线版本兼容"
       when:
         - backup_config.enabled | bool

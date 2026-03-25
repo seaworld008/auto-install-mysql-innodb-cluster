@@ -1,6 +1,10 @@
 # MySQL版本和下载配置
-mysql_version: "8.4"
-mysql_major_version: "8.4"
+mysql_release_line: "8.4"          # 支持 8.0 / 8.4，默认 8.4
+mysql_version: "{{ mysql_release_line }}"
+mysql_major_version: "{{ mysql_release_line }}"
+mysql_supported_release_lines:
+  - "8.0"
+  - "8.4"
 
 # 默认字符集排序规则（兼容历史应用，可按需改为 utf8mb4_0900_ai_ci）
 mysql_collation_server: "utf8mb4_general_ci"
@@ -191,7 +195,6 @@ backup_config:
   run_on_host_group: "mysql_primary"
   logical_tool: "mysqlsh-dump-instance"
   xtrabackup:
-    package_name: "percona-xtrabackup-84"
     parallel: 4
     compress: false
     compress_algorithm: "zstd"
@@ -270,10 +273,13 @@ mysql_architecture_map:
   arm64: "aarch64"
 
 # 官方 MySQL 仓库与支持矩阵
-mysql_repo_series: "8.4-lts"
 mysql_repo_gpg_keys:
   - "https://repo.mysql.com/RPM-GPG-KEY-mysql-2023"
   - "https://repo.mysql.com/RPM-GPG-KEY-mysql-2025"
+mysql_repo_series_map:
+  "8.0": "8.0"
+  "8.4": "8.4-lts"
+mysql_repo_series: "{{ mysql_repo_series_map[mysql_release_line] }}"
 mysql_supported_redhat_major_versions:
   - "8"
   - "9"
