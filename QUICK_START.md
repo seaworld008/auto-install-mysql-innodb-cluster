@@ -18,6 +18,9 @@ vim inventory/group_vars/all.yml
 
 # 5. 查看状态
 ./scripts/deploy_dedicated_routers.sh --status -i inventory/hosts-with-dedicated-routers.yml
+
+# 6. 如只需批量执行内核优化
+./scripts/deploy_dedicated_routers.sh --kernel-optimize-only -i inventory/hosts-with-dedicated-routers.yml
 ```
 
 连接信息：

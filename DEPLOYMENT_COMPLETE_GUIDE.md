@@ -14,6 +14,7 @@
 - 走主入口脚本执行完整部署或单独部署时，默认会对对应目标节点执行内核优化。
 - 缩容与备份不会额外触发内核优化。
 - 如需跳过，可在主入口脚本中使用 `--skip-kernel-optimization`。
+- 如需单独执行内核优化，可使用 `--kernel-optimize-only`。
 
 ## 推荐入口
 
@@ -33,6 +34,9 @@
 
 # 滚动应用当前配置
 ./scripts/deploy_dedicated_routers.sh --apply-config -i inventory/hosts-with-dedicated-routers.yml
+
+# 仅执行内核优化
+./scripts/deploy_dedicated_routers.sh --kernel-optimize-only -i inventory/hosts-with-dedicated-routers.yml
 
 # 仅部署 Router
 ./scripts/deploy_dedicated_routers.sh --install-routers -i inventory/hosts-with-dedicated-routers.yml

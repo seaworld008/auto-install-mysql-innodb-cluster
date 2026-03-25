@@ -109,6 +109,7 @@ ansible mysql_cluster:mysql_router:haproxy_lb -i inventory/hosts-with-dedicated-
 补充说明：
 - 多台服务器场景下，优先使用 Ansible playbook 批量执行内核优化。
 - `./scripts/optimize_mysql_kernel_stable.sh` 更适合单机手动优化、单机排查或临时验证。
+- 如需通过主入口脚本单独执行内核优化，可使用 `./scripts/deploy_dedicated_routers.sh --kernel-optimize-only -i inventory/hosts-with-dedicated-routers.yml`
 
 ### 3. 配置管理
 
@@ -395,6 +396,9 @@ sudo ./scripts/optimize_mysql_kernel_stable.sh --verify-only
 # 按当前主配置滚动应用到现有节点
 ./scripts/deploy_dedicated_routers.sh --apply-config -i inventory/hosts-with-dedicated-routers.yml
 
+# 仅执行内核优化
+./scripts/deploy_dedicated_routers.sh --kernel-optimize-only -i inventory/hosts-with-dedicated-routers.yml
+
 # 只安装 / 重配 Router（默认会对 mysql_router 目标组执行内核优化）
 ./scripts/deploy_dedicated_routers.sh --install-routers -i inventory/hosts-with-dedicated-routers.yml
 
@@ -414,6 +418,7 @@ sudo ./scripts/optimize_mysql_kernel_stable.sh --verify-only
 | 仅部署 Router | `--install-routers` | 是 | 已有 MySQL Cluster，补接入层 |
 | 仅部署 HAProxy + Keepalived | `--configure-lb` | 是 | 已有 Router，补 VIP / 四层入口 |
 | 滚动应用当前配置 | `--apply-config` | 是 | 修改主配置后滚动应用 |
+| 仅执行内核优化 | `--kernel-optimize-only` | 是 | 批量内核调优，不执行安装部署 |
 | MySQL 扩容 | `--scale-mysql-add` | 是 | 新增 MySQL 节点加入集群 |
 | MySQL 缩容 | `--scale-mysql-remove` | 否 | 下线 MySQL 节点 |
 | Router 缩容 | `--shrink-router` | 否 | 下线 Router 节点 |
@@ -465,19 +470,25 @@ sudo ./scripts/optimize_mysql_kernel_stable.sh --verify-only
 ./scripts/deploy_dedicated_routers.sh --apply-config -i inventory/hosts-with-dedicated-routers.yml
 ```
 
-#### 7. 扩容一个新的 MySQL 节点
+#### 7. 仅执行一次内核优化
+
+```bash
+./scripts/deploy_dedicated_routers.sh --kernel-optimize-only -i inventory/hosts-with-dedicated-routers.yml
+```
+
+#### 8. 扩容一个新的 MySQL 节点
 
 ```bash
 ./scripts/deploy_dedicated_routers.sh --scale-mysql-add --limit mysql-node4 -i inventory/hosts-with-dedicated-routers.yml
 ```
 
-#### 8. 缩容一个 MySQL 节点
+#### 9. 缩容一个 MySQL 节点
 
 ```bash
 ./scripts/deploy_dedicated_routers.sh --scale-mysql-remove --target mysql-node3 --new-primary mysql-node2 -i inventory/hosts-with-dedicated-routers.yml
 ```
 
-#### 9. 执行一次逻辑备份
+#### 10. 执行一次逻辑备份
 
 ```bash
 # 先在 inventory/group_vars/all.yml 中启用：
@@ -487,7 +498,7 @@ sudo ./scripts/optimize_mysql_kernel_stable.sh --verify-only
 ./scripts/deploy_dedicated_routers.sh --backup -i inventory/hosts-with-dedicated-routers.yml
 ```
 
-#### 10. 执行一次 XtraBackup 物理备份
+#### 11. 执行一次 XtraBackup 物理备份
 
 ```bash
 # 先在 inventory/group_vars/all.yml 中启用：
@@ -497,7 +508,7 @@ sudo ./scripts/optimize_mysql_kernel_stable.sh --verify-only
 ./scripts/deploy_dedicated_routers.sh --backup -i inventory/hosts-with-dedicated-routers.yml
 ```
 
-#### 11. 只做健康检查
+#### 12. 只做健康检查
 
 ```bash
 ./scripts/deploy_dedicated_routers.sh --status -i inventory/hosts-with-dedicated-routers.yml

@@ -35,6 +35,7 @@ MySQL InnoDB Cluster 生产部署入口
     --install-routers       仅安装/重配 Router
     --configure-lb          仅安装/重配 HAProxy + Keepalived
     --apply-config          按当前主配置滚动应用到现有节点
+    --kernel-optimize-only  仅执行内核优化（可配合 --limit）
     --scale-mysql-add       扩容 MySQL 节点（需配合 --limit）
     --scale-mysql-remove    缩容 MySQL 节点（需配合 --target，可选 --new-primary）
     --shrink-router         缩容 Router 节点（需配合 --limit）
@@ -157,6 +158,15 @@ apply_config() {
     health_check
 }
 
+kernel_optimize_only() {
+    local limit="$1"
+    if [[ -z "$limit" ]]; then
+        limit="all"
+    fi
+    log_step "仅执行内核优化: $limit"
+    ansible-playbook -i "$INVENTORY" playbooks/kernel-optimization-stable.yml --limit "$limit"
+}
+
 scale_mysql_add() {
     local limit="$1"
     if [[ -z "$limit" ]]; then
@@ -270,7 +280,7 @@ main() {
     local new_primary=""
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --production-ready|--mysql-only|--install-routers|--configure-lb|--apply-config|--scale-mysql-add|--scale-mysql-remove|--shrink-router|--shrink-lb|--backup|--full-deploy|--check-prereq|--test-connection|--status|--rollback)
+            --production-ready|--mysql-only|--install-routers|--configure-lb|--apply-config|--kernel-optimize-only|--scale-mysql-add|--scale-mysql-remove|--shrink-router|--shrink-lb|--backup|--full-deploy|--check-prereq|--test-connection|--status|--rollback)
                 action="$1"
                 shift
                 ;;
@@ -346,6 +356,9 @@ main() {
             ;;
         --apply-config)
             apply_config
+            ;;
+        --kernel-optimize-only)
+            kernel_optimize_only "$limit"
             ;;
         --scale-mysql-add)
             scale_mysql_add "$limit"
