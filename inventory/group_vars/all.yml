@@ -218,22 +218,16 @@ mysql_router_port: 6446
 mysql_router_ro_port: 6447
 mysql_router_admin_port: 8443
 mysql_router_rebootstrap: false
-mysql_router_metadata_connect_timeout: 5
-mysql_router_metadata_read_timeout: 30
-mysql_router_routing_connect_timeout: 5
-mysql_router_client_connect_timeout: 9
-mysql_router_max_connect_errors: 100
-mysql_router_max_total_connections: 30000
-mysql_router_route_max_connections: 15000
 
 # 4核8G Router优化配置
 mysql_router_4c8g_optimized:
-  # 连接配置 - 保持3万连接能力
-  max_connections: 30000
-  max_connections_per_route: 15000
-  connection_timeout: 30
-  read_timeout: 30
-  write_timeout: 30
+  # 连接配置（使用 MySQL Router 官方选项名）
+  max_total_connections: 30000
+  route_max_connections: 15000
+  metadata_connect_timeout: 5
+  metadata_read_timeout: 30
+  routing_connect_timeout: 5
+  client_connect_timeout: 9
   max_connect_errors: 100
   
   # CPU和内存优化 - 适配4核8G硬件
@@ -249,6 +243,14 @@ mysql_router_4c8g_optimized:
   # 路由策略
   routing_strategy_rw: "first-available"
   routing_strategy_ro: "round-robin"
+
+mysql_router_metadata_connect_timeout: "{{ mysql_router_4c8g_optimized.metadata_connect_timeout }}"
+mysql_router_metadata_read_timeout: "{{ mysql_router_4c8g_optimized.metadata_read_timeout }}"
+mysql_router_routing_connect_timeout: "{{ mysql_router_4c8g_optimized.routing_connect_timeout }}"
+mysql_router_client_connect_timeout: "{{ mysql_router_4c8g_optimized.client_connect_timeout }}"
+mysql_router_max_connect_errors: "{{ mysql_router_4c8g_optimized.max_connect_errors }}"
+mysql_router_max_total_connections: "{{ mysql_router_4c8g_optimized.max_total_connections }}"
+mysql_router_route_max_connections: "{{ mysql_router_4c8g_optimized.route_max_connections }}"
 
 # 架构检测
 mysql_architecture_map:
