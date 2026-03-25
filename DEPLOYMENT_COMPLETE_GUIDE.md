@@ -66,6 +66,7 @@
 ## 详细文档
 
 - 主说明：`README.md`
+- 备份恢复：`docs/BACKUP_AND_RESTORE_GUIDE.md`
 - HA 蓝图：`docs/DEPLOYMENT_HA_BLUEPRINT_ZH.md`
 - 容量分析：`docs/HARDWARE_CAPACITY_ANALYSIS.md`
 - Router 说明：`docs/ROUTER_DEPLOYMENT_COMPLETE.md`

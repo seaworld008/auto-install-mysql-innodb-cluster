@@ -363,6 +363,7 @@ MySQL集群 (192.168.1.10-12)
 - [🤖 **AI维护说明**](docs/AI_MAINTAINER_GUIDE.md) **← 给 AI / 新接手同事**
 - [📂 **项目结构总览**](PROJECT_STRUCTURE.md) **← 文件组织**
 - [🔧 **Router完整部署**](docs/ROUTER_DEPLOYMENT_COMPLETE.md) **← Router专项**
+- [💾 **备份与恢复指南**](docs/BACKUP_AND_RESTORE_GUIDE.md) **← 备份 / 恢复主线**
 - [⚡ **内核优化最佳实践**](docs/MYSQL_KERNEL_BEST_PRACTICES.md) **← 稳定配置**
 - [🎯 **MySQL完整优化**](docs/MYSQL_OPTIMIZATION_COMPLETE.md) **← 性能调优**
 - [📊 **硬件容量分析**](docs/HARDWARE_CAPACITY_ANALYSIS.md)
