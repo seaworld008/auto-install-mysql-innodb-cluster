@@ -1,12 +1,31 @@
 # 更新日志
 
-## [2024-12-28] - 8核32G+4核8G优化配置设为默认
+> 说明：本文件保留历史演进记录，当前运行时真相源请以 `inventory/group_vars/all.yml`、`README.md` 和 `DEPLOYMENT_COMPLETE_GUIDE.md` 为准。
+
+## [2026-03-25] - 收敛为可长期维护的生产主线
+
+### ✨ 主线升级
+
+- 统一主配置为 `inventory/group_vars/all.yml`
+- `config_manager.sh` 改为仅切换 `mysql_hardware_profile`
+- 扩容、缩容、滚动配置应用、可选逻辑备份全部纳入主流程
+- 新增 `collections/requirements.yml`，显式声明所需 collections
+- GitHub Actions 静态质量验证覆盖 syntax-check 与 inventory 校验
+
+### 🔧 当前主线默认
+
+- MySQL 默认 `2500/节点`
+- HAProxy VIP 默认 `3307/3308`
+- Router 直连默认 `6446/6447`
+- 连接复用按保守 `8:1` 设计
+
+## [2024-12-28] - 8核32G+4核8G优化配置设为默认（历史记录）
 
 ### ✨ 重大更新
 
 #### 🎯 默认配置优化
 - **8核32G+4核8G优化配置**现已设为默认配置
-- MySQL连接数调整为**4000/节点**，确保32G内存安全使用
+- MySQL连接数曾调整为**4000/节点**，这是旧阶段设计
 - Router保持**30000连接/台**，充分利用4核8G硬件
 - 连接复用比例优化到**5:1**，大幅提升效率
 
@@ -20,7 +39,7 @@
 - **8c32g-optimized**: 默认配置，适用于8核32G+4核8G硬件
 - **original-10k**: 保留原始高连接配置，适用于32核64G硬件
 - **standard**: 标准配置，适用于小规模部署
-- **high-performance**: 高性能配置，峰期升级时使用
+- **high-performance**: 旧命名，当前主线已不再使用
 
 #### 📝 文档更新
 - 更新主README，突出8C32G优化特色

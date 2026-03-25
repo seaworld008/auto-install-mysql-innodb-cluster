@@ -4,7 +4,7 @@
 
 ### 1. 修改主机清单文件
 
-编辑 `inventory/hosts.yml` 文件，配置你的3台服务器信息：
+优先编辑 `inventory/hosts-with-dedicated-routers.yml` 或 `inventory/hosts-ha-reference.yml`，配置你的服务器信息：
 
 ```yaml
 all:
@@ -102,8 +102,8 @@ ansible mysql-node3 -m ping
 连接测试成功后，开始部署：
 
 ```bash
-# 使用密码认证部署
-./deploy.sh
+# 使用统一主入口部署
+./scripts/deploy_dedicated_routers.sh --production-ready -i inventory/hosts-with-dedicated-routers.yml
 
 # 如果使用了Ansible Vault
 ansible-playbook -i inventory/hosts.yml playbooks/site.yml --ask-vault-pass
@@ -134,7 +134,7 @@ ansible_become_pass: "sudo密码"
 ### 7. 服务器要求
 
 每台服务器需要满足：
-- **操作系统**: CentOS 7.9+ 或 CentOS 8.x
+- **操作系统**: Ubuntu 22.04 / 24.04 / 25.10，或 RHEL/Rocky/Alma 8/9/10
 - **内存**: 最少2GB，推荐4GB+
 - **磁盘**: 最少20GB可用空间
 - **网络**: 服务器间网络互通
@@ -144,7 +144,9 @@ ansible_become_pass: "sudo密码"
 
 确保以下端口在服务器间开放：
 - **3306**: MySQL服务端口
-- **33060**: MySQL X Protocol端口
+- **33062**: MySQL X Protocol / 管理端口
 - **33061**: MySQL Group Replication端口
 - **6446**: MySQL Router读写端口
-- **6447**: MySQL Router只读端口 
+- **6447**: MySQL Router只读端口
+- **3307**: HAProxy VIP 读写端口
+- **3308**: HAProxy VIP 只读端口
