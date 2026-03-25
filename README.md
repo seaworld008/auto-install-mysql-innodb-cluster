@@ -401,6 +401,28 @@ sudo ./scripts/optimize_mysql_kernel_stable.sh --verify-only
 ./scripts/deploy_dedicated_routers.sh --backup -i inventory/hosts-with-dedicated-routers.yml
 ```
 
+### 功能矩阵
+
+| 能力 | 主入口命令 | 默认会带内核优化 | 适用场景 |
+|------|------------|------------------|----------|
+| 完整部署 | `--production-ready` | 是 | 新环境一次性完整部署 |
+| 仅部署 MySQL Cluster | `--mysql-only` | 是 | 只落数据库高可用层 |
+| 仅部署 Router | `--install-routers` | 是 | 已有 MySQL Cluster，补接入层 |
+| 仅部署 HAProxy + Keepalived | `--configure-lb` | 是 | 已有 Router，补 VIP / 四层入口 |
+| 滚动应用当前配置 | `--apply-config` | 是 | 修改主配置后滚动应用 |
+| MySQL 扩容 | `--scale-mysql-add` | 是 | 新增 MySQL 节点加入集群 |
+| MySQL 缩容 | `--scale-mysql-remove` | 否 | 下线 MySQL 节点 |
+| Router 缩容 | `--shrink-router` | 否 | 下线 Router 节点 |
+| HAProxy / Keepalived 缩容 | `--shrink-lb` | 否 | 下线入口层节点 |
+| 可选备份 | `--backup` | 否 | 逻辑备份或 XtraBackup 物理备份 |
+| 仅前置检查 | `--check-prereq` | 否 | 变更前做拓扑和参数检查 |
+| 仅健康检查 | `--test-connection` / `--status` | 否 | 部署后验证 |
+
+补充说明：
+- 如需显式跳过内核优化，可追加 `--skip-kernel-optimization`
+- 如果直接手工运行底层 playbook，则不会自动附带内核优化
+- 默认推荐使用主入口脚本，而不是直接调用底层 playbook
+
 备份目标支持：
 - 本地目录
 - 挂载目录（NFS）
