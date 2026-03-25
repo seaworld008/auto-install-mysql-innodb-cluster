@@ -423,6 +423,82 @@ sudo ./scripts/optimize_mysql_kernel_stable.sh --verify-only
 - 如果直接手工运行底层 playbook，则不会自动附带内核优化
 - 默认推荐使用主入口脚本，而不是直接调用底层 playbook
 
+### 实用命令示例
+
+#### 1. 新环境完整部署
+
+```bash
+./scripts/deploy_dedicated_routers.sh --production-ready -i inventory/hosts-with-dedicated-routers.yml
+```
+
+#### 2. 只部署 MySQL 高可用集群
+
+```bash
+./scripts/deploy_dedicated_routers.sh --mysql-only -i inventory/hosts-with-dedicated-routers.yml
+```
+
+#### 3. 已有 MySQL Cluster，补部署 Router
+
+```bash
+./scripts/deploy_dedicated_routers.sh --install-routers -i inventory/hosts-with-dedicated-routers.yml
+```
+
+#### 4. 已有 Router，补部署 HAProxy + Keepalived
+
+```bash
+./scripts/deploy_dedicated_routers.sh --configure-lb -i inventory/hosts-with-dedicated-routers.yml
+```
+
+#### 5. 只做前置检查，不做部署
+
+```bash
+./scripts/deploy_dedicated_routers.sh --check-prereq -i inventory/hosts-with-dedicated-routers.yml
+```
+
+#### 6. 修改主配置后，滚动应用到现有节点
+
+```bash
+./scripts/deploy_dedicated_routers.sh --apply-config -i inventory/hosts-with-dedicated-routers.yml
+```
+
+#### 7. 扩容一个新的 MySQL 节点
+
+```bash
+./scripts/deploy_dedicated_routers.sh --scale-mysql-add --limit mysql-node4 -i inventory/hosts-with-dedicated-routers.yml
+```
+
+#### 8. 缩容一个 MySQL 节点
+
+```bash
+./scripts/deploy_dedicated_routers.sh --scale-mysql-remove --target mysql-node3 --new-primary mysql-node2 -i inventory/hosts-with-dedicated-routers.yml
+```
+
+#### 9. 执行一次逻辑备份
+
+```bash
+# 先在 inventory/group_vars/all.yml 中启用：
+# backup_config.enabled: true
+# backup_config.method: logical
+
+./scripts/deploy_dedicated_routers.sh --backup -i inventory/hosts-with-dedicated-routers.yml
+```
+
+#### 10. 执行一次 XtraBackup 物理备份
+
+```bash
+# 先在 inventory/group_vars/all.yml 中启用：
+# backup_config.enabled: true
+# backup_config.method: xtrabackup
+
+./scripts/deploy_dedicated_routers.sh --backup -i inventory/hosts-with-dedicated-routers.yml
+```
+
+#### 11. 只做健康检查
+
+```bash
+./scripts/deploy_dedicated_routers.sh --status -i inventory/hosts-with-dedicated-routers.yml
+```
+
 备份目标支持：
 - 本地目录
 - 挂载目录（NFS）
