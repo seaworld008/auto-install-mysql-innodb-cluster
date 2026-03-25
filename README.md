@@ -280,6 +280,7 @@ MySQL集群 (192.168.1.10-12)
 ## 📚 文档目录
 
 - [🚀 **完整部署指南**](DEPLOYMENT_COMPLETE_GUIDE.md) **← 推荐首选**
+- [🤖 **AI维护说明**](docs/AI_MAINTAINER_GUIDE.md) **← 给 AI / 新接手同事**
 - [📂 **项目结构总览**](PROJECT_STRUCTURE.md) **← 文件组织**
 - [🔧 **Router完整部署**](docs/ROUTER_DEPLOYMENT_COMPLETE.md) **← Router专项**
 - [⚡ **内核优化最佳实践**](docs/MYSQL_KERNEL_BEST_PRACTICES.md) **← 稳定配置**
