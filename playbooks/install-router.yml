@@ -142,6 +142,13 @@
         --conf-use-sockets \
         --account mysqlrouter \
         --account-create always \
+        --conf-set-option=DEFAULT.max_total_connections={{ mysql_router_max_total_connections }} \
+        --conf-set-option=DEFAULT.read_timeout={{ mysql_router_metadata_read_timeout }} \
+        --conf-set-option=DEFAULT.connect_timeout={{ mysql_router_metadata_connect_timeout }} \
+        --conf-set-option=routing.max_connections={{ mysql_router_route_max_connections }} \
+        --conf-set-option=routing.max_connect_errors={{ mysql_router_max_connect_errors }} \
+        --conf-set-option=routing.client_connect_timeout={{ mysql_router_client_connect_timeout }} \
+        --conf-set-option=routing.connect_timeout={{ mysql_router_routing_connect_timeout }} \
         --force
       register: router_bootstrap
       become_user: mysqlrouter

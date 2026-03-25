@@ -70,9 +70,12 @@ mysql_config_profiles:
     table_open_cache_instances: 8
     open_files_limit: 65535
     join_buffer_size: "512K"
-    max_allowed_packet: "64M"
-    wait_timeout: 600
-    interactive_timeout: 600
+    max_allowed_packet: "256M"
+    wait_timeout: 1800
+    interactive_timeout: 1800
+    connect_timeout: 10
+    net_read_timeout: 300
+    net_write_timeout: 300
   original_10k:
     # 历史高连接配置，仅适用于更高内存压力容忍度场景
     innodb_buffer_pool_size: "24G"
@@ -97,9 +100,12 @@ mysql_config_profiles:
     table_open_cache_instances: 16
     open_files_limit: 100000
     join_buffer_size: "1M"
-    max_allowed_packet: "128M"
-    wait_timeout: 900
-    interactive_timeout: 900
+    max_allowed_packet: "256M"
+    wait_timeout: 3600
+    interactive_timeout: 3600
+    connect_timeout: 10
+    net_read_timeout: 300
+    net_write_timeout: 300
     
 # 当前配置（根据硬件配置文件选择）
 mysql_innodb_buffer_pool_size: "{{ mysql_config_profiles[mysql_hardware_profile].innodb_buffer_pool_size }}"
@@ -127,6 +133,9 @@ mysql_join_buffer_size: "{{ mysql_config_profiles[mysql_hardware_profile].join_b
 mysql_max_allowed_packet: "{{ mysql_config_profiles[mysql_hardware_profile].max_allowed_packet }}"
 mysql_wait_timeout: "{{ mysql_config_profiles[mysql_hardware_profile].wait_timeout }}"
 mysql_interactive_timeout: "{{ mysql_config_profiles[mysql_hardware_profile].interactive_timeout }}"
+mysql_connect_timeout: "{{ mysql_config_profiles[mysql_hardware_profile].connect_timeout }}"
+mysql_net_read_timeout: "{{ mysql_config_profiles[mysql_hardware_profile].net_read_timeout }}"
+mysql_net_write_timeout: "{{ mysql_config_profiles[mysql_hardware_profile].net_write_timeout }}"
 
 # 系统配置
 mysql_user: "mysql"
@@ -209,6 +218,13 @@ mysql_router_port: 6446
 mysql_router_ro_port: 6447
 mysql_router_admin_port: 8443
 mysql_router_rebootstrap: false
+mysql_router_metadata_connect_timeout: 5
+mysql_router_metadata_read_timeout: 30
+mysql_router_routing_connect_timeout: 5
+mysql_router_client_connect_timeout: 9
+mysql_router_max_connect_errors: 100
+mysql_router_max_total_connections: 30000
+mysql_router_route_max_connections: 15000
 
 # 4核8G Router优化配置
 mysql_router_4c8g_optimized:

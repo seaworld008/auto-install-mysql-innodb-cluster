@@ -331,6 +331,10 @@ sudo ./scripts/optimize_mysql_kernel_stable.sh --verify-only
 - 挂载目录（NFS）
 - SSH + rsync 到远端目录
 
+超时与长任务说明：
+- Router 当前显式设置的是连接建立与路由层超时，不会因为 SQL 执行时间长而主动中断正常长查询。
+- MySQL 当前默认 `wait_timeout/interactive_timeout` 已提升到更适合生产作业的范围，`net_read_timeout/net_write_timeout` 也按导入导出/迁移场景做了放宽。
+
 ### 内核优化管理
 
 ```bash
