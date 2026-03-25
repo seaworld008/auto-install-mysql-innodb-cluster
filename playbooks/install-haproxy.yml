@@ -28,6 +28,7 @@
       loop:
         - "{{ haproxy_mysql_rw_port }}"
         - "{{ haproxy_mysql_ro_port }}"
+        - "{{ haproxy_mysql_rwsplit_port }}"
         - "{{ haproxy_stats_port }}"
       when: ansible_service_mgr == 'systemd' and ansible_os_family == 'RedHat'
       ignore_errors: yes

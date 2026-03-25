@@ -8,6 +8,11 @@
     mysql_router_service_name: "mysqlrouter"
     mysql_router_package_name_redhat: "mysql-router-community"
     mysql_router_package_name_debian: "mysql-router"
+    mysql_release_apt_components: "{{ 'mysql-8.0 mysql-tools' if mysql_release_line == '8.0' else 'mysql-8.4-lts mysql-tools' }}"
+    mysql_release_yum_server_repo_name: "{{ 'mysql80-community' if mysql_release_line == '8.0' else 'mysql-84-lts-community' }}"
+    mysql_release_yum_server_baseurl: "{{ 'https://repo.mysql.com/yum/mysql-8.0-community/el/' ~ ansible_distribution_major_version ~ '/$basearch/' if mysql_release_line == '8.0' else 'https://repo.mysql.com/yum/mysql-8.4-community/el/' ~ ansible_distribution_major_version ~ '/$basearch/' }}"
+    mysql_release_yum_tools_repo_name: "{{ 'mysql-tools-community' if mysql_release_line == '8.0' else 'mysql-tools-84-lts-community' }}"
+    mysql_release_yum_tools_baseurl: "{{ 'https://repo.mysql.com/yum/mysql-tools-community/el/' ~ ansible_distribution_major_version ~ '/$basearch/' if mysql_release_line == '8.0' else 'https://repo.mysql.com/yum/mysql-tools-8.4-community/el/' ~ ansible_distribution_major_version ~ '/$basearch/' }}"
     mysql_router_packages_redhat:
       - wget
       - curl
@@ -23,13 +28,14 @@
     - name: 验证目标操作系统受支持
       assert:
         that:
+          - mysql_release_line in mysql_supported_release_lines
           - >
             (ansible_os_family == 'RedHat' and ansible_distribution_major_version in mysql_supported_redhat_major_versions)
             or
             (ansible_distribution == 'Ubuntu' and ansible_distribution_release in mysql_supported_ubuntu_releases)
             or
             (ansible_distribution == 'Debian' and ansible_distribution_release in mysql_supported_debian_releases)
-        fail_msg: "当前系统 {{ ansible_distribution }} {{ ansible_distribution_version }} 不在已验证矩阵中。当前仓库已验证 Ubuntu 22.04/24.04/25.10 与 RedHat 家族 8/9/10。"
+        fail_msg: "当前系统或 MySQL 发行线不在已验证矩阵中。当前仓库仅支持 MySQL 8.0 / 8.4，且已验证 Ubuntu 22.04/24.04/25.10 与 RedHat 家族 8/9/10。"
         success_msg: "目标操作系统在已验证矩阵内"
 
     - name: 安装 Router 依赖和软件包（RedHat）
@@ -48,12 +54,12 @@
         repo_gpgcheck: no
         gpgkey: "{{ mysql_repo_gpg_keys | join('\n') }}"
       loop:
-        - name: mysql-84-lts-community
+        - name: "{{ mysql_release_yum_server_repo_name }}"
           description: MySQL {{ mysql_repo_series }} Router
-          baseurl: "https://repo.mysql.com/yum/mysql-8.4-community/el/{{ ansible_distribution_major_version }}/$basearch/"
-        - name: mysql-tools-84-lts-community
+          baseurl: "{{ mysql_release_yum_server_baseurl }}"
+        - name: "{{ mysql_release_yum_tools_repo_name }}"
           description: MySQL {{ mysql_repo_series }} Tools
-          baseurl: "https://repo.mysql.com/yum/mysql-tools-8.4-community/el/{{ ansible_distribution_major_version }}/$basearch/"
+          baseurl: "{{ mysql_release_yum_tools_baseurl }}"
       when: ansible_os_family == 'RedHat'
 
     - name: 禁用 RedHat 系统自带 MySQL 模块
@@ -83,7 +89,7 @@
         dest: /etc/apt/sources.list.d/mysql.list
         mode: '0644'
         content: |
-          deb [signed-by=/usr/share/keyrings/mysql.gpg] http://repo.mysql.com/apt/{{ ansible_distribution | lower }} {{ ansible_distribution_release }} mysql-8.4-lts mysql-tools
+          deb [signed-by=/usr/share/keyrings/mysql.gpg] http://repo.mysql.com/apt/{{ ansible_distribution | lower }} {{ ansible_distribution_release }} {{ mysql_release_apt_components }}
       when: ansible_os_family == 'Debian'
 
     - name: 更新 APT 缓存
@@ -139,6 +145,7 @@
       shell: |
         mysqlrouter --bootstrap {{ mysql_cluster_user }}:{{ mysql_cluster_password }}@{{ hostvars[groups['mysql_primary'][0]]['ansible_default_ipv4']['address'] }}:{{ mysql_port }} \
         --directory /var/lib/mysqlrouter \
+        --conf-base-port={{ mysql_router_port }} \
         --conf-use-sockets \
         --account mysqlrouter \
         --account-create always \
@@ -149,6 +156,12 @@
         --conf-set-option=routing.max_connect_errors={{ mysql_router_max_connect_errors }} \
         --conf-set-option=routing.client_connect_timeout={{ mysql_router_client_connect_timeout }} \
         --conf-set-option=routing.connect_timeout={{ mysql_router_routing_connect_timeout }} \
+        --conf-set-option=routing:read_write_split.bind_port={{ mysql_router_rwsplit_port }} \
+        --conf-set-option=routing:read_write_split.destinations=metadata-cache://{{ mysql_cluster_name }}/default?role=PRIMARY_AND_SECONDARY \
+        --conf-set-option=routing:read_write_split.routing_strategy={{ mysql_router_4c8g_optimized.routing_strategy_rwsplit }} \
+        --conf-set-option=routing:read_write_split.access_mode=auto \
+        --conf-set-option=routing:read_write_split.connection_sharing=1 \
+        --conf-set-option=routing:read_write_split.protocol=classic \
         --force
       register: router_bootstrap
       become_user: mysqlrouter
@@ -176,6 +189,7 @@
       loop:
         - "{{ mysql_router_port }}/tcp"
         - "{{ mysql_router_ro_port }}/tcp"
+        - "{{ mysql_router_rwsplit_port }}/tcp"
         - "{{ mysql_router_admin_port }}/tcp"
       when: ansible_service_mgr == 'systemd' and ansible_os_family == 'RedHat'
       ignore_errors: yes
@@ -206,6 +220,12 @@
       register: router_ro_test
       ignore_errors: yes
 
+    - name: 测试 MySQL Router 自动读写分离端口
+      shell: |
+        mysql -h {{ ansible_default_ipv4.address }} -P {{ mysql_router_rwsplit_port }} -u {{ mysql_cluster_user }} -p{{ mysql_cluster_password }} -e "SELECT @@hostname, @@port"
+      register: router_rwsplit_test
+      ignore_errors: yes
+
     - name: 显示 Router 连接测试结果
       debug:
         msg: |
@@ -225,6 +245,7 @@
           - Router地址: {{ ansible_default_ipv4.address }}
           - 读写端口: {{ mysql_router_port }}
           - 只读端口: {{ mysql_router_ro_port }}
+          - 自动读写分离端口: {{ mysql_router_rwsplit_port }}
           - 管理端口: {{ mysql_router_admin_port }}
 
           应用连接示例:

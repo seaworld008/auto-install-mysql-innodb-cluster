@@ -152,6 +152,16 @@ backend mysql_readonly_servers
     server router1 192.168.1.20:6447 check
     server router2 192.168.1.21:6447 check
 
+# HAProxy VIP 自动读写分离入口 (3309)
+frontend mysql_read_write_split
+    bind *:3309
+    default_backend mysql_read_write_split_servers
+
+backend mysql_read_write_split_servers
+    balance roundrobin
+    server router1 192.168.1.20:6450 check
+    server router2 192.168.1.21:6450 check
+
 # 统计页面
 listen stats
     bind *:8404
@@ -212,6 +222,15 @@ destinations=metadata-cache://myCluster/default?role=SECONDARY
 routing_strategy=round-robin
 protocol=classic
 max_connections=15000
+
+[routing:read_write_split]
+bind_address=0.0.0.0
+bind_port=6450
+destinations=metadata-cache://myCluster/default?role=PRIMARY_AND_SECONDARY
+routing_strategy=round-robin-with-fallback
+access_mode=auto
+connection_sharing=1
+protocol=classic
 ```
 
 ### 2. 系统级优化

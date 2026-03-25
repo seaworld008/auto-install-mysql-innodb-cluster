@@ -118,6 +118,12 @@ sudo ./scripts/optimize_mysql_kernel_stable.sh --verify-only
 - MySQL Router: 2 节点（可扩至3）
 - HAProxy: 2 节点（可扩至3）
 
+接入层当前支持三类入口：
+
+- 强制读写入口
+- 强制只读入口
+- 自动读写分离单端口入口
+
 推荐参考清单：
 - 参考Inventory：`inventory/hosts-ha-reference.yml`
 - 部署蓝图（中文）：`docs/DEPLOYMENT_HA_BLUEPRINT_ZH.md`
@@ -388,6 +394,11 @@ sudo ./scripts/optimize_mysql_kernel_stable.sh --verify-only
 - Router 当前显式设置的是连接建立与路由层超时，不会因为 SQL 执行时间长而主动中断正常长查询。
 - MySQL 当前默认 `wait_timeout/interactive_timeout` 已提升到更适合生产作业的范围，`net_read_timeout/net_write_timeout` 也按导入导出/迁移场景做了放宽。
 
+自动读写分离说明：
+- 新增了单端口自动读写分离能力，适合不希望在应用层区分读写数据源的 Java 服务。
+- 现有强制 RW / RO 端口仍然保留，便于运维、批处理、DDL、只读分析等场景使用。
+- 自动读写分离是新增能力，不会破坏现有服务对 `3307/3308` 和 `6446/6447` 的使用方式。
+
 ### 内核优化管理
 
 ```bash
@@ -453,8 +464,12 @@ sudo ./scripts/optimize_mysql_kernel_stable.sh --verify-only
 
 ### 连接信息
 
-- **HAProxy VIP（推荐应用入口）**: `192.168.1.100:3307` (读写) / `192.168.1.100:3308` (只读)
-- **直连 Router**: `router-ip:6446` (读写) / `router-ip:6447` (只读)
+- **HAProxy VIP（自动读写分离，推荐应用默认入口）**: `192.168.1.100:3309`
+- **HAProxy VIP（强制读写）**: `192.168.1.100:3307`
+- **HAProxy VIP（强制只读）**: `192.168.1.100:3308`
+- **直连 Router（强制读写）**: `router-ip:6446`
+- **直连 Router（强制只读）**: `router-ip:6447`
+- **直连 Router（自动读写分离）**: `router-ip:6450`
 - **监控页面**: http://192.168.1.100:8404/stats
 - **配置管理**: `./scripts/config_manager.sh --help`
 - **稳定内核优化**: `sudo ./scripts/optimize_mysql_kernel_stable.sh --help`

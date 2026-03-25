@@ -9,6 +9,11 @@
     mysql_config_file: "{{ '/etc/my.cnf' if ansible_os_family == 'RedHat' else '/etc/mysql/mysql.conf.d/zz-innodb-cluster.cnf' }}"
     mysql_socket_path: "{{ mysql_datadir }}/mysql.sock"
     mysql_error_log_path: "{{ '/var/log/mysqld.log' if ansible_os_family == 'RedHat' else '/var/log/mysql/error.log' }}"
+    mysql_release_apt_components: "{{ 'mysql-8.0 mysql-tools' if mysql_release_line == '8.0' else 'mysql-8.4-lts mysql-tools' }}"
+    mysql_release_yum_server_repo_name: "{{ 'mysql80-community' if mysql_release_line == '8.0' else 'mysql-84-lts-community' }}"
+    mysql_release_yum_server_baseurl: "{{ 'https://repo.mysql.com/yum/mysql-8.0-community/el/' ~ ansible_distribution_major_version ~ '/$basearch/' if mysql_release_line == '8.0' else 'https://repo.mysql.com/yum/mysql-8.4-community/el/' ~ ansible_distribution_major_version ~ '/$basearch/' }}"
+    mysql_release_yum_tools_repo_name: "{{ 'mysql-tools-community' if mysql_release_line == '8.0' else 'mysql-tools-84-lts-community' }}"
+    mysql_release_yum_tools_baseurl: "{{ 'https://repo.mysql.com/yum/mysql-tools-community/el/' ~ ansible_distribution_major_version ~ '/$basearch/' if mysql_release_line == '8.0' else 'https://repo.mysql.com/yum/mysql-tools-8.4-community/el/' ~ ansible_distribution_major_version ~ '/$basearch/' }}"
     mysql_common_packages_redhat:
       - wget
       - curl
@@ -35,13 +40,14 @@
     - name: 验证目标操作系统受支持
       assert:
         that:
+          - mysql_release_line in mysql_supported_release_lines
           - >
             (ansible_os_family == 'RedHat' and ansible_distribution_major_version in mysql_supported_redhat_major_versions)
             or
             (ansible_distribution == 'Ubuntu' and ansible_distribution_release in mysql_supported_ubuntu_releases)
             or
             (ansible_distribution == 'Debian' and ansible_distribution_release in mysql_supported_debian_releases)
-        fail_msg: "当前系统 {{ ansible_distribution }} {{ ansible_distribution_version }} 不在已验证矩阵中。当前仓库已验证 Ubuntu 22.04/24.04/25.10 与 RedHat 家族 8/9/10。"
+        fail_msg: "当前系统或 MySQL 发行线不在已验证矩阵中。当前仓库仅支持 MySQL 8.0 / 8.4，且已验证 Ubuntu 22.04/24.04/25.10 与 RedHat 家族 8/9/10。"
         success_msg: "目标操作系统在已验证矩阵内"
 
     - name: 显示系统信息
@@ -110,12 +116,12 @@
         repo_gpgcheck: no
         gpgkey: "{{ mysql_repo_gpg_keys | join('\n') }}"
       loop:
-        - name: mysql-84-lts-community
+        - name: "{{ mysql_release_yum_server_repo_name }}"
           description: MySQL {{ mysql_repo_series }} Server
-          baseurl: "https://repo.mysql.com/yum/mysql-8.4-community/el/{{ ansible_distribution_major_version }}/$basearch/"
-        - name: mysql-tools-84-lts-community
+          baseurl: "{{ mysql_release_yum_server_baseurl }}"
+        - name: "{{ mysql_release_yum_tools_repo_name }}"
           description: MySQL {{ mysql_repo_series }} Tools
-          baseurl: "https://repo.mysql.com/yum/mysql-tools-8.4-community/el/{{ ansible_distribution_major_version }}/$basearch/"
+          baseurl: "{{ mysql_release_yum_tools_baseurl }}"
       when: ansible_os_family == 'RedHat'
 
     - name: 禁用 RedHat 系统自带 MySQL 模块
@@ -145,7 +151,7 @@
         dest: /etc/apt/sources.list.d/mysql.list
         mode: '0644'
         content: |
-          deb [signed-by=/usr/share/keyrings/mysql.gpg] http://repo.mysql.com/apt/{{ ansible_distribution | lower }} {{ ansible_distribution_release }} mysql-8.4-lts mysql-tools
+          deb [signed-by=/usr/share/keyrings/mysql.gpg] http://repo.mysql.com/apt/{{ ansible_distribution | lower }} {{ ansible_distribution_release }} {{ mysql_release_apt_components }}
       when: ansible_os_family == 'Debian'
 
     - name: 更新 APT 缓存

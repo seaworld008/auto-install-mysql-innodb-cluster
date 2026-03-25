@@ -31,9 +31,9 @@
     - name: 检查 XtraBackup 与主线版本兼容性
       assert:
         that:
-          - mysql_major_version == '8.4'
-          - mysql_repo_series == '8.4-lts'
-        fail_msg: "当前主线不是 MySQL 8.4 LTS，不能启用 XtraBackup 8.4。"
+          - mysql_release_line in ['8.0', '8.4']
+          - mysql_major_version == mysql_release_line
+        fail_msg: "当前主线不是受支持的 MySQL 8.0 / 8.4 发行线，不能启用 XtraBackup。"
         success_msg: "XtraBackup 与主线版本兼容"
       when: backup_config.method == 'xtrabackup'
 
@@ -46,9 +46,10 @@
     backup_run_root: "{{ backup_config.base_dir }}/{{ mysql_cluster_name }}/{{ backup_timestamp }}/{{ inventory_hostname }}"
     backup_manifest_path: "{{ backup_run_root }}/manifest.txt"
     xtrabackup_target_dir: "{{ backup_run_root }}/{{ backup_config.xtrabackup.target_subdir }}"
-    xtrabackup_package_name: "{{ backup_config.xtrabackup.package_name }}"
+    xtrabackup_package_name: "{{ 'percona-xtrabackup-80' if mysql_release_line == '8.0' else 'percona-xtrabackup-84' }}"
     percona_release_deb_url: "https://repo.percona.com/apt/percona-release_latest.generic_all.deb"
     percona_release_rpm_url: "https://repo.percona.com/yum/percona-release-latest.noarch.rpm"
+    percona_xbk_repo: "{{ 'pxb-80' if mysql_release_line == '8.0' else 'pxb-84-lts' }}"
   tasks:
     - name: 跳过非备份执行节点
       meta: end_host
@@ -98,7 +99,7 @@
 
     - name: 启用 Percona tools 仓库（Debian/Ubuntu）
       shell: |
-        percona-release enable-only tools release || percona-release enable-only tools
+        percona-release enable-only {{ percona_xbk_repo }} release || percona-release enable-only {{ percona_xbk_repo }}
         apt-get update
       args:
         executable: /bin/bash
@@ -125,7 +126,7 @@
 
     - name: 启用 Percona tools 仓库（RedHat）
       shell: |
-        percona-release enable-only tools release || percona-release enable-only tools
+        percona-release enable-only {{ percona_xbk_repo }} release || percona-release enable-only {{ percona_xbk_repo }}
       args:
         executable: /bin/bash
       when:
