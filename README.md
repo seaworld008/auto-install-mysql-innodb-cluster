@@ -1,6 +1,24 @@
 # MySQL InnoDB Cluster 自动部署
 
-企业级MySQL高可用集群自动部署方案，专为**8核32G+4核8G Router**硬件配置优化。
+一套面向生产环境的 MySQL InnoDB Cluster 自动化部署与运维方案：基于 Ansible 集成 MySQL Router、HAProxy、Keepalived、扩缩容流程与可选逻辑备份，默认针对 **8核32G MySQL + 4核8G Router** 场景优化。
+
+## ✨ 一句话介绍
+
+如果你想从零搭一套 **可维护、可扩展、可继续自动化演进** 的 MySQL 高可用主线，而不是只拼出一套一次性脚本，这个仓库就是为此准备的。
+
+## 👥 适合谁用
+
+- 想用 Ansible 自动化部署 MySQL InnoDB Cluster 的团队
+- 需要 MySQL Router + HAProxy + Keepalived 组成稳定接入层的团队
+- 需要后续持续支持扩容、缩容、配置升级、可选备份的团队
+- 希望把仓库维护成“长期可演进生产主线”的个人或组织
+
+## 🧭 你会得到什么
+
+- 一条统一的生产主线，而不是多套脚本并存
+- 单一主配置模型，便于长期维护和 AI / 人协作
+- 覆盖部署、扩容、缩容、滚动配置应用、可选逻辑备份的自动化能力
+- 可直接接入 GitHub Actions 的静态质量验证
 
 ## 🎯 项目特色
 
@@ -19,6 +37,16 @@
 | **Router集群** | 2×4核8G | 30000/台 | 6GB/台 | ✅ 高效路由 |
 | **内核优化** | 全服务器 | 动态调整 | 平衡配置 | ✅ **行业最佳实践** |
 | **总体能力** | 5台服务器 | 60K前端+7.5K后端 | - | ✅ 企业级 |
+
+## 📣 分享文案
+
+### 中文短文案
+
+一套面向生产环境的 MySQL InnoDB Cluster 自动化部署与运维方案，基于 Ansible 集成 MySQL Router、HAProxy、Keepalived，支持扩缩容、滚动配置升级与可选逻辑备份，适合作为长期维护的数据库高可用主线。
+
+### English Blurb
+
+Production-oriented automation for MySQL InnoDB Cluster using Ansible, integrated with MySQL Router, HAProxy, Keepalived, scaling workflows, rolling configuration updates, and optional logical backups.
 
 ## 🚀 快速开始
 
