@@ -1,5 +1,14 @@
 # MySQL InnoDB Cluster 自动部署
 
+![Static Quality](https://img.shields.io/github/actions/workflow/status/seaworld008/auto-install-mysql-innodb-cluster/ansible-ci.yml?branch=main&label=%E9%9D%99%E6%80%81%E8%B4%A8%E9%87%8F%E9%97%A8&logo=githubactions&logoColor=white)
+![Ansible](https://img.shields.io/badge/Ansible-%E8%87%AA%E5%8A%A8%E5%8C%96-EE0000?logo=ansible&logoColor=white)
+![MySQL](https://img.shields.io/badge/MySQL-InnoDB%20Cluster-4479A1?logo=mysql&logoColor=white)
+![Router](https://img.shields.io/badge/MySQL%20Router-%E8%AF%BB%E5%86%99%E8%B7%AF%E7%94%B1-0F6CBD)
+![HA](https://img.shields.io/badge/HA-HAProxy%20%2B%20Keepalived-106DA9)
+![Scaling](https://img.shields.io/badge/Scaling-%E6%89%A9%E5%AE%B9%20%2F%20%E7%BC%A9%E5%AE%B9-2E8B57)
+![Backup](https://img.shields.io/badge/Backup-%E5%8F%AF%E9%80%89%E9%80%BB%E8%BE%91%E5%A4%87%E4%BB%BD-8A2BE2)
+![Platforms](https://img.shields.io/badge/Platforms-Ubuntu%2022.04%20%7C%2024.04%20%7C%2025.10%20%2B%20RHEL%208%2F9%2F10-4C9A2A)
+
 一套面向生产环境的 MySQL InnoDB Cluster 自动化部署与运维方案：基于 Ansible 集成 MySQL Router、HAProxy、Keepalived、扩缩容流程与可选逻辑备份，默认针对 **8核32G MySQL + 4核8G Router** 场景优化。
 
 ## ✨ 一句话介绍
