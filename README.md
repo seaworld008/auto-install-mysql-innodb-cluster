@@ -96,15 +96,19 @@ vim inventory/hosts-with-dedicated-routers.yml
 ### 2. 分步部署（更安全）
 
 ```bash
-# 第一步：应用行业最佳实践内核优化
-sudo ./scripts/optimize_mysql_kernel_stable.sh
+# 第一步：对多台服务器批量应用行业最佳实践内核优化（推荐）
+ansible-playbook -i inventory/hosts-with-dedicated-routers.yml playbooks/kernel-optimization-stable.yml
 
 # 第二步：部署MySQL集群
-./scripts/deploy_dedicated_routers.sh --mysql-only
+./scripts/deploy_dedicated_routers.sh --mysql-only -i inventory/hosts-with-dedicated-routers.yml
 
-# 第三步：验证优化效果
-sudo ./scripts/optimize_mysql_kernel_stable.sh --verify-only
+# 第三步：批量验证关键内核参数
+ansible mysql_cluster:mysql_router:haproxy_lb -i inventory/hosts-with-dedicated-routers.yml -m shell -a "sysctl net.core.somaxconn vm.swappiness fs.file-max"
 ```
+
+补充说明：
+- 多台服务器场景下，优先使用 Ansible playbook 批量执行内核优化。
+- `./scripts/optimize_mysql_kernel_stable.sh` 更适合单机手动优化、单机排查或临时验证。
 
 ### 3. 配置管理
 

@@ -22,8 +22,9 @@ vim inventory/group_vars/all.yml
 
 连接信息：
 
-- HAProxy VIP：`3307` (RW) / `3308` (RO)
-- Router 直连：`6446` (RW) / `6447` (RO)
+- HAProxy VIP：`3309` (自动读写分离，推荐默认入口)
+- HAProxy VIP：`3307` (强制 RW) / `3308` (强制 RO)
+- Router 直连：`6450` (自动读写分离) / `6446` (强制 RW) / `6447` (强制 RO)
 
 更多说明见：
 

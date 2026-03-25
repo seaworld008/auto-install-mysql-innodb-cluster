@@ -53,8 +53,9 @@ MySQL InnoDB Cluster 生产部署入口
     -h, --help              显示帮助
 
 说明:
-    - 推荐应用入口是 HAProxy VIP: 3307(读写) / 3308(只读)
-    - 直连 Router 端口为 6446(读写) / 6447(只读)
+    - 推荐应用默认入口是 HAProxy VIP: 3309(自动读写分离)
+    - HAProxy VIP 也保留 3307(强制读写) / 3308(强制只读)
+    - 直连 Router 端口为 6450(自动读写分离) / 6446(强制读写) / 6447(强制只读)
     - MySQL/Router/HAProxy 的真实配置以 inventory/group_vars/all.yml 和目标 inventory 为准
 EOF
 }
@@ -103,17 +104,20 @@ PY
 }
 
 show_connection_summary() {
-    local vip rw_port ro_port router_rw router_ro
+    local vip rw_port ro_port rwsplit_port router_rw router_ro router_rwsplit
     vip="$(read_var_from_inventory keepalived_vip)"
     rw_port="$(read_var_from_inventory haproxy_mysql_rw_port)"
     ro_port="$(read_var_from_inventory haproxy_mysql_ro_port)"
+    rwsplit_port="$(read_var_from_inventory haproxy_mysql_rwsplit_port)"
     router_rw="$(read_var_from_inventory mysql_router_port)"
     router_ro="$(read_var_from_inventory mysql_router_ro_port)"
+    router_rwsplit="$(read_var_from_inventory mysql_router_rwsplit_port)"
 
     echo
     echo "连接信息:"
-    echo "  HAProxy VIP（推荐）: ${vip}:${rw_port} (RW) / ${vip}:${ro_port} (RO)"
-    echo "  Router 直连: router-ip:${router_rw} (RW) / router-ip:${router_ro} (RO)"
+    echo "  HAProxy VIP（推荐默认）: ${vip}:${rwsplit_port} (R/W Split)"
+    echo "  HAProxy VIP（强制）: ${vip}:${rw_port} (RW) / ${vip}:${ro_port} (RO)"
+    echo "  Router 直连: router-ip:${router_rwsplit} (R/W Split) / ${router_rw} (RW) / ${router_ro} (RO)"
 }
 
 check_prerequisites() {
@@ -206,7 +210,7 @@ shrink_lb() {
 }
 
 run_backup() {
-    log_step "执行逻辑备份"
+    log_step "执行备份"
     ansible-playbook -i "$INVENTORY" playbooks/backup.yml
 }
 

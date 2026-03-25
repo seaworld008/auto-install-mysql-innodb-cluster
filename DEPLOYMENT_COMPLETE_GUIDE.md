@@ -46,7 +46,7 @@
 # MySQL 缩容
 ./scripts/deploy_dedicated_routers.sh --scale-mysql-remove --target mysql-node3 --new-primary mysql-node2 -i inventory/hosts-with-dedicated-routers.yml
 
-# 可选逻辑备份（默认关闭，需先启用 backup_config.enabled=true）
+# 可选备份（默认关闭，需先启用 backup_config.enabled=true）
 ./scripts/deploy_dedicated_routers.sh --backup -i inventory/hosts-with-dedicated-routers.yml
 ```
 
