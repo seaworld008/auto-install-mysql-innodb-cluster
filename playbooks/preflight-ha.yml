@@ -71,11 +71,23 @@
       assert:
         that:
           - backup_config.base_dir | length > 0
+          - backup_config.method in ['logical', 'xtrabackup']
           - backup_config.type in ['local', 'nfs', 'rsync']
           - (backup_config.type != 'rsync') or (backup_config.remote_host | length > 0 and backup_config.remote_dir | length > 0)
         fail_msg: "备份配置不完整。启用备份时请检查 backup_config.type/base_dir/remote_host/remote_dir。"
         success_msg: "备份配置检查通过"
       when: backup_config.enabled | bool
+
+    - name: 检查 XtraBackup 与主线版本兼容性
+      assert:
+        that:
+          - mysql_major_version == '8.4'
+          - mysql_repo_series == '8.4-lts'
+        fail_msg: "当前主线版本不是 MySQL 8.4 LTS，不能启用 Percona XtraBackup 8.4。请先统一主线版本。"
+        success_msg: "XtraBackup 与当前主线版本兼容"
+      when:
+        - backup_config.enabled | bool
+        - backup_config.method == 'xtrabackup'
 
     - name: 检查 Router 最小 HA 节点数（启用时）
       assert:

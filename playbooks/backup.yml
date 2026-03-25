@@ -10,13 +10,14 @@
         fail_msg: "备份功能默认关闭。请先在 all.yml 中将 backup_config.enabled 设置为 true。"
         success_msg: "备份功能已启用"
 
-    - name: 检查备份类型是否合法
+    - name: 检查备份方法与目标是否合法
       assert:
         that:
+          - backup_config.method in ['logical', 'xtrabackup']
           - backup_config.type in ['local', 'nfs', 'rsync']
           - backup_config.base_dir | length > 0
-        fail_msg: "backup_config.type 仅支持 local/nfs/rsync，且必须配置 base_dir。"
-        success_msg: "备份类型配置通过"
+        fail_msg: "backup_config.method 仅支持 logical/xtrabackup，backup_config.type 仅支持 local/nfs/rsync。"
+        success_msg: "备份方法与目标配置通过"
 
     - name: 检查 rsync 远端参数
       assert:
@@ -27,15 +28,32 @@
         success_msg: "rsync 远端参数配置通过"
       when: backup_config.type == 'rsync'
 
-- name: 在备份执行节点上运行逻辑备份
-  hosts: "{{ backup_config.run_on_host_group }}"
+    - name: 检查 XtraBackup 与主线版本兼容性
+      assert:
+        that:
+          - mysql_major_version == '8.4'
+          - mysql_repo_series == '8.4-lts'
+        fail_msg: "当前主线不是 MySQL 8.4 LTS，不能启用 XtraBackup 8.4。"
+        success_msg: "XtraBackup 与主线版本兼容"
+      when: backup_config.method == 'xtrabackup'
+
+- name: 在备份执行节点上运行备份
+  hosts: all
   gather_facts: true
   become: yes
   vars:
     backup_timestamp: "{{ ansible_date_time.date }}-{{ ansible_date_time.time | replace(':', '') }}"
     backup_run_root: "{{ backup_config.base_dir }}/{{ mysql_cluster_name }}/{{ backup_timestamp }}/{{ inventory_hostname }}"
     backup_manifest_path: "{{ backup_run_root }}/manifest.txt"
+    xtrabackup_target_dir: "{{ backup_run_root }}/{{ backup_config.xtrabackup.target_subdir }}"
+    xtrabackup_package_name: "{{ backup_config.xtrabackup.package_name }}"
+    percona_release_deb_url: "https://repo.percona.com/apt/percona-release_latest.generic_all.deb"
+    percona_release_rpm_url: "https://repo.percona.com/yum/percona-release-latest.noarch.rpm"
   tasks:
+    - name: 跳过非备份执行节点
+      meta: end_host
+      when: inventory_hostname not in groups[backup_config.run_on_host_group]
+
     - name: 安装备份依赖
       package:
         name:
@@ -49,6 +67,77 @@
         state: directory
         mode: '0750'
 
+    - name: 安装 XtraBackup 前置工具（Debian/Ubuntu）
+      apt:
+        name:
+          - curl
+          - gnupg
+          - lsb-release
+        state: present
+        update_cache: yes
+      when:
+        - backup_config.method == 'xtrabackup'
+        - ansible_os_family == 'Debian'
+
+    - name: 下载 Percona Release 包（Debian/Ubuntu）
+      get_url:
+        url: "{{ percona_release_deb_url }}"
+        dest: /tmp/percona-release_latest.generic_all.deb
+        mode: '0644'
+      when:
+        - backup_config.method == 'xtrabackup'
+        - ansible_os_family == 'Debian'
+
+    - name: 安装 Percona Release 包（Debian/Ubuntu）
+      apt:
+        deb: /tmp/percona-release_latest.generic_all.deb
+        state: present
+      when:
+        - backup_config.method == 'xtrabackup'
+        - ansible_os_family == 'Debian'
+
+    - name: 启用 Percona tools 仓库（Debian/Ubuntu）
+      shell: |
+        percona-release enable-only tools release || percona-release enable-only tools
+        apt-get update
+      args:
+        executable: /bin/bash
+      when:
+        - backup_config.method == 'xtrabackup'
+        - ansible_os_family == 'Debian'
+
+    - name: 下载 Percona Release 包（RedHat）
+      get_url:
+        url: "{{ percona_release_rpm_url }}"
+        dest: /tmp/percona-release-latest.noarch.rpm
+        mode: '0644'
+      when:
+        - backup_config.method == 'xtrabackup'
+        - ansible_os_family == 'RedHat'
+
+    - name: 安装 Percona Release 包（RedHat）
+      package:
+        name: /tmp/percona-release-latest.noarch.rpm
+        state: present
+      when:
+        - backup_config.method == 'xtrabackup'
+        - ansible_os_family == 'RedHat'
+
+    - name: 启用 Percona tools 仓库（RedHat）
+      shell: |
+        percona-release enable-only tools release || percona-release enable-only tools
+      args:
+        executable: /bin/bash
+      when:
+        - backup_config.method == 'xtrabackup'
+        - ansible_os_family == 'RedHat'
+
+    - name: 安装 XtraBackup
+      package:
+        name: "{{ xtrabackup_package_name }}"
+        state: present
+      when: backup_config.method == 'xtrabackup'
+
     - name: 执行逻辑备份（mysqlsh util.dumpInstance）
       shell: |
         mysqlsh --uri {{ mysql_cluster_user }}:{{ mysql_cluster_password }}@127.0.0.1:{{ mysql_port }} --js <<'EOF'
@@ -61,6 +150,41 @@
       args:
         executable: /bin/bash
       register: backup_dump_result
+      when: backup_config.method == 'logical'
+
+    - name: 创建 XtraBackup 目标目录
+      file:
+        path: "{{ xtrabackup_target_dir }}"
+        state: directory
+        mode: '0750'
+      when: backup_config.method == 'xtrabackup'
+
+    - name: 执行 XtraBackup 物理备份
+      shell: |
+        xtrabackup \
+          --backup \
+          --target-dir="{{ xtrabackup_target_dir }}" \
+          --datadir="{{ mysql_datadir }}" \
+          --socket="{{ mysql_datadir }}/mysql.sock" \
+          --user=root \
+          --password="{{ mysql_root_password }}" \
+          --parallel={{ backup_config.xtrabackup.parallel }} \
+          --use-memory={{ backup_config.xtrabackup.use_memory }} \
+          {% if backup_config.xtrabackup.compress %}--compress={{ backup_config.xtrabackup.compress_algorithm }} --compress-threads={{ backup_config.xtrabackup.compress_threads }}{% endif %} \
+          {{ backup_config.xtrabackup.extra_args }}
+      args:
+        executable: /bin/bash
+      register: backup_xbk_result
+      when: backup_config.method == 'xtrabackup'
+
+    - name: 可选执行 XtraBackup prepare
+      shell: |
+        xtrabackup --prepare --target-dir="{{ xtrabackup_target_dir }}" --use-memory={{ backup_config.xtrabackup.use_memory }}
+      args:
+        executable: /bin/bash
+      when:
+        - backup_config.method == 'xtrabackup'
+        - backup_config.xtrabackup.prepare | bool
 
     - name: 生成备份清单
       copy:
@@ -68,12 +192,13 @@
         mode: '0640'
         content: |
           cluster_name={{ mysql_cluster_name }}
+          backup_method={{ backup_config.method }}
           backup_type={{ backup_config.type }}
           host={{ inventory_hostname }}
           mysql_port={{ mysql_port }}
           backup_dir={{ backup_run_root }}
           timestamp={{ backup_timestamp }}
-          tool={{ backup_config.logical_tool }}
+          tool={{ backup_config.logical_tool if backup_config.method == 'logical' else xtrabackup_package_name }}
       when: backup_config.create_manifest | bool
 
     - name: 同步备份到远端目录（rsync）
@@ -98,5 +223,6 @@
         msg: |
           备份完成：
           - 节点: {{ inventory_hostname }}
-          - 类型: {{ backup_config.type }}
+          - 方法: {{ backup_config.method }}
+          - 目标类型: {{ backup_config.type }}
           - 目录: {{ backup_run_root }}

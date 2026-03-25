@@ -38,7 +38,7 @@ MySQL InnoDB Cluster 生产部署入口
     --scale-mysql-remove    缩容 MySQL 节点（需配合 --target，可选 --new-primary）
     --shrink-router         缩容 Router 节点（需配合 --limit）
     --shrink-lb             缩容 HAProxy/Keepalived 节点（需配合 --limit）
-    --backup                执行一次可选逻辑备份（需先启用 backup_config.enabled=true）
+    --backup                执行一次可选备份（logical / xtrabackup，需先启用 backup_config.enabled=true）
     --full-deploy           部署 Router + HAProxy/Keepalived（假设 MySQL 集群已存在）
     --check-prereq          仅执行前置检查
     --test-connection       仅执行 HA 健康检查

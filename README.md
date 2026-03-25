@@ -26,7 +26,7 @@
 
 - 一条统一的生产主线，而不是多套脚本并存
 - 单一主配置模型，便于长期维护和 AI / 人协作
-- 覆盖部署、扩容、缩容、滚动配置应用、可选逻辑备份的自动化能力
+- 覆盖部署、扩容、缩容、滚动配置应用、可选逻辑 / 物理备份的自动化能力
 - 可直接接入 GitHub Actions 的静态质量验证
 
 ## 🎯 项目特色
@@ -51,7 +51,7 @@
 
 ### 中文短文案
 
-一套面向生产环境的 MySQL InnoDB Cluster 自动化部署与运维方案，基于 Ansible 集成 MySQL Router、HAProxy、Keepalived，支持扩缩容、滚动配置升级与可选逻辑备份，适合作为长期维护的数据库高可用主线。
+一套面向生产环境的 MySQL InnoDB Cluster 自动化部署与运维方案，基于 Ansible 集成 MySQL Router、HAProxy、Keepalived，支持扩缩容、滚动配置升级与可选逻辑 / 物理备份，适合作为长期维护的数据库高可用主线。
 
 ### English Blurb
 
@@ -360,7 +360,7 @@ sudo ./scripts/optimize_mysql_kernel_stable.sh --verify-only
 # 按当前主配置滚动应用到现有节点
 ./scripts/deploy_dedicated_routers.sh --apply-config -i inventory/hosts-with-dedicated-routers.yml
 
-# 可选逻辑备份（默认关闭，需先在 all.yml 中启用 backup_config.enabled=true）
+# 可选备份（默认关闭，需先在 all.yml 中启用 backup_config.enabled=true）
 ./scripts/deploy_dedicated_routers.sh --backup -i inventory/hosts-with-dedicated-routers.yml
 ```
 
@@ -368,6 +368,10 @@ sudo ./scripts/optimize_mysql_kernel_stable.sh --verify-only
 - 本地目录
 - 挂载目录（NFS）
 - SSH + rsync 到远端目录
+
+备份模式支持：
+- `logical`：默认，使用 MySQL Shell Dump
+- `xtrabackup`：可选，使用 Percona XtraBackup 物理备份，适合大数据量场景
 
 超时与长任务说明：
 - Router 当前显式设置的是连接建立与路由层超时，不会因为 SQL 执行时间长而主动中断正常长查询。

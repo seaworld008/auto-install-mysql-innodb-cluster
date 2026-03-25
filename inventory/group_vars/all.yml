@@ -1,6 +1,6 @@
 # MySQL版本和下载配置
-mysql_version: "8.0.42"
-mysql_major_version: "8.0"
+mysql_version: "8.4"
+mysql_major_version: "8.4"
 
 # 默认字符集排序规则（兼容历史应用，可按需改为 utf8mb4_0900_ai_ci）
 mysql_collation_server: "utf8mb4_general_ci"
@@ -175,6 +175,7 @@ scale_policy:
 # 可选备份配置
 backup_config:
   enabled: false
+  method: "logical"            # logical | xtrabackup
   type: "local"                 # local | nfs | rsync
   base_dir: "/backup/mysql"
   retention_days: 7
@@ -189,6 +190,16 @@ backup_config:
   rsync_opts: "-az --delete-delay"
   run_on_host_group: "mysql_primary"
   logical_tool: "mysqlsh-dump-instance"
+  xtrabackup:
+    package_name: "percona-xtrabackup-84"
+    parallel: 4
+    compress: false
+    compress_algorithm: "zstd"
+    compress_threads: 2
+    prepare: false
+    target_subdir: "xtrabackup"
+    use_memory: "1G"
+    extra_args: ""
 
 # HAProxy 配置（默认接入 Router 层；如无 Router 可改为 mysql）
 haproxy_backend_target: "router"   # 可选: router, mysql
