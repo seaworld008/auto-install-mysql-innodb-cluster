@@ -13,11 +13,10 @@
 ├── DEPLOYMENT_COMPLETE_GUIDE.md
 ├── LICENSE
 ├── PRE_DEPLOYMENT_CHECKLIST.md
-├── PROJECT_STRUCTURE.md
 ├── QUICK_START.md
 ├── README.md
+├── README_EN.md
 ├── SECURITY.md
-├── TROUBLESHOOTING.md
 ├── ansible.cfg
 ├── collections/
 ├── docs/
@@ -90,17 +89,13 @@ Ansible 角色模板。
 
 ### `docs/`
 
-专题文档。
+专题文档按读者意图分层，避免把当前 runbook、长期参考和历史报告混在同一级目录。
 
-- `docs/BACKUP_AND_RESTORE_GUIDE.md`
-- `docs/DEPLOYMENT_HA_BLUEPRINT_ZH.md`
-- `docs/ARCHITECTURE_AND_EVIDENCE.md`
-- `docs/VARIABLE_REFERENCE.md`
-- `docs/MYSQL_KERNEL_BEST_PRACTICES.md`
-- `docs/MYSQL80_CLUSTER_CROSS_VALIDATION.md`
-- `docs/ROUTER_DEPLOYMENT_COMPLETE.md`
-- `docs/AI_MAINTAINER_GUIDE.md`
-- `docs/index.md`：GitHub Pages 文档站点入口。
+- `docs/index.md`：GitHub Pages 文档站点入口和文档地图。
+- `docs/runbooks/`：可执行的运维流程，例如服务器配置、备份恢复和故障排查。
+- `docs/reference/`：长期参考资料，例如 HA 蓝图、变量参考、架构证据、内核实践和项目结构。
+- `docs/reports/`：历史分析、容量推导和阶段性完整指南；保留参考价值，但不是运行时真相源。
+- `docs/maintainers/`：维护者说明、发布清单和发布草稿。
 - `docs/templates/`：staging 验证、故障演练和隔离恢复演练记录模板。
 - `docs/decisions/`：架构决策记录。
 

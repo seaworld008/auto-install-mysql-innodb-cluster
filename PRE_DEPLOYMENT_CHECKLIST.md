@@ -20,7 +20,7 @@
 
 - [ ] `inventory/group_vars/all.yml` 已确认
 - [ ] `mysql_hardware_profile` 已确认
-- [ ] 已按 `docs/VARIABLE_REFERENCE.md` 复核关键变量
+- [ ] 已按 `docs/reference/VARIABLE_REFERENCE.md` 复核关键变量
 - [ ] 业务密码与 SSH 密码不是示例值
 - [ ] `server_id` 唯一
 - [ ] Keepalived 网卡名与真实系统一致
@@ -31,7 +31,7 @@
 - [ ] 已准备 staging 验证记录：`docs/templates/staging-validation-record.md`
 - [ ] 如涉及 HA 行为，已准备故障演练记录：`docs/templates/failover-drill-record.md`
 - [ ] 如涉及备份恢复，已准备隔离恢复演练记录：`docs/templates/restore-drill-record.md`
-- [ ] 截图和 CLI 输出会按 `docs/ARCHITECTURE_AND_EVIDENCE.md` 脱敏留存
+- [ ] 截图和 CLI 输出会按 `docs/reference/ARCHITECTURE_AND_EVIDENCE.md` 脱敏留存
 
 ## 推荐执行顺序
 
@@ -45,6 +45,6 @@
 
 - `README.md`
 - `DEPLOYMENT_COMPLETE_GUIDE.md`
-- `docs/VARIABLE_REFERENCE.md`
-- `docs/ARCHITECTURE_AND_EVIDENCE.md`
-- `TROUBLESHOOTING.md`
+- `docs/reference/VARIABLE_REFERENCE.md`
+- `docs/reference/ARCHITECTURE_AND_EVIDENCE.md`
+- `docs/runbooks/TROUBLESHOOTING.md`

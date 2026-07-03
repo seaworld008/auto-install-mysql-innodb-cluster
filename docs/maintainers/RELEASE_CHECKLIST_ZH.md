@@ -35,7 +35,7 @@ ANSIBLE_STDOUT_CALLBACK=default ansible-playbook -i inventory/hosts-ha-reference
 - [ ] 如有 staging 验证，已填写 `docs/templates/staging-validation-record.md`
 - [ ] 如有故障演练，已填写 `docs/templates/failover-drill-record.md`
 - [ ] 如有恢复演练，已填写 `docs/templates/restore-drill-record.md`
-- [ ] 文档截图和 CLI 输出已按 `docs/ARCHITECTURE_AND_EVIDENCE.md` 脱敏
+- [ ] 文档截图和 CLI 输出已按 `docs/reference/ARCHITECTURE_AND_EVIDENCE.md` 脱敏
 
 ## 6. 可选文档质量检查
 

@@ -73,7 +73,7 @@ ansible-playbook -i inventory/hosts-ha-reference.yml playbooks/site.yml
 ```
 
 4) 交叉验证：
-- MySQL 侧：`docs/MYSQL80_CLUSTER_CROSS_VALIDATION.md`
+- MySQL 侧：`docs/reference/MYSQL80_CLUSTER_CROSS_VALIDATION.md`
 - 入口侧：
   - Router 端口（6446/6447/6450）
   - HAProxy 端口（3307/3308/3309）

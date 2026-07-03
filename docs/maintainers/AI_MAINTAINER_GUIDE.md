@@ -39,8 +39,8 @@
 8. `playbooks/install-router.yml`
 9. `playbooks/backup.yml`
 10. `.github/workflows/ansible-ci.yml`
-11. `docs/VARIABLE_REFERENCE.md`
-12. `docs/ARCHITECTURE_AND_EVIDENCE.md`
+11. `docs/reference/VARIABLE_REFERENCE.md`
+12. `docs/reference/ARCHITECTURE_AND_EVIDENCE.md`
 13. `docs/templates/`
 
 ## 3. 单一真相源
@@ -80,8 +80,8 @@
 
 专题文档和证据模板：
 
-- `docs/VARIABLE_REFERENCE.md`
-- `docs/ARCHITECTURE_AND_EVIDENCE.md`
+- `docs/reference/VARIABLE_REFERENCE.md`
+- `docs/reference/ARCHITECTURE_AND_EVIDENCE.md`
 - `docs/templates/staging-validation-record.md`
 - `docs/templates/failover-drill-record.md`
 - `docs/templates/restore-drill-record.md`

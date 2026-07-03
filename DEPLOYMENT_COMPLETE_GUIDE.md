@@ -67,15 +67,17 @@
 
 - 主说明：`README.md`
 - 英文入口：`README_EN.md`
-- 备份恢复：`docs/BACKUP_AND_RESTORE_GUIDE.md`
-- HA 蓝图：`docs/DEPLOYMENT_HA_BLUEPRINT_ZH.md`
-- 架构图与证据留存：`docs/ARCHITECTURE_AND_EVIDENCE.md`
-- 变量参考与配置示例：`docs/VARIABLE_REFERENCE.md`
-- 容量分析：`docs/HARDWARE_CAPACITY_ANALYSIS.md`
-- Router 说明：`docs/ROUTER_DEPLOYMENT_COMPLETE.md`
-- 交叉验证：`docs/MYSQL80_CLUSTER_CROSS_VALIDATION.md`
+- 服务器配置：`docs/runbooks/SERVER_CONFIGURATION.md`
+- 备份恢复：`docs/runbooks/BACKUP_AND_RESTORE_GUIDE.md`
+- 故障排查：`docs/runbooks/TROUBLESHOOTING.md`
+- HA 蓝图：`docs/reference/DEPLOYMENT_HA_BLUEPRINT_ZH.md`
+- 架构图与证据留存：`docs/reference/ARCHITECTURE_AND_EVIDENCE.md`
+- 变量参考与配置示例：`docs/reference/VARIABLE_REFERENCE.md`
+- 交叉验证：`docs/reference/MYSQL80_CLUSTER_CROSS_VALIDATION.md`
 - Staging 验证模板：`docs/templates/staging-validation-record.md`
 - 故障演练模板：`docs/templates/failover-drill-record.md`
 - 隔离恢复演练模板：`docs/templates/restore-drill-record.md`
 - 文档站点入口：`docs/index.md`
-- 发布清单：`docs/RELEASE_CHECKLIST_ZH.md`
+- 发布清单：`docs/maintainers/RELEASE_CHECKLIST_ZH.md`
+
+历史分析报告位于 `docs/reports/`，可用于理解容量推导和旧方案背景，但运行时配置仍以 `inventory/group_vars/all.yml` 为准。
