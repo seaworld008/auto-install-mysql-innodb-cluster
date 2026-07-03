@@ -2,7 +2,7 @@
 
 ## 🎯 优化概述
 
-本指南涵盖MySQL InnoDB Cluster在生产环境中的完整优化配置，包括高并发优化、硬件配置适配、性能调优等内容。**内核优化请参考 [MYSQL_KERNEL_BEST_PRACTICES.md](MYSQL_KERNEL_BEST_PRACTICES.md)**。
+本指南涵盖MySQL InnoDB Cluster在生产环境中的完整优化配置，包括高并发优化、硬件配置适配、性能调优等内容。**内核优化请参考 [MYSQL_KERNEL_BEST_PRACTICES.md](../reference/MYSQL_KERNEL_BEST_PRACTICES.md)**。
 
 ## 📊 配置架构
 
@@ -552,4 +552,4 @@ router_max_connections: 30000
 读取：InnoDB Cluster (从) + 只读实例
 ```
 
-现在你拥有了完整的MySQL高并发优化配置方案！结合 **[内核优化最佳实践](MYSQL_KERNEL_BEST_PRACTICES.md)** 文档，可以实现完整的生产级优化部署。🚀
+现在你拥有了完整的MySQL高并发优化配置方案！结合 **[内核优化最佳实践](../reference/MYSQL_KERNEL_BEST_PRACTICES.md)** 文档，可以实现完整的生产级优化部署。🚀

@@ -7,7 +7,7 @@
 [![MySQL 8.4 LTS | 8.0](https://img.shields.io/badge/MySQL-8.4%20LTS%20%7C%208.0-4479A1?logo=mysql&logoColor=white&style=flat-square)](inventory/group_vars/all.yml)
 [![InnoDB Cluster](https://img.shields.io/badge/InnoDB%20Cluster-group%20replication-005C84?logo=mysql&logoColor=white&style=flat-square)](playbooks/configure-cluster.yml)
 [![MySQL Router](https://img.shields.io/badge/MySQL%20Router-r%2Fw%20split-0F6CBD?style=flat-square)](playbooks/install-router.yml)
-[![HA entry](https://img.shields.io/badge/HAProxy%20%2B%20Keepalived-HA%20entry-106DA9?style=flat-square)](docs/DEPLOYMENT_HA_BLUEPRINT_ZH.md)
+[![HA entry](https://img.shields.io/badge/HAProxy%20%2B%20Keepalived-HA%20entry-106DA9?style=flat-square)](docs/reference/DEPLOYMENT_HA_BLUEPRINT_ZH.md)
 [![operations](https://img.shields.io/badge/operations-scale%20%7C%20backup%20%7C%20rolling%20config-6A5ACD?style=flat-square)](DEPLOYMENT_COMPLETE_GUIDE.md)
 
 面向运维和平台团队的 MySQL InnoDB Cluster 自动化部署与运维方案，基于 Ansible 编排 MySQL Server、MySQL Router、HAProxy、Keepalived、扩缩容、滚动配置应用和可选备份流程。
@@ -20,12 +20,12 @@
 - [English Summary](README_EN.md)
 - [部署指南](DEPLOYMENT_COMPLETE_GUIDE.md)
 - [部署前检查清单](PRE_DEPLOYMENT_CHECKLIST.md)
-- [备份与恢复指南](docs/BACKUP_AND_RESTORE_GUIDE.md)
-- [高可用部署蓝图](docs/DEPLOYMENT_HA_BLUEPRINT_ZH.md)
-- [变量参考](docs/VARIABLE_REFERENCE.md)
-- [架构图与证据留存](docs/ARCHITECTURE_AND_EVIDENCE.md)
+- [备份与恢复指南](docs/runbooks/BACKUP_AND_RESTORE_GUIDE.md)
+- [高可用部署蓝图](docs/reference/DEPLOYMENT_HA_BLUEPRINT_ZH.md)
+- [变量参考](docs/reference/VARIABLE_REFERENCE.md)
+- [架构图与证据留存](docs/reference/ARCHITECTURE_AND_EVIDENCE.md)
 - [文档站点入口](docs/index.md)
-- [故障排查](TROUBLESHOOTING.md)
+- [故障排查](docs/runbooks/TROUBLESHOOTING.md)
 - [Release](https://github.com/seaworld008/auto-install-mysql-innodb-cluster/releases)
 - [Issues](https://github.com/seaworld008/auto-install-mysql-innodb-cluster/issues)
 
@@ -74,7 +74,7 @@
 | 内核优化 | 支持 | `--kernel-optimize-only` |
 | 逻辑备份 | 支持，可选 | `backup_config.method: logical` |
 | XtraBackup 物理备份 | 支持，可选 | `backup_config.method: xtrabackup` |
-| 自动恢复 | 不做一键覆盖 | 参考 `docs/BACKUP_AND_RESTORE_GUIDE.md` |
+| 自动恢复 | 不做一键覆盖 | 参考 `docs/runbooks/BACKUP_AND_RESTORE_GUIDE.md` |
 
 ## 默认拓扑
 
@@ -234,15 +234,17 @@ vim inventory/group_vars/all.yml
 ├── QUICK_START.md
 ├── DEPLOYMENT_COMPLETE_GUIDE.md
 ├── PRE_DEPLOYMENT_CHECKLIST.md
-├── TROUBLESHOOTING.md
 ├── ansible.cfg
 ├── collections/
 │   └── requirements.yml
 ├── docs/
-│   ├── BACKUP_AND_RESTORE_GUIDE.md
-│   ├── DEPLOYMENT_HA_BLUEPRINT_ZH.md
-│   ├── MYSQL_KERNEL_BEST_PRACTICES.md
-│   └── ...
+│   ├── index.md
+│   ├── runbooks/
+│   ├── reference/
+│   ├── reports/
+│   ├── maintainers/
+│   ├── templates/
+│   └── decisions/
 ├── examples/
 ├── inventory/
 │   ├── group_vars/all.yml
@@ -256,7 +258,7 @@ vim inventory/group_vars/all.yml
 └── .github/workflows/ansible-ci.yml
 ```
 
-更多说明见 [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)。
+更多说明见 [docs/reference/PROJECT_STRUCTURE.md](docs/reference/PROJECT_STRUCTURE.md)。
 
 ## 技术栈
 
@@ -295,21 +297,34 @@ yamllint .
 
 ## 文档
 
+主入口：
+
 - [Quick Start](QUICK_START.md)
 - [完整部署指南](DEPLOYMENT_COMPLETE_GUIDE.md)
 - [部署前检查清单](PRE_DEPLOYMENT_CHECKLIST.md)
-- [高可用部署蓝图](docs/DEPLOYMENT_HA_BLUEPRINT_ZH.md)
-- [架构图与证据留存指南](docs/ARCHITECTURE_AND_EVIDENCE.md)
-- [变量参考与配置示例](docs/VARIABLE_REFERENCE.md)
-- [备份与恢复指南](docs/BACKUP_AND_RESTORE_GUIDE.md)
+- [GitHub Pages 文档站点入口](docs/index.md)
+
+Runbook：
+
+- [服务器配置指南](docs/runbooks/SERVER_CONFIGURATION.md)
+- [备份与恢复指南](docs/runbooks/BACKUP_AND_RESTORE_GUIDE.md)
+- [故障排查](docs/runbooks/TROUBLESHOOTING.md)
+
+参考资料：
+
+- [高可用部署蓝图](docs/reference/DEPLOYMENT_HA_BLUEPRINT_ZH.md)
+- [架构图与证据留存指南](docs/reference/ARCHITECTURE_AND_EVIDENCE.md)
+- [变量参考与配置示例](docs/reference/VARIABLE_REFERENCE.md)
+- [MySQL 内核优化最佳实践](docs/reference/MYSQL_KERNEL_BEST_PRACTICES.md)
+- [MySQL 8.0 / 8.4 交叉验证](docs/reference/MYSQL80_CLUSTER_CROSS_VALIDATION.md)
+- [项目结构总览](docs/reference/PROJECT_STRUCTURE.md)
+
+模板与维护者资料：
+
 - [Staging 验证记录模板](docs/templates/staging-validation-record.md)
 - [故障演练记录模板](docs/templates/failover-drill-record.md)
 - [隔离环境恢复演练模板](docs/templates/restore-drill-record.md)
-- [MySQL 内核优化最佳实践](docs/MYSQL_KERNEL_BEST_PRACTICES.md)
-- [MySQL 8.0 / 8.4 交叉验证](docs/MYSQL80_CLUSTER_CROSS_VALIDATION.md)
-- [GitHub Pages 文档站点入口](docs/index.md)
-- [AI 维护说明](docs/AI_MAINTAINER_GUIDE.md)
-- [故障排查](TROUBLESHOOTING.md)
+- [AI 维护说明](docs/maintainers/AI_MAINTAINER_GUIDE.md)
 - [English README](README_EN.md)
 
 ## 安全说明

@@ -100,13 +100,16 @@ yamllint .
 - Quick start: `QUICK_START.md`
 - Deployment guide: `DEPLOYMENT_COMPLETE_GUIDE.md`
 - Pre-deployment checklist: `PRE_DEPLOYMENT_CHECKLIST.md`
-- HA blueprint: `docs/DEPLOYMENT_HA_BLUEPRINT_ZH.md`
-- Architecture and evidence guide: `docs/ARCHITECTURE_AND_EVIDENCE.md`
-- Variable reference: `docs/VARIABLE_REFERENCE.md`
-- Backup and restore guide: `docs/BACKUP_AND_RESTORE_GUIDE.md`
+- Server configuration runbook: `docs/runbooks/SERVER_CONFIGURATION.md`
+- Troubleshooting runbook: `docs/runbooks/TROUBLESHOOTING.md`
+- HA blueprint: `docs/reference/DEPLOYMENT_HA_BLUEPRINT_ZH.md`
+- Architecture and evidence guide: `docs/reference/ARCHITECTURE_AND_EVIDENCE.md`
+- Variable reference: `docs/reference/VARIABLE_REFERENCE.md`
+- Backup and restore guide: `docs/runbooks/BACKUP_AND_RESTORE_GUIDE.md`
 - Staging validation template: `docs/templates/staging-validation-record.md`
 - Failover drill template: `docs/templates/failover-drill-record.md`
 - Isolated restore drill template: `docs/templates/restore-drill-record.md`
+- Historical analysis reports: `docs/reports/`
 
 ## Status Boundary
 

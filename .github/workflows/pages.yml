@@ -11,8 +11,6 @@ on:
       - "QUICK_START.md"
       - "DEPLOYMENT_COMPLETE_GUIDE.md"
       - "PRE_DEPLOYMENT_CHECKLIST.md"
-      - "PROJECT_STRUCTURE.md"
-      - "TROUBLESHOOTING.md"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 

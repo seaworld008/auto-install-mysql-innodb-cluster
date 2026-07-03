@@ -16,7 +16,7 @@
   - `SECURITY.md`
 - 新增 GitHub Issue Templates 和 Pull Request Template。
 - 新增 `.gitignore` 与 `.editorconfig`。
-- 更新 `PROJECT_STRUCTURE.md`，使其匹配当前仓库真实结构。
+- 更新 `docs/reference/PROJECT_STRUCTURE.md`，使其匹配当前仓库真实结构。
 - 将看起来像真实密码的默认值替换为明确占位符，降低公开仓库误用风险。
 - 在 GitHub Actions 中增加 shell 语法检查。
 - 将 `setup-servers.sh` 升级为 3 MySQL + 2 Router + 2 HAProxy 的 HA inventory 向导。

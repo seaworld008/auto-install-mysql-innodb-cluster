@@ -37,5 +37,5 @@ vim inventory/group_vars/all.yml
 - `README.md`
 - `README_EN.md`
 - `DEPLOYMENT_COMPLETE_GUIDE.md`
-- `docs/VARIABLE_REFERENCE.md`
-- `docs/ARCHITECTURE_AND_EVIDENCE.md`
+- `docs/reference/VARIABLE_REFERENCE.md`
+- `docs/reference/ARCHITECTURE_AND_EVIDENCE.md`
