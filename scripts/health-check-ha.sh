@@ -2,30 +2,53 @@
 set -euo pipefail
 INV="${1:-inventory/hosts-ha-reference.yml}"
 
+detect_python() {
+    if [[ -n "${PYTHON_BIN:-}" ]]; then
+        if command -v "$PYTHON_BIN" >/dev/null 2>&1; then
+            command -v "$PYTHON_BIN"
+            return 0
+        fi
+        echo "缺少依赖: PYTHON_BIN 指向的命令不可用: $PYTHON_BIN" >&2
+        exit 1
+    fi
+    if command -v python3 >/dev/null 2>&1; then
+        command -v python3
+        return 0
+    fi
+    if command -v python >/dev/null 2>&1; then
+        command -v python
+        return 0
+    fi
+    echo "缺少依赖: python3 或 python" >&2
+    exit 1
+}
+
 read_var_from_inventory() {
     local var_name="$1"
+    local python_bin
+    python_bin="$(detect_python)"
     if command -v ansible-inventory >/dev/null 2>&1; then
-        ansible-inventory -i "$INV" --list 2>/dev/null | python - "$var_name" << 'PY'
+        ansible-inventory -i "$INV" --list 2>/dev/null | "$python_bin" -c '
 import sys, json
 var_name = sys.argv[1]
 data = json.load(sys.stdin)
 value = data.get("all", {}).get("vars", {}).get(var_name, "")
 print(value if value is not None else "")
-PY
+' "$var_name"
     else
-        python - "$var_name" << 'PY'
+        "$python_bin" -c '
 import sys, yaml, pathlib
 var_name = sys.argv[1]
 data = yaml.safe_load(pathlib.Path("inventory/group_vars/all.yml").read_text(encoding="utf-8"))
 value = data.get(var_name, "")
 print(value if value is not None else "")
-PY
+' "$var_name"
     fi
 }
 
-MYSQL_CLUSTER_USER="${MYSQL_CLUSTER_USER:-clusteradmin}"
-MYSQL_CLUSTER_PASSWORD="${MYSQL_CLUSTER_PASSWORD:-Clust3rP@ss!}"
-MYSQL_CLUSTER_NAME="${MYSQL_CLUSTER_NAME:-prodCluster}"
+MYSQL_CLUSTER_USER="${MYSQL_CLUSTER_USER:-$(read_var_from_inventory mysql_cluster_user)}"
+MYSQL_CLUSTER_PASSWORD="${MYSQL_CLUSTER_PASSWORD:-$(read_var_from_inventory mysql_cluster_password)}"
+MYSQL_CLUSTER_NAME="${MYSQL_CLUSTER_NAME:-$(read_var_from_inventory mysql_cluster_name)}"
 MYSQL_PORT="${MYSQL_PORT:-$(read_var_from_inventory mysql_port)}"
 MYSQL_ROUTER_PORT="${MYSQL_ROUTER_PORT:-$(read_var_from_inventory mysql_router_port)}"
 MYSQL_ROUTER_RO_PORT="${MYSQL_ROUTER_RO_PORT:-$(read_var_from_inventory mysql_router_ro_port)}"

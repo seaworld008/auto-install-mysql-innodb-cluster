@@ -1,108 +1,136 @@
-# MySQL InnoDB Cluster 项目结构总览
+# 项目结构总览
 
-## 📁 项目结构（已清理优化）
+本仓库维护一条统一的 MySQL InnoDB Cluster 自动化部署与运维主线。当前运行时真相源是 `inventory/group_vars/all.yml`，推荐入口是 `scripts/deploy_dedicated_routers.sh`。
 
-```
-09-outo-install-mysql-innodb-cluster/
-├── 📄 README.md                          # 项目主文档 - 推荐稳定配置
-├── 📄 QUICKSTART.md                       # 快速开始指南
-├── 📄 README_ROUTER_DEPLOYMENT.md         # Router部署指南
-│
-├── 📂 scripts/                           # 核心脚本（已优化清理）
-│   ├── 🔧 optimize_mysql_kernel_stable.sh  # 🌟 内核优化 - 行业最佳实践
-│   ├── 🚀 deploy_dedicated_routers.sh      # 主部署脚本
-│   ├── ⚙️ config_manager.sh               # 配置管理工具
-│   ├── 📈 upgrade_hardware_profile.sh     # 硬件升级脚本
-│   ├── 🔧 setup-servers.sh               # 服务器初始化
-│   ├── 🧪 failover-test.sh              # 故障转移测试
-│   └── 📊 cluster-status.sh              # 集群状态检查
-│
-├── 📂 playbooks/                         # Ansible脚本（已优化清理）
-│   ├── 🌟 kernel-optimization-stable.yml   # 内核优化 - 行业最佳实践
-│   ├── 🗄️ install-mysql.yml              # MySQL安装
-│   ├── 🔀 install-router.yml             # Router安装
-│   ├── ⚙️ configure-cluster.yml          # 集群配置
-│   └── 📋 site.yml                       # 主playbook
-│
-├── 📂 docs/                              # 文档（已清理优化）
-│   ├── 🌟 MYSQL_KERNEL_BEST_PRACTICES.md   # 🎯 内核优化最佳实践对比
-│   ├── 📊 HARDWARE_CAPACITY_ANALYSIS.md    # 硬件容量分析
-│   ├── ⚡ HIGH_CONCURRENCY_OPTIMIZATION.md  # 高并发优化
-│   ├── 🔧 ROUTER_DEPLOYMENT_GUIDE.md       # Router部署详细指南
-│   ├── 📖 PRODUCTION_OPTIMIZATION.md       # 生产优化最佳实践
-│   └── 🔧 SERVER_CONFIGURATION.md          # 服务器配置
-│
-├── 📂 inventory/                         # Ansible清单
-├── 📂 roles/                            # Ansible角色
-├── 📂 files/                            # 配置文件
-├── 📂 examples/                         # 示例配置
-│
-├── 📄 ansible.cfg                       # Ansible配置
-├── 📄 requirements.txt                  # Python依赖
-├── 📄 deploy.sh                         # 快速部署脚本
-├── 📄 DEPLOYMENT_GUIDE.md               # 部署指南
-├── 📄 TROUBLESHOOTING.md                # 故障排除
-├── 📄 CHECKLIST.md                      # 部署检查清单
-└── 📄 CHANGELOG.md                      # 变更日志
+## 顶层结构
+
+```text
+.
+├── AGENTS.md
+├── CHANGELOG.md
+├── CONTRIBUTING.md
+├── CODE_OF_CONDUCT.md
+├── DEPLOYMENT_COMPLETE_GUIDE.md
+├── LICENSE
+├── PRE_DEPLOYMENT_CHECKLIST.md
+├── PROJECT_STRUCTURE.md
+├── QUICK_START.md
+├── README.md
+├── SECURITY.md
+├── TROUBLESHOOTING.md
+├── ansible.cfg
+├── collections/
+├── docs/
+├── examples/
+├── inventory/
+├── playbooks/
+├── roles/
+├── scripts/
+├── validate_deployment.ps1
+└── validate_deployment.sh
 ```
 
-## 🎯 核心组件说明
+## 核心入口
 
-### 🌟 内核优化（已升级为行业最佳实践）
+| 路径 | 说明 |
+| --- | --- |
+| `scripts/deploy_dedicated_routers.sh` | 当前推荐主入口，统一执行部署、检查、扩缩容、配置应用和备份 |
+| `deploy.sh` | 兼容旧操作习惯的包装入口，内部转发到主入口 |
+| `inventory/group_vars/all.yml` | 当前唯一运行时主配置 |
+| `.github/workflows/ansible-ci.yml` | GitHub Actions 静态质量门 |
 
-**主要工具**：
-- `scripts/optimize_mysql_kernel_stable.sh` - **推荐使用**
-  - 基于Oracle MySQL、Percona、MariaDB官方推荐
-  - 动态参数调整（根据系统规格自动适配）
-  - 保守且稳定的企业级配置
-  - 完整的备份和回滚支持
+## 目录说明
 
-**文档参考**：
-- `docs/MYSQL_KERNEL_BEST_PRACTICES.md` - **重要参考**
-  - 详细的配置对比分析
-  - 权威来源说明
-  - 稳定性保证
-  - 生产环境验证记录
+### `inventory/`
 
-### 🚀 部署脚本
+Ansible inventory 与全局变量。
 
-**主要工具**：
-- `scripts/deploy_dedicated_routers.sh` - 专用Router部署
-- `scripts/config_manager.sh` - 配置管理和切换
-- `playbooks/kernel-optimization-stable.yml` - Ansible批量内核优化
+- `inventory/group_vars/all.yml`：主配置。
+- `inventory/hosts-with-dedicated-routers.yml`：推荐的独立 Router + HAProxy 拓扑示例。
+- `inventory/hosts-ha-reference.yml`：高可用参考拓扑。
+- `inventory/hosts.yml`：基础示例拓扑。
+- `inventory/group_vars/all-8c32g-optimized.yml`、`inventory/group_vars/all-original-10k-config.yml`：历史快照，不是运行时真相源。
 
-### 📚 文档体系
+### `playbooks/`
 
-**核心文档**：
-- `README.md` - 项目总览（推荐稳定配置）
-- `QUICKSTART.md` - 快速上手
-- `docs/MYSQL_KERNEL_BEST_PRACTICES.md` - 内核优化最佳实践
+Ansible playbooks。
 
-## 🧹 清理说明
+- `site.yml`：完整部署入口。
+- `preflight-ha.yml`：高可用拓扑与关键参数预检查。
+- `install-mysql.yml`：安装 MySQL Server。
+- `configure-cluster.yml`：配置 InnoDB Cluster。
+- `install-router.yml`：安装 MySQL Router。
+- `install-haproxy.yml`：安装 HAProxy。
+- `install-keepalived.yml`：安装 Keepalived。
+- `apply-config.yml`：滚动应用当前主配置。
+- `backup.yml`：可选逻辑 / 物理备份。
+- `scale-*.yml`、`shrink-*.yml`：扩容和缩容流程。
 
-**已删除的冗余文件**：
-- ❌ `scripts/optimize_mysql_kernel.sh` - 激进配置，已被稳定版替代
-- ❌ `playbooks/kernel-optimization.yml` - 激进配置，已被稳定版替代  
-- ❌ `docs/MYSQL_KERNEL_OPTIMIZATION.md` - 激进配置文档，已被最佳实践文档替代
-- ❌ `templates/` 目录 - 模板文件已集成到稳定版本中
+### `roles/`
 
-**清理原则**：
-- 保留稳定且基于行业最佳实践的配置
-- 删除激进和实验性的配置
-- 合并重复功能的文件
-- 简化项目结构，提升可维护性
+Ansible 角色模板。
 
-## 🎯 推荐使用方式
+- `roles/mysql-server/templates/my.cnf.j2`
+- `roles/mysql-router/templates/mysqlrouter.service.j2`
+- `roles/haproxy/templates/haproxy.cfg.j2`
+- `roles/keepalived/templates/keepalived.conf.j2`
+
+### `scripts/`
+
+运维脚本和主入口。
+
+- `deploy_dedicated_routers.sh`：统一部署和运维入口。
+- `config_manager.sh`：切换 `mysql_hardware_profile`。
+- `optimize_mysql_kernel_stable.sh`：单机内核优化辅助脚本。
+- `health-check-ha.sh`：高可用健康检查。
+- `backup.sh`：备份辅助脚本。
+- `scale-*.sh`、`shrink-*.sh`：扩缩容辅助入口。
+
+### `docs/`
+
+专题文档。
+
+- `docs/BACKUP_AND_RESTORE_GUIDE.md`
+- `docs/DEPLOYMENT_HA_BLUEPRINT_ZH.md`
+- `docs/MYSQL_KERNEL_BEST_PRACTICES.md`
+- `docs/MYSQL80_CLUSTER_CROSS_VALIDATION.md`
+- `docs/ROUTER_DEPLOYMENT_COMPLETE.md`
+- `docs/AI_MAINTAINER_GUIDE.md`
+
+### `examples/`
+
+示例配置。
+
+- `examples/production-inventory.yml`：生产 inventory 示例。
+- `examples/vault-secrets.yml`：Ansible Vault 变量示例，提交前必须加密或替换。
+- `examples/hardware_profiles.yml`：硬件配置参考。
+- `examples/router-deployment-options.yml`：Router 接入方式参考。
+
+## 推荐工作流
 
 ```bash
-# 1. 内核优化（行业最佳实践）
-sudo ./scripts/optimize_mysql_kernel_stable.sh
+# 1. 安装依赖
+pip install -r requirements.txt
+ansible-galaxy collection install -r collections/requirements.yml
 
-# 2. 完整部署
-./scripts/deploy_dedicated_routers.sh --production-ready
+# 2. 修改 inventory 和主配置
+vim inventory/hosts-with-dedicated-routers.yml
+vim inventory/group_vars/all.yml
 
-# 3. Ansible批量优化
-ansible-playbook -i inventory/hosts-with-dedicated-routers.yml playbooks/kernel-optimization-stable.yml
+# 3. 前置检查
+./scripts/deploy_dedicated_routers.sh --check-prereq -i inventory/hosts-with-dedicated-routers.yml
+
+# 4. 完整部署
+./scripts/deploy_dedicated_routers.sh --production-ready -i inventory/hosts-with-dedicated-routers.yml
+
+# 5. 查看状态
+./scripts/deploy_dedicated_routers.sh --status -i inventory/hosts-with-dedicated-routers.yml
 ```
 
-现在项目结构更加清晰，专注于稳定可靠的生产级配置！🚀 
+## 维护原则
+
+- 不新增平行部署主线。
+- 不复制新的运行时主配置文件。
+- 新配置优先进入 `inventory/group_vars/all.yml` 的结构化变量。
+- 行为变更需要同步 README、部署指南和相关 runbook。
+- 发布前至少运行 shell 语法、Ansible syntax-check、inventory 校验和 `git diff --check`。

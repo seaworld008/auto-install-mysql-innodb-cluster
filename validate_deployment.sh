@@ -25,21 +25,21 @@ log_info() {
 
 log_success() {
     echo -e "${GREEN}[PASS]${NC} $1"
-    ((PASSED_CHECKS++))
+    ((PASSED_CHECKS+=1))
 }
 
 log_warning() {
     echo -e "${YELLOW}[WARN]${NC} $1"
-    ((WARNING_CHECKS++))
+    ((WARNING_CHECKS+=1))
 }
 
 log_error() {
     echo -e "${RED}[FAIL]${NC} $1"
-    ((FAILED_CHECKS++))
+    ((FAILED_CHECKS+=1))
 }
 
 check_item() {
-    ((TOTAL_CHECKS++))
+    ((TOTAL_CHECKS+=1))
     local description="$1"
     local command="$2"
     local expected_result="$3"
@@ -63,7 +63,7 @@ check_item() {
 }
 
 check_file_exists() {
-    ((TOTAL_CHECKS++))
+    ((TOTAL_CHECKS+=1))
     local file="$1"
     local description="$2"
     
@@ -75,7 +75,7 @@ check_file_exists() {
 }
 
 check_dir_exists() {
-    ((TOTAL_CHECKS++))
+    ((TOTAL_CHECKS+=1))
     local dir="$1"
     local description="$2"
     
@@ -87,7 +87,7 @@ check_dir_exists() {
 }
 
 check_yaml_syntax() {
-    ((TOTAL_CHECKS++))
+    ((TOTAL_CHECKS+=1))
     local file="$1"
     
     if command -v python3 >/dev/null 2>&1; then
@@ -181,7 +181,7 @@ log_info "8. 检查脚本文件"
 for script in deploy.sh scripts/*.sh; do
     if [ -f "$script" ]; then
         # 检查是否有正确的shebang
-        ((TOTAL_CHECKS++))
+        ((TOTAL_CHECKS+=1))
         if head -1 "$script" | grep -q "#!/bin/bash"; then
             log_success "Shebang检查: $script"
         else
@@ -190,7 +190,7 @@ for script in deploy.sh scripts/*.sh; do
         
         # 检查脚本语法（如果有bash）
         if command -v bash >/dev/null 2>&1; then
-            ((TOTAL_CHECKS++))
+            ((TOTAL_CHECKS+=1))
             if tr -d '\r' < "$script" | bash -n >/dev/null 2>&1; then
                 log_success "语法检查: $script"
             else
@@ -207,7 +207,7 @@ if [ -f "$config_file" ]; then
     # 检查关键变量是否定义
     key_vars=("mysql_version" "mysql_root_password" "mysql_cluster_name" "mysql_cluster_user" "mysql_port")
     for var in "${key_vars[@]}"; do
-        ((TOTAL_CHECKS++))
+        ((TOTAL_CHECKS+=1))
         if grep -q "^$var:" "$config_file"; then
             log_success "变量定义: $var"
         else
@@ -221,7 +221,7 @@ log_info "10. 检查Python依赖"
 if [ -f "requirements.txt" ]; then
     required_packages=("ansible" "PyMySQL" "mysql-connector-python")
     for package in "${required_packages[@]}"; do
-        ((TOTAL_CHECKS++))
+        ((TOTAL_CHECKS+=1))
         if grep -q "$package" requirements.txt; then
             log_success "依赖包: $package 已在requirements.txt中"
         else
@@ -232,14 +232,14 @@ fi
 
 # 11. 检查系统兼容性
 log_info "11. 检查系统兼容性要求"
-((TOTAL_CHECKS++))
+((TOTAL_CHECKS+=1))
 if command -v python3 >/dev/null 2>&1; then
     log_success "Python3 可用"
 else
     log_warning "Python3 未安装（部署时需要）"
 fi
 
-((TOTAL_CHECKS++))
+((TOTAL_CHECKS+=1))
 if command -v ansible >/dev/null 2>&1; then
     ansible_version=$(ansible --version | head -1 | awk '{print $3}')
     log_success "Ansible 已安装 (版本: $ansible_version)"
@@ -252,14 +252,14 @@ log_info "12. 检查网络配置示例"
 inventory_files=("inventory/hosts.yml" "inventory/hosts-recommended-router.yml")
 for inv_file in "${inventory_files[@]}"; do
     if [ -f "$inv_file" ]; then
-        ((TOTAL_CHECKS++))
+        ((TOTAL_CHECKS+=1))
         if grep -q "192.168.1" "$inv_file"; then
             log_warning "网络配置: $inv_file 使用示例IP地址，部署前需要修改"
         else
             log_success "网络配置: $inv_file 已自定义IP地址"
         fi
         
-        ((TOTAL_CHECKS++))
+        ((TOTAL_CHECKS+=1))
         if grep -q "your_password" "$inv_file"; then
             log_warning "密码配置: $inv_file 使用示例密码，部署前需要修改"
         else
@@ -280,7 +280,7 @@ log_info "14. 检查配置文件一致性"
 config_files=("inventory/group_vars/all.yml")
 for config in "${config_files[@]}"; do
     if [ -f "$config" ]; then
-        ((TOTAL_CHECKS++))
+        ((TOTAL_CHECKS+=1))
         cluster_name=$(grep "mysql_cluster_name:" "$config" | awk '{print $2}' | tr -d '"')
         if [ "$cluster_name" = "prodCluster" ]; then
             log_success "集群名称一致性: $config"
@@ -290,7 +290,7 @@ for config in "${config_files[@]}"; do
     fi
 done
 
-((TOTAL_CHECKS++))
+((TOTAL_CHECKS+=1))
 if python3 - <<'PY' >/dev/null 2>&1
 import yaml, pathlib, sys
 data = yaml.safe_load(pathlib.Path("inventory/group_vars/all.yml").read_text(encoding="utf-8"))
@@ -309,23 +309,25 @@ log_info "15. 检查模板文件完整性"
 template_files=("roles/mysql-server/templates/my.cnf.j2" "roles/mysql-router/templates/mysqlrouter.service.j2")
 for template in "${template_files[@]}"; do
     if [ -f "$template" ]; then
-        ((TOTAL_CHECKS++))
-        # 检查模板是否包含变量
-        if grep -q "{{" "$template"; then
+        ((TOTAL_CHECKS+=1))
+        if [ ! -s "$template" ]; then
+            log_error "模板完整性: $template 为空文件"
+        elif grep -q "{{" "$template"; then
             log_success "模板变量: $template 包含Ansible变量"
         else
-            log_warning "模板变量: $template 可能缺少必要的变量"
+            log_success "模板完整性: $template 是有效静态模板"
         fi
     fi
 done
 
 # 16. 最终安全检查
 log_info "16. 安全配置检查"
-((TOTAL_CHECKS++))
-if grep -r "password" inventory/group_vars/ | grep -v "your_password" | grep -q "P@ss"; then
-    log_success "密码强度: 使用了强密码模式"
+((TOTAL_CHECKS+=1))
+secret_pattern_file="${TMPDIR:-/tmp}/mysql-secret-patterns.txt"
+if grep -R -n -E "MyS3cur3P|Clust3rP|R3pl1c|ProductionRootPassword|ProductionClusterPassword|ProductionReplicationPassword|BackupEncryptionKey|MonitoringAPIKey" inventory examples scripts docs >"$secret_pattern_file" 2>/dev/null; then
+    log_error "默认凭据检查: 发现疑似真实默认密码或示例密钥，请检查 $secret_pattern_file"
 else
-    log_warning "密码强度: 建议使用更强的密码模式"
+    log_success "默认凭据检查: 未发现已知默认样式密码或示例密钥"
 fi
 
 # 总结报告

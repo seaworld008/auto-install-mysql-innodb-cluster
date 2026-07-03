@@ -1,0 +1,45 @@
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Ansible
+*.retry
+.ansible/
+ansible.log
+vault-password.txt
+vault_pass.txt
+*.vault-password
+
+# Secrets and local overrides
+.env
+.env.*
+!/.env.example
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+id_rsa
+id_ed25519
+known_hosts
+
+# Logs and generated output
+*.log
+logs/
+tmp/
+temp/
+backup/
+backups/
+*.bak
+*.backup
+
+# OS and editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo

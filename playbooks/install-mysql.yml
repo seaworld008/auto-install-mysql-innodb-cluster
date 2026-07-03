@@ -280,7 +280,7 @@
         - mysql_temp_password.stdout | length > 0
 
     - name: 设置 MySQL root 密码（Debian/Ubuntu socket 流程）
-      community.mysql.mysql_user:
+      ansible.mysql.mysql_user:
         check_implicit_admin: true
         login_unix_socket: "{{ mysql_socket_path }}"
         name: root
@@ -300,7 +300,7 @@
       ignore_errors: yes
 
     - name: 创建集群管理用户
-      community.mysql.mysql_user:
+      ansible.mysql.mysql_user:
         login_user: root
         login_password: "{{ mysql_root_password }}"
         login_unix_socket: "{{ mysql_socket_path if ansible_os_family == 'Debian' else omit }}"
@@ -312,7 +312,7 @@
         state: present
 
     - name: 创建复制用户
-      community.mysql.mysql_user:
+      ansible.mysql.mysql_user:
         login_user: root
         login_password: "{{ mysql_root_password }}"
         login_unix_socket: "{{ mysql_socket_path if ansible_os_family == 'Debian' else omit }}"

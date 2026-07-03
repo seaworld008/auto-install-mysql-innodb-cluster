@@ -18,6 +18,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install ansible-core
           ansible-galaxy collection install -r collections/requirements.yml
+      - name: Shell syntax check
+        run: |
+          bash -n deploy.sh validate_deployment.sh scripts/*.sh
       - name: Syntax check
         run: |
           ansible-playbook -i inventory/hosts.yml playbooks/site.yml --syntax-check

@@ -4,9 +4,14 @@
 # 使用方法: ./failover-test.sh [primary_host] [cluster_user] [cluster_password]
 
 PRIMARY_HOST=${1:-"192.168.1.10"}
-CLUSTER_USER=${2:-"clusteradmin"}
-CLUSTER_PASSWORD=${3:-"Clust3rP@ss!"}
-CLUSTER_NAME=${4:-"prodCluster"}
+CLUSTER_USER=${2:-"${MYSQL_CLUSTER_USER:-clusteradmin}"}
+CLUSTER_PASSWORD=${3:-"${MYSQL_CLUSTER_PASSWORD:-CHANGE_ME_CLUSTER_PASSWORD}"}
+CLUSTER_NAME=${4:-"${MYSQL_CLUSTER_NAME:-prodCluster}"}
+
+if [[ "$CLUSTER_PASSWORD" == CHANGE_ME_* || -z "$CLUSTER_PASSWORD" ]]; then
+    echo "错误: 请通过第三个参数或 MYSQL_CLUSTER_PASSWORD 环境变量显式提供集群密码。" >&2
+    exit 1
+fi
 
 echo "=== MySQL InnoDB Cluster 故障转移测试 ==="
 echo "主节点: $PRIMARY_HOST"
@@ -72,4 +77,4 @@ echo "2. 将原主节点重新加入集群:"
 echo "   mysqlsh --uri ${CLUSTER_USER}:${CLUSTER_PASSWORD}@${NEW_PRIMARY%:*}:3306 -e \"var cluster = dba.getCluster('${CLUSTER_NAME}'); cluster.rejoinInstance('${CURRENT_PRIMARY}')\""
 
 echo
-echo "=== 测试完成 ===" 
+echo "=== 测试完成 ==="

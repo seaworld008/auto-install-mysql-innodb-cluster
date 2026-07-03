@@ -1,139 +1,98 @@
-# 更新日志
+# Changelog
 
-> 说明：本文件保留历史演进记录，当前运行时真相源请以 `inventory/group_vars/all.yml`、`README.md` 和 `DEPLOYMENT_COMPLETE_GUIDE.md` 为准。
+本项目遵循 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 的组织方式，并尽量使用语义化版本。
 
-## [2026-03-25] - 收敛为可长期维护的生产主线
+> 说明：当前运行时真相源请以 `inventory/group_vars/all.yml`、`README.md` 和 `DEPLOYMENT_COMPLETE_GUIDE.md` 为准。
 
-### ✨ 主线升级
+## [Unreleased]
 
-- 统一主配置为 `inventory/group_vars/all.yml`
-- `config_manager.sh` 改为仅切换 `mysql_hardware_profile`
-- 扩容、缩容、滚动配置应用、可选逻辑备份全部纳入主流程
-- 新增 `collections/requirements.yml`，显式声明所需 collections
-- GitHub Actions 静态质量验证覆盖 syntax-check 与 inventory 校验
+### 新增
 
-### 🔧 当前主线默认
+- 新增开源协作文件：`LICENSE`、`CONTRIBUTING.md`、`CODE_OF_CONDUCT.md`、`SECURITY.md`。
+- 新增 GitHub Issue Templates 和 Pull Request Template。
+- 新增 `.gitignore` 和 `.editorconfig`，减少本地开发噪声和误提交风险。
+- 新增下一次文档与仓库展示优化版本的 Release 草案。
 
-- MySQL 默认 `2500/节点`
-- HAProxy VIP 默认 `3307/3308`
-- Router 直连默认 `6446/6447`
-- 连接复用按保守 `8:1` 设计
+### 变更
 
-## [2024-12-28] - 8核32G+4核8G优化配置设为默认（历史记录）
+- 重构 `README.md`，补齐项目定位、Quick Start、配置说明、常用操作、本地检查、FAQ 和英文摘要。
+- 更新 `PROJECT_STRUCTURE.md`，使其匹配当前仓库真实结构。
+- 将看起来像真实密码的示例值替换为明确的 `CHANGE_ME_*` 或占位值。
+- 在 GitHub Actions 中增加 shell 语法检查。
+- 将旧的 `setup-servers.sh` 三机向导升级为 3 MySQL + 2 Router + 2 HAProxy 的 HA inventory 向导。
+- 将辅助脚本 `apply-config.sh`、`backup.sh`、`scale-mysql.sh`、`shrink-*.sh`、`deploy-ha-stack.sh` 收敛到统一主入口。
+- 将 MySQL 用户管理模块从 `community.mysql.mysql_user` 迁移到 `ansible.mysql.mysql_user`，消除新版 collection 弃用警告。
+- 明确 `--skip-kernel-optimization` 的执行路径，避免依赖不确定的 tag 跳过行为。
 
-### ✨ 重大更新
+### 安全
 
-#### 🎯 默认配置优化
-- **8核32G+4核8G优化配置**现已设为默认配置
-- MySQL连接数曾调整为**4000/节点**，这是旧阶段设计
-- Router保持**30000连接/台**，充分利用4核8G硬件
-- 连接复用比例优化到**5:1**，大幅提升效率
+- 明确建议生产环境使用 Ansible Vault、SSH key、CI/CD Secret 或专用 Secret Manager。
+- 降低从公开示例中复制默认样式凭据的误用风险。
+- `cluster-status.sh`、`failover-test.sh` 在未显式提供集群密码时会直接阻断，避免使用占位密码发起连接。
 
-#### 🔧 新增配置管理工具
-- 新增`scripts/config_manager.sh`配置管理脚本
-- 支持一键切换不同硬件配置
-- 自动备份和恢复功能
-- 配置验证和状态查看
+### 修复
 
-#### 📊 硬件配置文件
-- **8c32g-optimized**: 默认配置，适用于8核32G+4核8G硬件
-- **original-10k**: 保留原始高连接配置，适用于32核64G硬件
-- **standard**: 标准配置，适用于小规模部署
-- **high-performance**: 旧命名，当前主线已不再使用
+- 修复 `deploy_dedicated_routers.sh` 与 `health-check-ha.sh` 中 inventory 变量读取时 `python -` 与管道 stdin 冲突导致的 JSON 解析失败。
+- 修复 `validate_deployment.sh` 在 `set -e` 下因后缀自增提前退出的问题。
+- 修复 `--full-deploy` 重复执行入口层内核优化的问题。
 
-#### 📝 文档更新
-- 更新主README，突出8C32G优化特色
-- 完善Router部署指南
-- 新增硬件容量分析文档
-- 更新性能指标和预期
+## [0.2.0] - 2026-03-25
 
-### 🚀 性能提升
+### 新增
 
-#### 内存使用优化
-```
-之前配置: MySQL 10000连接 = 48GB内存需求 (超出32GB)
-优化配置: MySQL 4000连接 = 32GB内存需求 (完美匹配)
-```
+- 统一运行时配置模型，以 `inventory/group_vars/all.yml` 作为单一真相源。
+- 统一主入口：`scripts/deploy_dedicated_routers.sh`。
+- 默认使用 MySQL 8.4 LTS，同时保留 MySQL 8.0 兼容。
+- 新增单端口自动读写分离入口：
+  - HAProxy VIP: `3309`
+  - MySQL Router 直连: `6450`
+- 保留显式读写和只读入口：
+  - HAProxy VIP: `3307 / 3308`
+  - MySQL Router 直连: `6446 / 6447`
+- 新增 MySQL 扩容和缩容流程。
+- 新增 Router 与 HAProxy 缩容流程。
+- 新增滚动应用当前配置流程。
+- 新增独立内核优化动作：`--kernel-optimize-only`。
+- 新增可选备份流程：
+  - MySQL Shell 逻辑备份。
+  - Percona XtraBackup 物理备份。
+  - 本地目录、NFS、SSH + rsync 远端目录。
+- 新增备份与恢复 runbook：`docs/BACKUP_AND_RESTORE_GUIDE.md`。
+- 新增 AI 维护说明：
+  - `AGENTS.md`
+  - `docs/AI_MAINTAINER_GUIDE.md`
+- 增强 GitHub Actions 静态质量门，覆盖 Ansible syntax-check 和 inventory 校验。
 
-#### 连接效率提升
-```
-连接架构: 60K前端 → 12K后端 (5:1复用)
-系统稳定性: 100%内存利用，无超载风险
-运维体验: 无OOM告警，生产就绪
-```
+### 变更
 
-### 🛠️ 技术改进
+- 将此前分散的脚本能力收敛到当前生产部署主线。
+- Router bootstrap 行为更偏保守和幂等。
+- 围绕当前主线同步文档。
 
-#### 配置文件结构
-- 统一配置文件命名规范
-- 增加详细的配置注释和说明
-- 支持动态参数计算
+## [0.1.0] - 2025-07-09
 
-#### 部署脚本优化
-- Router部署脚本支持新配置
-- 配置管理脚本提供完整的操作界面
-- 自动备份机制确保配置安全
+### 新增
 
-### 📋 迁移指南
+- MySQL InnoDB Cluster 自动化仓库首次公开发布。
+- 提供 MySQL Server 安装、InnoDB Cluster 配置和 MySQL Router 设置的基础 Ansible 结构。
 
-#### 从旧配置迁移到新默认配置
+## 历史记录
 
-```bash
-# 1. 备份当前配置
-./scripts/config_manager.sh --backup
+### 2024-12-28 - 8C32G + 4C8G 优化配置成为默认设计基线
 
-# 2. 查看新默认配置
-./scripts/config_manager.sh --current
+- 引入 8C32G MySQL + 4C8G Router 容量模型。
+- 新增 `scripts/config_manager.sh`，用于切换硬件配置。
+- 新增历史硬件配置快照。
+- 更新 Router 部署和容量分析相关文档。
 
-# 3. 如需切换到其他配置
-./scripts/config_manager.sh --list
-./scripts/config_manager.sh --switch <config-name>
-```
+### 2024-12-27 - 高并发调优
 
-#### 配置对比
+- 增加 Router 与 MySQL 高并发配置思路。
+- 增加系统参数调优说明。
+- 增加监控与告警说明。
 
-| 项目 | 旧配置 | 新默认配置 | 优势 |
-|------|--------|------------|------|
-| MySQL连接数 | 10000/节点 | 4000/节点 | 内存安全 |
-| 内存需求 | 48GB | 32GB | 完美匹配 |
-| 连接复用 | 2:1 | 5:1 | 效率提升 |
-| 系统稳定性 | 风险 | 优秀 | 生产就绪 |
+### 2024-12-26 - 初始内部基线
 
-### 🔄 向后兼容
-
-- 保留所有原有配置文件
-- 支持一键切换回旧配置
-- 配置管理工具提供完整的恢复机制
-
-### 📈 预期收益
-
-1. **更好的资源利用**: 100%内存利用率，无浪费
-2. **更高的系统稳定性**: 无内存超载风险
-3. **更简单的运维**: 无需担心OOM问题
-4. **更灵活的配置管理**: 支持多种硬件配置快速切换
-5. **更完善的文档**: 详细的部署和优化指南
-
----
-
-## [2024-12-27] - 高并发优化
-
-### 🚀 性能优化
-- Router单台连接数提升至30000
-- MySQL单节点连接数提升至10000  
-- 系统级参数优化支持高并发
-- 完整的监控和告警配置
-
-### 📚 文档完善
-- 高并发优化指南
-- Router部署策略分析
-- 生产优化最佳实践
-
----
-
-## [2024-12-26] - 初始版本
-
-### 🎉 首次发布
-- MySQL InnoDB Cluster自动部署
-- 支持3节点MySQL集群
-- 基础的MySQL Router配置
-- Ansible自动化脚本 
+- 增加初始 MySQL InnoDB Cluster 部署脚本。
+- 增加 3 节点 MySQL 集群基础支持。
+- 增加 MySQL Router 基础配置。

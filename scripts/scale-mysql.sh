@@ -9,4 +9,4 @@ if [[ -z "$LIMIT" ]]; then
     exit 1
 fi
 
-ansible-playbook -i "$INV" playbooks/scale-mysql.yml --limit "$LIMIT"
+exec ./scripts/deploy_dedicated_routers.sh --scale-mysql-add --limit "$LIMIT" -i "$INV"

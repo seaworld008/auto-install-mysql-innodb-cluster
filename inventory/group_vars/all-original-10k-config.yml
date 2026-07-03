@@ -10,11 +10,12 @@ mysql_major_version: "8.0"
 mysql_collation_server: "utf8mb4_general_ci"
 
 # MySQL用户和密码配置
-mysql_root_password: "MyS3cur3P@ssw0rd!"
+# 历史快照也保留占位符，避免被直接复制到公开环境。
+mysql_root_password: "CHANGE_ME_ROOT_PASSWORD"
 mysql_cluster_user: "clusteradmin"
-mysql_cluster_password: "Clust3rP@ss!"
+mysql_cluster_password: "CHANGE_ME_CLUSTER_PASSWORD"
 mysql_replication_user: "replicator"
-mysql_replication_password: "R3pl1c@t0r!"
+mysql_replication_password: "CHANGE_ME_REPLICATION_PASSWORD"
 
 # MySQL集群配置
 mysql_cluster_name: "prodCluster"
