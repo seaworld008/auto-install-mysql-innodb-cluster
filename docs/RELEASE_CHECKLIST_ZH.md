@@ -32,4 +32,17 @@ ANSIBLE_STDOUT_CALLBACK=default ansible-playbook -i inventory/hosts-ha-reference
 - [ ] README/蓝图文档已同步
 - [ ] inventory 中密码/IP 已替换为真实值
 - [ ] Keepalived VIP 与网卡名（`keepalived_interface`）已按环境修正
+- [ ] 如有 staging 验证，已填写 `docs/templates/staging-validation-record.md`
+- [ ] 如有故障演练，已填写 `docs/templates/failover-drill-record.md`
+- [ ] 如有恢复演练，已填写 `docs/templates/restore-drill-record.md`
+- [ ] 文档截图和 CLI 输出已按 `docs/ARCHITECTURE_AND_EVIDENCE.md` 脱敏
 
+## 6. 可选文档质量检查
+
+```bash
+npx --yes markdownlint-cli2
+python -m pip install yamllint
+yamllint .
+```
+
+当前文档 lint 是 advisory，不替代 Ansible syntax check、inventory 校验或真实环境验证。

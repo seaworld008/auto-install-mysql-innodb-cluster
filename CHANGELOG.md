@@ -8,6 +8,12 @@
 
 ### 新增
 
+- 新增英文入口 `README_EN.md`，便于全球开发者检索和评估。
+- 新增 GitHub Pages 文档站点入口与发布工作流：`docs/index.md`、`.github/workflows/pages.yml`。
+- 新增架构图、端口视图和证据留存指南：`docs/ARCHITECTURE_AND_EVIDENCE.md`。
+- 新增变量参考与配置示例：`docs/VARIABLE_REFERENCE.md`。
+- 新增 staging 验证、故障演练和隔离恢复演练记录模板。
+- 新增可选 Markdown / YAML advisory lint 工作流与配置。
 - 新增开源协作文件：`LICENSE`、`CONTRIBUTING.md`、`CODE_OF_CONDUCT.md`、`SECURITY.md`。
 - 新增 GitHub Issue Templates 和 Pull Request Template。
 - 新增 `.gitignore` 和 `.editorconfig`，减少本地开发噪声和误提交风险。

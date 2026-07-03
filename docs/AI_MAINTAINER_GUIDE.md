@@ -39,6 +39,9 @@
 8. `playbooks/install-router.yml`
 9. `playbooks/backup.yml`
 10. `.github/workflows/ansible-ci.yml`
+11. `docs/VARIABLE_REFERENCE.md`
+12. `docs/ARCHITECTURE_AND_EVIDENCE.md`
+13. `docs/templates/`
 
 ## 3. 单一真相源
 
@@ -68,11 +71,23 @@
 当前主入口文档是：
 
 - `README.md`
+- `README_EN.md`
 - `DEPLOYMENT_COMPLETE_GUIDE.md`
 - `QUICK_START.md`
 - `PRE_DEPLOYMENT_CHECKLIST.md`
 
 如果实现改变了，这几份文档必须同步。
+
+专题文档和证据模板：
+
+- `docs/VARIABLE_REFERENCE.md`
+- `docs/ARCHITECTURE_AND_EVIDENCE.md`
+- `docs/templates/staging-validation-record.md`
+- `docs/templates/failover-drill-record.md`
+- `docs/templates/restore-drill-record.md`
+- `docs/index.md`
+
+这些文件用于解释、索引和留存证据，不是新的运行时配置来源。
 
 ## 4. 修改原则
 

@@ -38,6 +38,8 @@
 | `deploy.sh` | 兼容旧操作习惯的包装入口，内部转发到主入口 |
 | `inventory/group_vars/all.yml` | 当前唯一运行时主配置 |
 | `.github/workflows/ansible-ci.yml` | GitHub Actions 静态质量门 |
+| `.github/workflows/docs-quality.yml` | 可选 Markdown / YAML advisory lint |
+| `.github/workflows/pages.yml` | GitHub Pages 文档站点发布 |
 
 ## 目录说明
 
@@ -92,10 +94,15 @@ Ansible 角色模板。
 
 - `docs/BACKUP_AND_RESTORE_GUIDE.md`
 - `docs/DEPLOYMENT_HA_BLUEPRINT_ZH.md`
+- `docs/ARCHITECTURE_AND_EVIDENCE.md`
+- `docs/VARIABLE_REFERENCE.md`
 - `docs/MYSQL_KERNEL_BEST_PRACTICES.md`
 - `docs/MYSQL80_CLUSTER_CROSS_VALIDATION.md`
 - `docs/ROUTER_DEPLOYMENT_COMPLETE.md`
 - `docs/AI_MAINTAINER_GUIDE.md`
+- `docs/index.md`：GitHub Pages 文档站点入口。
+- `docs/templates/`：staging 验证、故障演练和隔离恢复演练记录模板。
+- `docs/decisions/`：架构决策记录。
 
 ### `examples/`
 

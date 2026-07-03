@@ -1,0 +1,19 @@
+title: MySQL InnoDB Cluster Automation
+description: Documentation for the Ansible-based MySQL InnoDB Cluster automation mainline.
+theme: minima
+markdown: kramdown
+kramdown:
+  input: GFM
+plugins:
+  - jekyll-default-layout
+  - jekyll-optional-front-matter
+  - jekyll-readme-index
+  - jekyll-relative-links
+  - jekyll-titles-from-headings
+relative_links:
+  enabled: true
+  collections: true
+exclude:
+  - "../.git"
+  - "../.github"
+  - "../.venv"
