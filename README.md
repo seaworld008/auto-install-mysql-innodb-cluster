@@ -1,13 +1,14 @@
 # MySQL InnoDB Cluster 自动化部署
 
-[![Static Quality](https://img.shields.io/github/actions/workflow/status/seaworld008/auto-install-mysql-innodb-cluster/ansible-ci.yml?branch=main&label=static%20quality&logo=githubactions&logoColor=white)](https://github.com/seaworld008/auto-install-mysql-innodb-cluster/actions/workflows/ansible-ci.yml)
-[![Latest Release](https://img.shields.io/github/v/release/seaworld008/auto-install-mysql-innodb-cluster?label=release)](https://github.com/seaworld008/auto-install-mysql-innodb-cluster/releases)
-[![Stars](https://img.shields.io/github/stars/seaworld008/auto-install-mysql-innodb-cluster?style=flat&label=stars)](https://github.com/seaworld008/auto-install-mysql-innodb-cluster/stargazers)
-[![Forks](https://img.shields.io/github/forks/seaworld008/auto-install-mysql-innodb-cluster?style=flat&label=forks)](https://github.com/seaworld008/auto-install-mysql-innodb-cluster/forks)
-[![Issues](https://img.shields.io/github/issues/seaworld008/auto-install-mysql-innodb-cluster?label=issues)](https://github.com/seaworld008/auto-install-mysql-innodb-cluster/issues)
-[![Pull Requests](https://img.shields.io/github/issues-pr/seaworld008/auto-install-mysql-innodb-cluster?label=pull%20requests)](https://github.com/seaworld008/auto-install-mysql-innodb-cluster/pulls)
-[![Last Commit](https://img.shields.io/github/last-commit/seaworld008/auto-install-mysql-innodb-cluster?label=last%20commit)](https://github.com/seaworld008/auto-install-mysql-innodb-cluster/commits/main)
-[![License](https://img.shields.io/github/license/seaworld008/auto-install-mysql-innodb-cluster?label=license)](LICENSE)
+[![Quality Gate](https://img.shields.io/github/actions/workflow/status/seaworld008/auto-install-mysql-innodb-cluster/ansible-ci.yml?branch=main&label=quality%20gate&logo=githubactions&logoColor=white&style=for-the-badge)](https://github.com/seaworld008/auto-install-mysql-innodb-cluster/actions/workflows/ansible-ci.yml)
+[![Release](https://img.shields.io/github/v/release/seaworld008/auto-install-mysql-innodb-cluster?label=release&style=for-the-badge)](https://github.com/seaworld008/auto-install-mysql-innodb-cluster/releases)
+[![MIT License](https://img.shields.io/badge/license-MIT-2E8B57?style=for-the-badge)](LICENSE)
+[![Ansible](https://img.shields.io/badge/automation-Ansible-EE0000?logo=ansible&logoColor=white&style=for-the-badge)](collections/requirements.yml)
+[![MySQL](https://img.shields.io/badge/MySQL-8.4%20LTS%20%7C%208.0-4479A1?logo=mysql&logoColor=white&style=for-the-badge)](inventory/group_vars/all.yml)
+[![InnoDB Cluster](https://img.shields.io/badge/InnoDB%20Cluster-Group%20Replication-005C84?logo=mysql&logoColor=white&style=for-the-badge)](playbooks/configure-cluster.yml)
+[![MySQL Router](https://img.shields.io/badge/MySQL%20Router-R%2FW%20Split-0F6CBD?style=for-the-badge)](playbooks/install-router.yml)
+[![HA Entry](https://img.shields.io/badge/HAProxy%20%2B%20Keepalived-HA%20Entry-106DA9?style=for-the-badge)](docs/DEPLOYMENT_HA_BLUEPRINT_ZH.md)
+[![Operations](https://img.shields.io/badge/Operations-Scale%20%7C%20Backup%20%7C%20Rolling%20Config-6A5ACD?style=for-the-badge)](DEPLOYMENT_COMPLETE_GUIDE.md)
 
 面向运维和平台团队的 MySQL InnoDB Cluster 自动化部署与运维方案，基于 Ansible 编排 MySQL Server、MySQL Router、HAProxy、Keepalived、扩缩容、滚动配置应用和可选备份流程。
 
