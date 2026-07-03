@@ -1,629 +1,355 @@
-# MySQL InnoDB Cluster 自动部署
+# MySQL InnoDB Cluster 自动化部署
 
-![Static Quality](https://img.shields.io/github/actions/workflow/status/seaworld008/auto-install-mysql-innodb-cluster/ansible-ci.yml?branch=main&label=%E9%9D%99%E6%80%81%E8%B4%A8%E9%87%8F%E9%97%A8&logo=githubactions&logoColor=white)
-![Ansible](https://img.shields.io/badge/Ansible-%E8%87%AA%E5%8A%A8%E5%8C%96-EE0000?logo=ansible&logoColor=white)
-![MySQL](https://img.shields.io/badge/MySQL-InnoDB%20Cluster-4479A1?logo=mysql&logoColor=white)
-![Router](https://img.shields.io/badge/MySQL%20Router-%E8%AF%BB%E5%86%99%E8%B7%AF%E7%94%B1-0F6CBD)
-![HA](https://img.shields.io/badge/HA-HAProxy%20%2B%20Keepalived-106DA9)
-![Scaling](https://img.shields.io/badge/Scaling-%E6%89%A9%E5%AE%B9%20%2F%20%E7%BC%A9%E5%AE%B9-2E8B57)
-![Backup](https://img.shields.io/badge/Backup-%E5%8F%AF%E9%80%89%E9%80%BB%E8%BE%91%E5%A4%87%E4%BB%BD-8A2BE2)
-![Platforms](https://img.shields.io/badge/Platforms-Ubuntu%2022.04%20%7C%2024.04%20%7C%2025.10%20%2B%20RHEL%208%2F9%2F10-4C9A2A)
+[![Static Quality](https://img.shields.io/github/actions/workflow/status/seaworld008/auto-install-mysql-innodb-cluster/ansible-ci.yml?branch=main&label=static%20quality&logo=githubactions&logoColor=white)](https://github.com/seaworld008/auto-install-mysql-innodb-cluster/actions/workflows/ansible-ci.yml)
+[![Latest Release](https://img.shields.io/github/v/release/seaworld008/auto-install-mysql-innodb-cluster?label=release)](https://github.com/seaworld008/auto-install-mysql-innodb-cluster/releases)
+[![Stars](https://img.shields.io/github/stars/seaworld008/auto-install-mysql-innodb-cluster?style=flat&label=stars)](https://github.com/seaworld008/auto-install-mysql-innodb-cluster/stargazers)
+[![Forks](https://img.shields.io/github/forks/seaworld008/auto-install-mysql-innodb-cluster?style=flat&label=forks)](https://github.com/seaworld008/auto-install-mysql-innodb-cluster/forks)
+[![Issues](https://img.shields.io/github/issues/seaworld008/auto-install-mysql-innodb-cluster?label=issues)](https://github.com/seaworld008/auto-install-mysql-innodb-cluster/issues)
+[![Pull Requests](https://img.shields.io/github/issues-pr/seaworld008/auto-install-mysql-innodb-cluster?label=pull%20requests)](https://github.com/seaworld008/auto-install-mysql-innodb-cluster/pulls)
+[![Last Commit](https://img.shields.io/github/last-commit/seaworld008/auto-install-mysql-innodb-cluster?label=last%20commit)](https://github.com/seaworld008/auto-install-mysql-innodb-cluster/commits/main)
+[![License](https://img.shields.io/github/license/seaworld008/auto-install-mysql-innodb-cluster?label=license)](LICENSE)
 
-一套面向生产环境的 MySQL InnoDB Cluster 自动化部署与运维方案：基于 Ansible 集成 MySQL Router、HAProxy、Keepalived、扩缩容流程与可选逻辑备份，默认针对 **8核32G MySQL + 4核8G Router** 场景优化。
+面向运维和平台团队的 MySQL InnoDB Cluster 自动化部署与运维方案，基于 Ansible 编排 MySQL Server、MySQL Router、HAProxy、Keepalived、扩缩容、滚动配置应用和可选备份流程。
 
-当前主线：
-- 默认以 **MySQL 8.4 LTS** 为主
-- 同时兼容 **MySQL 8.0.x**
-- 备份模式可按版本选择逻辑备份或 XtraBackup 物理备份
-- 支持 **单端口自动读写分离**，提供更简洁的应用接入模型
+> 当前仓库以中文文档为主，适合需要快速落地 MySQL 高可用自动化主线的中文 DevOps、DBA、SRE 和后端团队。英文摘要见文末。
 
-## ✨ 一句话介绍
+## 快速导航
 
-如果你想从零搭一套 **可维护、可扩展、可继续自动化演进** 的 MySQL 高可用主线，而不是只拼出一套一次性脚本，这个仓库就是为此准备的。
+- [Quick Start](#quick-start)
+- [部署指南](DEPLOYMENT_COMPLETE_GUIDE.md)
+- [部署前检查清单](PRE_DEPLOYMENT_CHECKLIST.md)
+- [备份与恢复指南](docs/BACKUP_AND_RESTORE_GUIDE.md)
+- [高可用部署蓝图](docs/DEPLOYMENT_HA_BLUEPRINT_ZH.md)
+- [故障排查](TROUBLESHOOTING.md)
+- [Release](https://github.com/seaworld008/auto-install-mysql-innodb-cluster/releases)
+- [Issues](https://github.com/seaworld008/auto-install-mysql-innodb-cluster/issues)
 
-## 👥 适合谁用
+## 项目定位
 
-- 想用 Ansible 自动化部署 MySQL InnoDB Cluster 的团队
-- 需要 MySQL Router + HAProxy + Keepalived 组成稳定接入层的团队
-- 需要后续持续支持扩容、缩容、配置升级、可选备份的团队
-- 希望把仓库维护成“长期可演进生产主线”的个人或组织
+这个项目不是单次执行的安装脚本集合，而是一条可持续维护的 MySQL InnoDB Cluster 自动化主线。它把数据库层、路由层和入口层的常见部署动作收敛到同一套 Ansible inventory、group vars、playbooks 和入口脚本中，方便团队在后续扩容、缩容、配置变更和备份时继续复用。
 
-## 🧭 你会得到什么
+核心目标：
 
-- 一条统一的生产主线，而不是多套脚本并存
-- 单一主配置模型，便于长期维护和 AI / 人协作
-- 覆盖部署、扩容、缩容、滚动配置应用、可选逻辑 / 物理备份的自动化能力
-- 可直接接入 GitHub Actions 的静态质量验证
+- 用 Ansible 自动化部署 MySQL InnoDB Cluster。
+- 通过 MySQL Router、HAProxy 和 Keepalived 提供分层接入能力。
+- 支持显式读写端口、显式只读端口和单端口自动读写分离入口。
+- 将扩容、缩容、滚动配置应用、内核优化和可选备份纳入统一入口。
+- 让仓库成为可审计、可协作、可继续演进的运维资产。
 
-## 🎯 项目特色
+## 适合场景
 
-- ✅ **基于行业最佳实践** - Oracle MySQL、Percona、MariaDB官方推荐
-- ✅ **智能连接管理** - 前端60K连接，后端7.5K连接，保守复用比设计
-- ✅ **生产安全余量** - 默认 2500 连接/MySQL 节点，预留 2-4GB 峰值缓冲
-- ✅ **生产级高可用** - 自动故障转移，99.9%+可用性
-- ✅ **自动读写分离** - 新增单端口接入模型，兼容现有显式 RW / RO 模型
-- ✅ **稳定内核优化** - 动态参数调整，保守且通用的企业级配置
-- ✅ **一键部署** - Ansible自动化，企业级运维体验
+- 从零部署 3 节点 MySQL InnoDB Cluster。
+- 为 MySQL Cluster 增加独立 MySQL Router 层。
+- 通过 HAProxy + Keepalived 提供统一 VIP 入口。
+- 将 MySQL 运维操作标准化为 Ansible playbook。
+- 在测试、预生产或生产候选环境中验证 MySQL 8.0 / 8.4 高可用拓扑。
+- 作为企业内部数据库自动化方案的起点进行二次定制。
 
-## 📊 默认配置概览
+不建议直接用于以下情况：
 
-| 组件 | 规格 | 连接数 | 内存使用 | 优化策略 |
-|------|------|--------|----------|----------|
-| **MySQL集群** | 3×8核32G | 2500/节点 | 保留安全余量 | ✅ 生产默认 |
-| **Router集群** | 2×4核8G | 30000/台 | 6GB/台 | ✅ 高效路由 |
-| **内核优化** | 全服务器 | 动态调整 | 平衡配置 | ✅ **行业最佳实践** |
-| **总体能力** | 5台服务器 | 60K前端+7.5K后端 | - | ✅ 企业级 |
+- 没有测试环境验证，直接对现网数据库执行首次部署。
+- 未替换默认占位密码和示例 IP。
+- 需要一键恢复覆盖现网数据的场景。本仓库提供备份自动化和恢复 runbook，恢复仍建议人工确认后执行。
+- 需要已经验证的性能承诺或 SLA。本仓库提供自动化配置与静态校验，不替代真实压测、故障演练和容量评估。
 
-## 🔀 自动读写分离
+## 核心能力
 
-当前仓库已经支持 **单端口自动读写分离**，同时保留传统的强制读写 / 强制只读入口：
+| 能力 | 当前支持情况 | 入口 |
+| --- | --- | --- |
+| MySQL Server 安装 | 支持 | `playbooks/install-mysql.yml` |
+| InnoDB Cluster 配置 | 支持 | `playbooks/configure-cluster.yml` |
+| MySQL Router 部署 | 支持 | `playbooks/install-router.yml` |
+| HAProxy 部署 | 支持 | `playbooks/install-haproxy.yml` |
+| Keepalived VIP | 支持 | `playbooks/install-keepalived.yml` |
+| 单端口自动读写分离 | 支持 | HAProxy `3309`，Router `6450` |
+| 显式读写 / 只读入口 | 支持 | HAProxy `3307/3308`，Router `6446/6447` |
+| MySQL 扩容 / 缩容 | 支持 | `--scale-mysql-add` / `--scale-mysql-remove` |
+| Router / HAProxy 缩容 | 支持 | `--shrink-router` / `--shrink-lb` |
+| 滚动应用配置 | 支持 | `--apply-config` |
+| 内核优化 | 支持 | `--kernel-optimize-only` |
+| 逻辑备份 | 支持，可选 | `backup_config.method: logical` |
+| XtraBackup 物理备份 | 支持，可选 | `backup_config.method: xtrabackup` |
+| 自动恢复 | 不做一键覆盖 | 参考 `docs/BACKUP_AND_RESTORE_GUIDE.md` |
 
-- **3309**：HAProxy VIP 自动读写分离，推荐给大部分应用默认接入
-- **3307**：HAProxy VIP 强制读写
-- **3308**：HAProxy VIP 强制只读
-- **6450**：Router 直连自动读写分离
-- **6446**：Router 直连强制读写
-- **6447**：Router 直连强制只读
+## 默认拓扑
 
-如果你的 Java 服务不希望拆成两套读写数据源，优先评估接入 **3309**。
+默认高可用基线由 `inventory/group_vars/all.yml` 和预检查 playbook 控制：
 
-### 端口矩阵
+| 层级 | 默认建议 | 说明 |
+| --- | --- | --- |
+| MySQL InnoDB Cluster | 3 节点 | `mysql_primary` + `mysql_secondary` |
+| MySQL Router | 2 节点起 | 推荐独立部署，降低与数据库层的故障耦合 |
+| HAProxy + Keepalived | 2 节点起 | 对应用提供统一 VIP / 四层入口 |
+| MySQL 版本线 | `8.4` 默认，兼容 `8.0` | 由 `mysql_release_line` 控制 |
+| 默认容量模型 | 8C32G MySQL + 4C8G Router | 作为仓库内置配置基线，不等同于压测结果 |
 
-| 端口 | 所在层 | 类型 | 说明 | 推荐对象 |
-|------|--------|------|------|----------|
-| `3309` | HAProxy VIP | 自动读写分离 | 单端口自动分流 | 大多数应用默认入口 |
-| `3307` | HAProxy VIP | 强制读写 | 始终走主节点 | DDL、批处理、强一致写入 |
-| `3308` | HAProxy VIP | 强制只读 | 始终走只读副本 | 报表、查询服务、只读任务 |
-| `6450` | Router 直连 | 自动读写分离 | 不经 HAProxy 的单端口自动分流 | 测试、绕过 VIP 的接入 |
-| `6446` | Router 直连 | 强制读写 | 不经 HAProxy 的主节点入口 | 运维直连、应急接入 |
-| `6447` | Router 直连 | 强制只读 | 不经 HAProxy 的只读入口 | 运维只读分析 |
-| `8404` | HAProxy | 监控 | Stats 页面 | 运维与巡检 |
+推荐链路：
 
-## 📣 分享文案
+```text
+Application
+  -> HAProxy VIP
+  -> MySQL Router cluster
+  -> MySQL InnoDB Cluster
+```
 
-### 中文短文案
+## 端口矩阵
 
-一套面向生产环境的 MySQL InnoDB Cluster 自动化部署与运维方案，基于 Ansible 集成 MySQL Router、HAProxy、Keepalived，支持扩缩容、滚动配置升级与可选逻辑 / 物理备份，适合作为长期维护的数据库高可用主线。
+| 端口 | 所在层 | 类型 | 说明 |
+| --- | --- | --- | --- |
+| `3309` | HAProxy VIP | 自动读写分离 | 推荐给大多数应用评估的默认入口 |
+| `3307` | HAProxy VIP | 强制读写 | DDL、批处理、强一致写入 |
+| `3308` | HAProxy VIP | 强制只读 | 报表、查询服务、只读任务 |
+| `6450` | MySQL Router | 自动读写分离 | 绕过 HAProxy 直连 Router 时使用 |
+| `6446` | MySQL Router | 强制读写 | 运维直连或应急接入 |
+| `6447` | MySQL Router | 强制只读 | 只读分析或排查 |
+| `8404` | HAProxy | 监控 | HAProxy stats 页面 |
 
-### English Blurb
+## Quick Start
 
-Production-oriented automation for MySQL InnoDB Cluster using Ansible, integrated with MySQL Router, HAProxy, Keepalived, scaling workflows, rolling configuration updates, and optional logical backups.
-
-## 🚀 快速开始
-
-### 1. 完整部署（推荐）
+### 1. 克隆仓库
 
 ```bash
-# 克隆项目
-git clone <this-repo>
+git clone https://github.com/seaworld008/auto-install-mysql-innodb-cluster.git
 cd auto-install-mysql-innodb-cluster
+```
 
-# 配置服务器信息
+### 2. 安装本地依赖
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+ansible-galaxy collection install -r collections/requirements.yml
+```
+
+### 3. 修改 inventory 和主配置
+
+```bash
 vim inventory/hosts-with-dedicated-routers.yml
-
-# 使用稳定的行业最佳实践配置
-./scripts/deploy_dedicated_routers.sh --production-ready
+vim inventory/group_vars/all.yml
 ```
 
-### 2. 分步部署（更安全）
+也可以使用 HA inventory 向导生成推荐拓扑：
 
 ```bash
-# 第一步：对多台服务器批量应用行业最佳实践内核优化（推荐）
-ansible-playbook -i inventory/hosts-with-dedicated-routers.yml playbooks/kernel-optimization-stable.yml
-
-# 第二步：部署MySQL集群
-./scripts/deploy_dedicated_routers.sh --mysql-only -i inventory/hosts-with-dedicated-routers.yml
-
-# 第三步：批量验证关键内核参数
-ansible mysql_cluster:mysql_router:haproxy_lb -i inventory/hosts-with-dedicated-routers.yml -m shell -a "sysctl net.core.somaxconn vm.swappiness fs.file-max"
+./scripts/setup-servers.sh inventory/hosts-with-dedicated-routers.yml
 ```
 
-补充说明：
-- 多台服务器场景下，优先使用 Ansible playbook 批量执行内核优化。
-- `./scripts/optimize_mysql_kernel_stable.sh` 更适合单机手动优化、单机排查或临时验证。
-- 如需通过主入口脚本单独执行内核优化，可使用 `./scripts/deploy_dedicated_routers.sh --kernel-optimize-only -i inventory/hosts-with-dedicated-routers.yml`
+至少需要确认：
 
-### 3. 配置管理
+- `ansible_host`、`ansible_user`、`ansible_ssh_pass` 或 SSH key 配置。
+- `mysql_root_password`、`mysql_cluster_password`、`mysql_replication_password` 已替换为真实值。
+- `keepalived_vip` 是当前内网可用且未被占用的 VIP。
+- `mysql_release_line` 符合目标版本线，当前支持 `8.0` 和 `8.4`。
+- 目标主机数量满足 `mysql_ha_min_nodes`、`router_ha_min_nodes`、`haproxy_ha_min_nodes`。
 
-```bash
-# 查看当前配置
-./scripts/config_manager.sh --current
+更安全的生产方式是使用 Ansible Vault 或外部 Secret 管理真实密码。示例见 `examples/production-inventory.yml` 和 `examples/vault-secrets.yml`。
 
-# 列出所有可用配置
-./scripts/config_manager.sh --list
-
-# 切换配置（如果需要）
-./scripts/config_manager.sh --switch 8c32g-optimized
-```
-
-说明:
-- `inventory/group_vars/all.yml` 是当前唯一生效的主配置文件。
-- `config_manager.sh` 现在只切换 `mysql_hardware_profile`，不再整文件覆盖主配置。
-- `all-8c32g-optimized.yml`、`all-original-10k-config.yml` 保留为历史快照参考，不是运行时真相源。
-
-
-## 🧱 高可用拓扑（Router + HAProxy）
-
-当前仓库已支持并默认按最小高可用拓扑检查：
-
-- MySQL: 3 节点
-- MySQL Router: 2 节点（可扩至3）
-- HAProxy: 2 节点（可扩至3）
-
-接入层当前支持三类入口：
-
-- 强制读写入口
-- 强制只读入口
-- 自动读写分离单端口入口
-
-推荐参考清单：
-- 参考Inventory：`inventory/hosts-ha-reference.yml`
-- 部署蓝图（中文）：`docs/DEPLOYMENT_HA_BLUEPRINT_ZH.md`
-- 一键HA部署脚本：`scripts/deploy-ha-stack.sh`
-
-- VIP高可用（Keepalived）: `playbooks/install-keepalived.yml`
-- Router扩容脚本: `scripts/scale-router.sh`
-- HAProxy扩容脚本: `scripts/scale-haproxy.sh`
-- 一键健康检查: `scripts/health-check-ha.sh`
-- 发布清单: `docs/RELEASE_CHECKLIST_ZH.md`
-
-快速执行：
-
-```bash
-./scripts/deploy-ha-stack.sh inventory/hosts-ha-reference.yml
-```
-
-## 📋 硬件要求
-
-### MySQL 服务器 (3台)
-- **CPU**: 8核
-- **内存**: 32GB
-- **存储**: SSD推荐
-- **网络**: 千兆内网
-- **系统**: Ubuntu 22.04 / 24.04 / 25.10，或 RHEL/Rocky/Alma 8/9/10
-
-### MySQL Router 服务器 (2台)  
-- **CPU**: 4核
-- **内存**: 8GB
-- **存储**: 100GB
-- **网络**: 千兆内网
-- **系统**: Ubuntu 22.04 / 24.04 / 25.10，或 RHEL/Rocky/Alma 8/9/10
-
-## 🔧 配置选项
-
-### 可用配置文件
-
-| 配置名称 | 适用硬件 | MySQL连接 | 说明 |
-|----------|----------|-----------|------|
-| **8c32g-optimized** | **8C32G+4C8G** | **2500/节点** | **默认推荐配置（生产余量版）** |
-| original-10k | 32C64G+4C8G | 10000/节点 | 高内存需求配置 |
-
-### 配置切换
-
-```bash
-# 当前是8C32G配置，如需切换到历史高连接配置
-./scripts/config_manager.sh --switch original-10k
-
-# 备份当前配置
-./scripts/config_manager.sh --backup
-
-# 验证配置
-./scripts/config_manager.sh --validate
-```
-
-## ⚡ 内核优化说明 - 行业最佳实践
-
-### 🏭 为什么采用行业最佳实践？
-
-我们的内核优化基于以下权威来源，确保**稳定性和通用性**：
-
-✅ **Oracle MySQL 8.0 官方性能调优指南**  
-✅ **Percona MySQL 性能最佳实践**  
-✅ **MariaDB 企业级部署手册**  
-✅ **AWS RDS / 阿里云 / 腾讯云生产环境验证**
-
-### 🔧 智能动态参数调整
-
-与传统一刀切配置不同，我们根据系统规格动态调整：
-
-#### 你的8核32G系统（中等内存）
-```bash
-# 平衡参数，兼顾性能和稳定性
-连接队列: 16384 (而非过度的65535)
-文件描述符: 131072 (13万，充足但不浪费内存)
-共享内存: 20GB (60%内存，安全范围)
-TCP缓冲区: 4MB (平衡性能和内存使用)
-```
-
-#### 小内存系统 (≤8GB)
-```bash
-# 保守参数，确保稳定性
-连接队列: 8192
-文件描述符: 65536
-共享内存: 50%内存
-```
-
-#### 大内存系统 (>32GB)
-```bash
-# 高性能参数，充分利用资源
-连接队列: 32768
-文件描述符: 262144
-共享内存: 75%内存（上限64GB）
-```
-
-### 📈 关键优化项目
-
-#### 🌐 网络参数优化 - 稳定且保守
-- **连接队列**: 基于内存大小动态调整 (8K-32K)
-- **文件描述符**: 根据系统规格智能设置
-- **TCP优化**: BBR算法优先，回退cubic
-- **缓冲区**: 4MB平衡配置 (避免16MB内存浪费)
-
-#### 💾 内存管理优化 - 用户定制优化
-- **交换控制**: swappiness=0 (完全关闭swap - 用户要求)
-- **Swap状态**: 完全禁用，永不使用swap分区
-- **脏页控制**: 10%比例 (Percona验证的稳定值)
-- **透明大页**: 禁用 (MySQL官方要求)
-- **内存保护**: 保守模式 (避免OOM风险)
-
-#### 💽 I/O调度优化 - 现代最佳实践
-- **SSD**: mq-deadline调度器 (现代内核推荐)
-- **HDD**: mq-deadline/deadline调度器
-- **队列深度**: SSD(128), HDD(64) (平衡性能)
-
-### 🛡️ 稳定性保证
-
-| 对比项 | 激进配置 | **行业最佳实践** |
-|--------|----------|------------------|
-| OOM风险 | ⚠️ 中等 | ✅ 低 |
-| 内存效率 | ⚠️ 浪费较多 | ✅ 优化合理 |
-| 兼容性 | ⚠️ 部分系统问题 | ✅ 广泛兼容 |
-| 长期稳定性 | ⚠️ 需要监控 | ✅ 生产就绪 |
-| 维护成本 | ⚠️ 高 | ✅ 低 |
-
-### 手动内核优化
-
-```bash
-# 使用稳定的行业最佳实践脚本
-sudo ./scripts/optimize_mysql_kernel_stable.sh
-
-# 检查系统环境和推荐配置
-sudo ./scripts/optimize_mysql_kernel_stable.sh --check-only
-
-# 验证优化效果
-sudo ./scripts/optimize_mysql_kernel_stable.sh --verify-only
-
-# 或使用Ansible批量优化
-ansible-playbook -i inventory/hosts-with-dedicated-routers.yml playbooks/kernel-optimization-stable.yml
-```
-
-## 📈 性能指标
-
-### 连接能力
-
-```
-前端连接: 60000 (2台Router × 30000)
-后端连接: 7500 (3台MySQL × 2500)
-连接复用: 8:1 左右（保守后端容量设计）
-响应时间: <10ms (内网环境)
-吞吐量: 100K-150K QPS (读多写少场景)
-```
-
-### 内核优化效果 - 基于行业最佳实践
-
-| 参数 | 系统默认 | **行业最佳实践** | 提升 |
-|------|----------|------------------|------|
-| **最大连接数** | 1024 | **32768** | **32倍** |
-| **连接队列** | 128 | **16384** | **128倍** |
-| **文件描述符** | 1024 | **131072** | **128倍** |
-| **连接建立时间** | 10-50ms | **1-5ms** | **90%+** |
-| **I/O延迟** | 5-20ms | **1-5ms** | **75%+** |
-| **查询稳定性** | 抖动较大 | **稳定** | **抖动减少80%** |
-| **内存使用效率** | 低 | **优化** | **节省50%+内存** |
-
-### 内存使用
-
-```
-MySQL单台内存分配:
-├── InnoDB Buffer Pool: 18GB
-├── 连接与会话内存: 4-6GB
-├── 系统与页缓存: 6GB+
-└── 安全余量: 2-4GB
-
-Router单台内存分配:
-├── 基础内存: 1.5GB
-├── 连接内存: 0.5GB (30000×16KB)  
-├── 缓存内存: 2GB
-├── 系统预留: 2GB (25%)
-└── 总计: 6GB/8GB (75%安全使用)
-```
-
-## 🏗️ 架构设计
-
-```
-应用程序层
-    ↓
-HAProxy VIP (192.168.1.100)
-    ↓
-Router集群 (192.168.1.20-21)
-    ↓
-MySQL集群 (192.168.1.10-12)
-```
-
-**优势:**
-- 单一连接入口，简化应用配置
-- 自动故障切换，秒级恢复
-- 读写分离，智能路由
-- 连接复用，降低数据库压力
-- 内核级优化，极致性能
-
-## 📚 文档目录
-
-- [🚀 **完整部署指南**](DEPLOYMENT_COMPLETE_GUIDE.md) **← 推荐首选**
-- [🤖 **AI维护说明**](docs/AI_MAINTAINER_GUIDE.md) **← 给 AI / 新接手同事**
-- [📂 **项目结构总览**](PROJECT_STRUCTURE.md) **← 文件组织**
-- [🔧 **Router完整部署**](docs/ROUTER_DEPLOYMENT_COMPLETE.md) **← Router专项**
-- [💾 **备份与恢复指南**](docs/BACKUP_AND_RESTORE_GUIDE.md) **← 备份 / 恢复主线**
-- [⚡ **内核优化最佳实践**](docs/MYSQL_KERNEL_BEST_PRACTICES.md) **← 稳定配置**
-- [🎯 **MySQL完整优化**](docs/MYSQL_OPTIMIZATION_COMPLETE.md) **← 性能调优**
-- [📊 **硬件容量分析**](docs/HARDWARE_CAPACITY_ANALYSIS.md)
-- [🔧 **服务器配置说明**](docs/SERVER_CONFIGURATION.md)
-- [🔧 **故障排除指南**](TROUBLESHOOTING.md)
-
-## 🛠️ 运维管理
-
-### 日常管理
-
-```bash
-# 查看集群状态
-./scripts/deploy_dedicated_routers.sh --status
-
-# 测试连接
-./scripts/deploy_dedicated_routers.sh --test-connection
-
-# 查看监控
-curl http://192.168.1.100:8404/stats
-
-# 验证内核优化状态（稳定版本）
-sudo ./scripts/optimize_mysql_kernel_stable.sh --verify-only
-```
-
-说明：
-- 走主入口脚本执行完整部署或单独部署时，默认会对对应目标节点执行内核优化。
-- 如需显式跳过，可在主入口脚本中使用 `--skip-kernel-optimization`。
-- 如果你直接手工运行底层 playbook，则不会自动附带内核优化，需要自行决定是否先执行 `playbooks/kernel-optimization-stable.yml`。
-
-### 扩容、缩容、配置升级与备份
-
-```bash
-# MySQL 扩容（目标主机需先加入 inventory）
-./scripts/deploy_dedicated_routers.sh --scale-mysql-add --limit mysql-node4 -i inventory/hosts-with-dedicated-routers.yml
-
-# MySQL 缩容（缩容当前主节点时需指定新主节点）
-./scripts/deploy_dedicated_routers.sh --scale-mysql-remove --target mysql-node3 --new-primary mysql-node2 -i inventory/hosts-with-dedicated-routers.yml
-
-# Router / HAProxy 缩容（执行后请把目标主机从 inventory 中移除）
-./scripts/deploy_dedicated_routers.sh --shrink-router --limit mysql-router-2 -i inventory/hosts-with-dedicated-routers.yml
-./scripts/deploy_dedicated_routers.sh --shrink-lb --limit haproxy-2 -i inventory/hosts-with-dedicated-routers.yml
-
-# 按当前主配置滚动应用到现有节点
-./scripts/deploy_dedicated_routers.sh --apply-config -i inventory/hosts-with-dedicated-routers.yml
-
-# 仅执行内核优化
-./scripts/deploy_dedicated_routers.sh --kernel-optimize-only -i inventory/hosts-with-dedicated-routers.yml
-
-# 只安装 / 重配 Router（默认会对 mysql_router 目标组执行内核优化）
-./scripts/deploy_dedicated_routers.sh --install-routers -i inventory/hosts-with-dedicated-routers.yml
-
-# 只安装 / 重配 HAProxy + Keepalived（默认会对 haproxy_lb 目标组执行内核优化）
-./scripts/deploy_dedicated_routers.sh --configure-lb -i inventory/hosts-with-dedicated-routers.yml
-
-# 可选备份（默认关闭，需先在 all.yml 中启用 backup_config.enabled=true）
-./scripts/deploy_dedicated_routers.sh --backup -i inventory/hosts-with-dedicated-routers.yml
-```
-
-### 功能矩阵
-
-| 能力 | 主入口命令 | 默认会带内核优化 | 适用场景 |
-|------|------------|------------------|----------|
-| 完整部署 | `--production-ready` | 是 | 新环境一次性完整部署 |
-| 仅部署 MySQL Cluster | `--mysql-only` | 是 | 只落数据库高可用层 |
-| 仅部署 Router | `--install-routers` | 是 | 已有 MySQL Cluster，补接入层 |
-| 仅部署 HAProxy + Keepalived | `--configure-lb` | 是 | 已有 Router，补 VIP / 四层入口 |
-| 滚动应用当前配置 | `--apply-config` | 是 | 修改主配置后滚动应用 |
-| 仅执行内核优化 | `--kernel-optimize-only` | 是 | 批量内核调优，不执行安装部署 |
-| MySQL 扩容 | `--scale-mysql-add` | 是 | 新增 MySQL 节点加入集群 |
-| MySQL 缩容 | `--scale-mysql-remove` | 否 | 下线 MySQL 节点 |
-| Router 缩容 | `--shrink-router` | 否 | 下线 Router 节点 |
-| HAProxy / Keepalived 缩容 | `--shrink-lb` | 否 | 下线入口层节点 |
-| 可选备份 | `--backup` | 否 | 逻辑备份或 XtraBackup 物理备份 |
-| 仅前置检查 | `--check-prereq` | 否 | 变更前做拓扑和参数检查 |
-| 仅健康检查 | `--test-connection` / `--status` | 否 | 部署后验证 |
-
-补充说明：
-- 如需显式跳过内核优化，可追加 `--skip-kernel-optimization`
-- 如果直接手工运行底层 playbook，则不会自动附带内核优化
-- 默认推荐使用主入口脚本，而不是直接调用底层 playbook
-
-### 实用命令示例
-
-#### 1. 新环境完整部署
-
-```bash
-./scripts/deploy_dedicated_routers.sh --production-ready -i inventory/hosts-with-dedicated-routers.yml
-```
-
-#### 2. 只部署 MySQL 高可用集群
-
-```bash
-./scripts/deploy_dedicated_routers.sh --mysql-only -i inventory/hosts-with-dedicated-routers.yml
-```
-
-#### 3. 已有 MySQL Cluster，补部署 Router
-
-```bash
-./scripts/deploy_dedicated_routers.sh --install-routers -i inventory/hosts-with-dedicated-routers.yml
-```
-
-#### 4. 已有 Router，补部署 HAProxy + Keepalived
-
-```bash
-./scripts/deploy_dedicated_routers.sh --configure-lb -i inventory/hosts-with-dedicated-routers.yml
-```
-
-#### 5. 只做前置检查，不做部署
+### 4. 执行前置检查
 
 ```bash
 ./scripts/deploy_dedicated_routers.sh --check-prereq -i inventory/hosts-with-dedicated-routers.yml
 ```
 
-#### 6. 修改主配置后，滚动应用到现有节点
+### 5. 执行完整部署
 
 ```bash
-./scripts/deploy_dedicated_routers.sh --apply-config -i inventory/hosts-with-dedicated-routers.yml
+./scripts/deploy_dedicated_routers.sh --production-ready -i inventory/hosts-with-dedicated-routers.yml
 ```
 
-#### 7. 仅执行一次内核优化
-
-```bash
-./scripts/deploy_dedicated_routers.sh --kernel-optimize-only -i inventory/hosts-with-dedicated-routers.yml
-```
-
-#### 8. 扩容一个新的 MySQL 节点
-
-```bash
-./scripts/deploy_dedicated_routers.sh --scale-mysql-add --limit mysql-node4 -i inventory/hosts-with-dedicated-routers.yml
-```
-
-#### 9. 缩容一个 MySQL 节点
-
-```bash
-./scripts/deploy_dedicated_routers.sh --scale-mysql-remove --target mysql-node3 --new-primary mysql-node2 -i inventory/hosts-with-dedicated-routers.yml
-```
-
-#### 10. 执行一次逻辑备份
-
-```bash
-# 先在 inventory/group_vars/all.yml 中启用：
-# backup_config.enabled: true
-# backup_config.method: logical
-
-./scripts/deploy_dedicated_routers.sh --backup -i inventory/hosts-with-dedicated-routers.yml
-```
-
-#### 11. 执行一次 XtraBackup 物理备份
-
-```bash
-# 先在 inventory/group_vars/all.yml 中启用：
-# backup_config.enabled: true
-# backup_config.method: xtrabackup
-
-./scripts/deploy_dedicated_routers.sh --backup -i inventory/hosts-with-dedicated-routers.yml
-```
-
-#### 12. 只做健康检查
+### 6. 查看状态
 
 ```bash
 ./scripts/deploy_dedicated_routers.sh --status -i inventory/hosts-with-dedicated-routers.yml
 ```
 
-备份目标支持：
-- 本地目录
-- 挂载目录（NFS）
-- SSH + rsync 到远端目录
-
-备份模式支持：
-- `logical`：默认，使用 MySQL Shell Dump
-- `xtrabackup`：可选，使用 Percona XtraBackup 物理备份，适合大数据量场景
-
-版本兼容说明：
-- `MySQL 8.4` → `Percona XtraBackup 8.4`
-- `MySQL 8.0` → `Percona XtraBackup 8.0`
-- 默认主线使用 `MySQL 8.4 LTS`
-- 如需降低对写流量影响，建议将物理备份执行节点切到 `mysql_secondary`
-
-超时与长任务说明：
-- Router 当前显式设置的是连接建立与路由层超时，不会因为 SQL 执行时间长而主动中断正常长查询。
-- MySQL 当前默认 `wait_timeout/interactive_timeout` 已提升到更适合生产作业的范围，`net_read_timeout/net_write_timeout` 也按导入导出/迁移场景做了放宽。
-
-自动读写分离说明：
-- 新增了单端口自动读写分离能力，进一步完善仓库的高可用接入层能力。
-- 现有强制 RW / RO 端口仍然保留，便于运维、批处理、DDL、只读分析等场景使用。
-- 自动读写分离是新增能力，不会破坏现有服务对 `3307/3308` 和 `6446/6447` 的使用方式。
-
-### 内核优化管理
+## 常用操作
 
 ```bash
-# 查看当前内核参数
-sysctl -a | grep -E "net.core.somaxconn|vm.swappiness|fs.file-max"
+# 仅部署 MySQL Cluster
+./scripts/deploy_dedicated_routers.sh --mysql-only -i inventory/hosts-with-dedicated-routers.yml
 
-# 检查系统规格和推荐配置
-sudo ./scripts/optimize_mysql_kernel_stable.sh --check-only
+# 仅部署或重配 MySQL Router
+./scripts/deploy_dedicated_routers.sh --install-routers -i inventory/hosts-with-dedicated-routers.yml
 
-# 查看透明大页状态
-cat /sys/kernel/mm/transparent_hugepage/enabled
+# 仅部署或重配 HAProxy + Keepalived
+./scripts/deploy_dedicated_routers.sh --configure-lb -i inventory/hosts-with-dedicated-routers.yml
 
-# 查看磁盘调度器
-for disk in $(lsblk -dno NAME | grep -E '^(sd|nvme)'); do
-  echo "$disk: $(cat /sys/block/$disk/queue/scheduler)"
-done
-```
-
-### 配置迁移（如果之前使用了激进配置）
-
-```bash
-# 1. 备份当前配置
-sudo ./scripts/optimize_mysql_kernel_stable.sh --backup-only
-
-# 2. 检查系统状态
-sudo ./scripts/optimize_mysql_kernel_stable.sh --check-only
-
-# 3. 应用稳定配置
-sudo ./scripts/optimize_mysql_kernel_stable.sh --full-optimize
-
-# 4. 重启服务器
-sudo reboot
-
-# 5. 验证配置
-sudo ./scripts/optimize_mysql_kernel_stable.sh --verify-only
-```
-
-### 硬件升级
-
-当业务增长，需要升级到32核64G时：
-
-```bash
-# 切换到历史高连接配置
-./scripts/config_manager.sh --switch original-10k
-
-# 滚动应用新配置
+# 修改主配置后滚动应用
 ./scripts/deploy_dedicated_routers.sh --apply-config -i inventory/hosts-with-dedicated-routers.yml
 
-# 或使用统一升级脚本
-./scripts/upgrade_hardware_profile.sh --profile original-10k --apply
+# 仅执行内核优化
+./scripts/deploy_dedicated_routers.sh --kernel-optimize-only -i inventory/hosts-with-dedicated-routers.yml
+
+# MySQL 扩容，目标主机需先加入 inventory
+./scripts/deploy_dedicated_routers.sh --scale-mysql-add --limit mysql-node4 -i inventory/hosts-with-dedicated-routers.yml
+
+# MySQL 缩容，缩容当前主节点时建议指定新主节点
+./scripts/deploy_dedicated_routers.sh --scale-mysql-remove --target mysql-node3 --new-primary mysql-node2 -i inventory/hosts-with-dedicated-routers.yml
+
+# Router / HAProxy 缩容
+./scripts/deploy_dedicated_routers.sh --shrink-router --limit mysql-router-2 -i inventory/hosts-with-dedicated-routers.yml
+./scripts/deploy_dedicated_routers.sh --shrink-lb --limit haproxy-2 -i inventory/hosts-with-dedicated-routers.yml
+
+# 可选备份，需先启用 backup_config.enabled
+./scripts/deploy_dedicated_routers.sh --backup -i inventory/hosts-with-dedicated-routers.yml
 ```
 
-## 🎉 部署完成
+## 配置说明
 
-部署成功后，你将拥有:
+主要配置入口：
 
-✅ **企业级高可用MySQL集群**  
-✅ **专用Router集群，60K并发连接能力**  
-✅ **基于行业最佳实践的稳定内核优化**  
-✅ **智能负载均衡和故障转移**  
-✅ **生产级监控和运维工具**  
-✅ **灵活的配置管理方案**
+| 文件 | 用途 |
+| --- | --- |
+| `inventory/group_vars/all.yml` | 当前运行时主配置，仓库的单一真相源 |
+| `inventory/hosts-with-dedicated-routers.yml` | 推荐的独立 Router + HAProxy inventory 示例 |
+| `inventory/hosts-ha-reference.yml` | 高可用拓扑参考 inventory |
+| `collections/requirements.yml` | Ansible collections 依赖 |
+| `ansible.cfg` | Ansible 默认配置 |
 
-### 连接信息
+关键变量：
 
-- **HAProxy VIP（自动读写分离，推荐应用默认入口）**: `192.168.1.100:3309`
-- **HAProxy VIP（强制读写）**: `192.168.1.100:3307`
-- **HAProxy VIP（强制只读）**: `192.168.1.100:3308`
-- **直连 Router（强制读写）**: `router-ip:6446`
-- **直连 Router（强制只读）**: `router-ip:6447`
-- **直连 Router（自动读写分离）**: `router-ip:6450`
-- **监控页面**: http://192.168.1.100:8404/stats
-- **配置管理**: `./scripts/config_manager.sh --help`
-- **稳定内核优化**: `sudo ./scripts/optimize_mysql_kernel_stable.sh --help`
+| 变量 | 默认值 | 是否必改 | 说明 |
+| --- | --- | --- | --- |
+| `mysql_release_line` | `8.4` | 视情况 | 支持 `8.0` / `8.4` |
+| `mysql_root_password` | `CHANGE_ME_ROOT_PASSWORD` | 是 | root 初始密码 |
+| `mysql_cluster_password` | `CHANGE_ME_CLUSTER_PASSWORD` | 是 | cluster admin 密码 |
+| `mysql_replication_password` | `CHANGE_ME_REPLICATION_PASSWORD` | 是 | 复制用户密码 |
+| `mysql_hardware_profile` | `optimized_8c32g` | 视情况 | 选择内置容量配置 |
+| `keepalived_vip` | `192.168.1.100` | 是 | HAProxy 入口 VIP |
+| `backup_config.enabled` | `false` | 视情况 | 备份默认关闭 |
+| `backup_config.method` | `logical` | 视情况 | 支持 `logical` / `xtrabackup` |
 
-现在你的MySQL集群已经针对8核32G+4核8G硬件进行了完美优化，并且采用了**行业最佳实践的稳定内核配置**，具备最佳的高可用性、高性能和长期稳定性！🚀 
+## 项目结构
+
+```text
+.
+├── README.md
+├── QUICK_START.md
+├── DEPLOYMENT_COMPLETE_GUIDE.md
+├── PRE_DEPLOYMENT_CHECKLIST.md
+├── TROUBLESHOOTING.md
+├── ansible.cfg
+├── collections/
+│   └── requirements.yml
+├── docs/
+│   ├── BACKUP_AND_RESTORE_GUIDE.md
+│   ├── DEPLOYMENT_HA_BLUEPRINT_ZH.md
+│   ├── MYSQL_KERNEL_BEST_PRACTICES.md
+│   └── ...
+├── examples/
+├── inventory/
+│   ├── group_vars/all.yml
+│   └── hosts-*.yml
+├── playbooks/
+├── roles/
+├── scripts/
+│   ├── deploy_dedicated_routers.sh
+│   ├── config_manager.sh
+│   └── ...
+└── .github/workflows/ansible-ci.yml
+```
+
+更多说明见 [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)。
+
+## 技术栈
+
+- 自动化：Ansible、Ansible Collections。
+- 数据库：MySQL InnoDB Cluster，默认 MySQL 8.4 LTS，兼容 MySQL 8.0。
+- 路由层：MySQL Router。
+- 入口层：HAProxy、Keepalived。
+- 备份：MySQL Shell Dump、Percona XtraBackup。
+- 脚本：Bash、PowerShell 验证脚本。
+- CI：GitHub Actions，覆盖 Ansible syntax check、inventory 校验和静态守卫。
+
+## 本地检查
+
+```bash
+# Shell 语法检查
+bash -n deploy.sh validate_deployment.sh scripts/*.sh
+
+# Ansible 语法检查
+ansible-playbook -i inventory/hosts.yml playbooks/site.yml --syntax-check
+ansible-playbook -i inventory/hosts-ha-reference.yml playbooks/site.yml --syntax-check
+ansible-playbook -i inventory/hosts-with-dedicated-routers.yml playbooks/site.yml --syntax-check
+
+# Inventory 校验
+ansible-inventory -i inventory/hosts.yml --list >/tmp/inventory-hosts.json
+ansible-inventory -i inventory/hosts-ha-reference.yml --list >/tmp/inventory-ha.json
+ansible-inventory -i inventory/hosts-with-dedicated-routers.yml --list >/tmp/inventory-dedicated.json
+
+# Diff 空白检查
+git diff --check
+```
+
+## 文档
+
+- [Quick Start](QUICK_START.md)
+- [完整部署指南](DEPLOYMENT_COMPLETE_GUIDE.md)
+- [部署前检查清单](PRE_DEPLOYMENT_CHECKLIST.md)
+- [高可用部署蓝图](docs/DEPLOYMENT_HA_BLUEPRINT_ZH.md)
+- [备份与恢复指南](docs/BACKUP_AND_RESTORE_GUIDE.md)
+- [MySQL 内核优化最佳实践](docs/MYSQL_KERNEL_BEST_PRACTICES.md)
+- [MySQL 8.0 / 8.4 交叉验证](docs/MYSQL80_CLUSTER_CROSS_VALIDATION.md)
+- [AI 维护说明](docs/AI_MAINTAINER_GUIDE.md)
+- [故障排查](TROUBLESHOOTING.md)
+
+## 安全说明
+
+- 不要把真实 SSH 密码、MySQL 密码、Vault 密钥、云厂商密钥提交到仓库。
+- `inventory/group_vars/all.yml` 中的 `CHANGE_ME_*` 必须在部署前替换。
+- 建议生产环境使用 Ansible Vault、SSH key、CI/CD Secret 或专用 Secret Manager。
+- 公开披露安全问题前，请优先通过 GitHub Security Advisories 或维护者私下渠道报告。
+
+## Roadmap
+
+当前更适合按以下方向继续增强：
+
+- 增加可复用的 staging 验证记录和故障演练模板。
+- 增加架构图、部署截图或 CLI 运行截图。
+- 增加英文摘要页或英文 README，便于全球开发者检索。
+- 增加更细的变量参考表和配置示例。
+- 增加可选 Markdown lint / YAML lint。
+- 增加恢复流程的隔离环境演练记录。
+- 增加 GitHub Pages 或文档站点。
+
+## FAQ
+
+### 是否可以直接用于生产？
+
+仓库面向生产候选拓扑设计，但静态检查和 Ansible syntax check 不等于真实生产验证。建议先在测试或预生产环境完成部署、压测、故障转移、备份恢复演练，再进入生产。
+
+### 是否支持 Docker？
+
+当前主线是 Ansible 远程部署，不提供 Docker Compose 一键运行 MySQL Cluster。后续可以考虑增加用于学习和演示的容器化实验环境。
+
+### 默认密码可以直接用吗？
+
+不可以。默认值是 `CHANGE_ME_*` 占位符，预检查会阻止继续部署。请使用真实强密码，生产环境建议使用 Ansible Vault 或外部 Secret 管理。
+
+### 如何选择 MySQL 8.0 还是 8.4？
+
+默认 `mysql_release_line: "8.4"`。如果你的环境仍要求 MySQL 8.0，可以改为 `8.0`，并在测试环境验证安装源、Router、备份工具和应用兼容性。
+
+### 备份是否默认开启？
+
+默认关闭。启用前请修改 `backup_config.enabled: true`，并确认 `method`、`type`、目标目录和权限。
+
+### CI 能证明部署一定成功吗？
+
+不能。CI 当前用于静态质量门：Ansible 语法、inventory 解析和部分过时参数守卫。真实部署仍依赖目标主机、网络、系统版本、权限、MySQL 源和安全策略。
+
+## 贡献
+
+欢迎通过 Issue 和 Pull Request 参与改进。提交前请阅读 [CONTRIBUTING.md](CONTRIBUTING.md)，并尽量运行本地检查命令。
+
+如果这个项目对你有帮助，欢迎 Star 支持，也欢迎把真实问题、部署反馈和改进建议提交到 Issues。
+
+## License
+
+本仓库使用 [MIT License](LICENSE)。如你计划在商业或企业场景中复用，请在引入前自行确认许可证与组织合规要求。
+
+## English Summary
+
+`auto-install-mysql-innodb-cluster` is an Ansible-based automation project for deploying and operating MySQL InnoDB Cluster with MySQL Router, HAProxy, Keepalived, scaling workflows, rolling configuration updates, kernel tuning, and optional logical or physical backups. The documentation is currently Chinese-first, with MySQL 8.4 LTS as the default release line and MySQL 8.0 compatibility retained.

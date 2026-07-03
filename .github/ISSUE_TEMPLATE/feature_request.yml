@@ -1,0 +1,51 @@
+name: Feature request
+description: Suggest an improvement to deployment, operations, documentation, or CI.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case
+      description: What problem are you trying to solve?
+      placeholder: Describe the operational scenario, deployment topology, or documentation gap.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What would you like to change or add?
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Documentation
+        - Inventory or configuration
+        - Ansible playbooks
+        - Shell scripts
+        - Backup or restore
+        - Scaling or shrinking
+        - CI or validation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Are there existing commands, playbooks, or manual steps that partly solve this?
+  - type: textarea
+    id: risks
+    attributes:
+      label: Risks and compatibility
+      description: Could this affect existing deployments, variables, inventory structure, or operational safety?
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Add examples, references, or constraints. Please redact secrets.

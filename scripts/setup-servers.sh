@@ -1,79 +1,102 @@
 #!/bin/bash
 
-# MySQL InnoDB Cluster 服务器配置脚本
-# 用于配置3台不同IP和密码的服务器
+# MySQL InnoDB Cluster HA inventory 配置向导
+# 生成当前主线推荐的 3 MySQL + 2 Router + 2 HAProxy/Keepalived inventory。
 
-set -e
+set -euo pipefail
 
-echo "=========================================="
-echo "MySQL InnoDB Cluster 服务器配置向导"
-echo "=========================================="
-echo
-
-# 颜色定义
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-# 获取服务器信息
-echo -e "${BLUE}请输入3台服务器的信息:${NC}"
+DEFAULT_INVENTORY="inventory/hosts-with-dedicated-routers.yml"
+INVENTORY_FILE="${1:-$DEFAULT_INVENTORY}"
+BACKUP_FILE="${INVENTORY_FILE}.backup.$(date +%Y%m%d_%H%M%S)"
+
+prompt_host() {
+    local prefix="$1"
+    local label="$2"
+    local default_user="${3:-root}"
+
+    echo -e "${GREEN}=== ${label} ===${NC}"
+    read -r -p "请输入 ${label} 的 IP 地址: " "${prefix}_IP"
+    read -r -p "请输入 ${label} 的 SSH 用户名 [${default_user}]: " "${prefix}_USER"
+    local user_var="${prefix}_USER"
+    if [[ -z "${!user_var}" ]]; then
+        printf -v "$user_var" "%s" "$default_user"
+    fi
+    read -r -s -p "请输入 ${label} 的 SSH 密码: " "${prefix}_PASS"
+    echo
+    echo
+}
+
+confirm_not_empty() {
+    local var_name="$1"
+    local label="$2"
+    if [[ -z "${!var_name}" ]]; then
+        echo -e "${RED}错误: ${label} 不能为空${NC}" >&2
+        exit 1
+    fi
+}
+
+echo "=========================================="
+echo "MySQL InnoDB Cluster HA inventory 配置向导"
+echo "=========================================="
+echo
+echo -e "${YELLOW}当前主线最小 HA 拓扑:${NC}"
+echo "- MySQL: 3 节点"
+echo "- MySQL Router: 2 节点"
+echo "- HAProxy + Keepalived: 2 节点"
+echo
+echo "输出文件: ${INVENTORY_FILE}"
 echo
 
-# 服务器1 (主节点)
-echo -e "${GREEN}=== 服务器1 (MySQL主节点 + Router) ===${NC}"
-read -p "请输入服务器1的IP地址: " SERVER1_IP
-read -p "请输入服务器1的SSH用户名 [root]: " SERVER1_USER
-SERVER1_USER=${SERVER1_USER:-root}
-read -s -p "请输入服务器1的SSH密码: " SERVER1_PASS
+prompt_host MYSQL1 "MySQL 主节点"
+prompt_host MYSQL2 "MySQL 从节点 1"
+prompt_host MYSQL3 "MySQL 从节点 2"
+prompt_host ROUTER1 "MySQL Router 节点 1"
+prompt_host ROUTER2 "MySQL Router 节点 2"
+prompt_host HAPROXY1 "HAProxy/Keepalived 节点 1"
+prompt_host HAPROXY2 "HAProxy/Keepalived 节点 2"
+
+read -r -p "请输入 Keepalived VIP，例如 192.168.1.100: " KEEPALIVED_VIP
+confirm_not_empty KEEPALIVED_VIP "Keepalived VIP"
+
+for var in MYSQL1_IP MYSQL2_IP MYSQL3_IP ROUTER1_IP ROUTER2_IP HAPROXY1_IP HAPROXY2_IP; do
+    confirm_not_empty "$var" "$var"
+done
+
+echo -e "${YELLOW}请确认拓扑:${NC}"
+cat <<EOF
+MySQL:
+  - mysql-node1: ${MYSQL1_USER}@${MYSQL1_IP}
+  - mysql-node2: ${MYSQL2_USER}@${MYSQL2_IP}
+  - mysql-node3: ${MYSQL3_USER}@${MYSQL3_IP}
+Router:
+  - mysql-router-1: ${ROUTER1_USER}@${ROUTER1_IP}
+  - mysql-router-2: ${ROUTER2_USER}@${ROUTER2_IP}
+HAProxy/Keepalived:
+  - haproxy-1: ${HAPROXY1_USER}@${HAPROXY1_IP}
+  - haproxy-2: ${HAPROXY2_USER}@${HAPROXY2_IP}
+VIP:
+  - ${KEEPALIVED_VIP}
+EOF
 echo
 
-# 服务器2 (从节点)
-echo -e "${GREEN}=== 服务器2 (MySQL从节点) ===${NC}"
-read -p "请输入服务器2的IP地址: " SERVER2_IP
-read -p "请输入服务器2的SSH用户名 [root]: " SERVER2_USER
-SERVER2_USER=${SERVER2_USER:-root}
-read -s -p "请输入服务器2的SSH密码: " SERVER2_PASS
-echo
-
-# 服务器3 (从节点)
-echo -e "${GREEN}=== 服务器3 (MySQL从节点) ===${NC}"
-read -p "请输入服务器3的IP地址: " SERVER3_IP
-read -p "请输入服务器3的SSH用户名 [root]: " SERVER3_USER
-SERVER3_USER=${SERVER3_USER:-root}
-read -s -p "请输入服务器3的SSH密码: " SERVER3_PASS
-echo
-
-# 验证输入
-echo
-echo -e "${YELLOW}请确认服务器信息:${NC}"
-echo "服务器1 (主节点): ${SERVER1_USER}@${SERVER1_IP}"
-echo "服务器2 (从节点): ${SERVER2_USER}@${SERVER2_IP}"
-echo "服务器3 (从节点): ${SERVER3_USER}@${SERVER3_IP}"
-echo
-
-read -p "信息是否正确? (y/n): " CONFIRM
-if [[ $CONFIRM != "y" && $CONFIRM != "Y" ]]; then
-    echo -e "${RED}配置已取消${NC}"
+read -r -p "确认写入 inventory? (y/n): " CONFIRM
+if [[ "$CONFIRM" != "y" && "$CONFIRM" != "Y" ]]; then
+    echo -e "${YELLOW}已取消${NC}"
     exit 1
 fi
 
-# 生成inventory文件
-echo
-echo -e "${BLUE}正在生成inventory配置文件...${NC}"
-
-INVENTORY_FILE="inventory/hosts.yml"
-BACKUP_FILE="inventory/hosts.yml.backup.$(date +%Y%m%d_%H%M%S)"
-
-# 备份原文件
-if [ -f "$INVENTORY_FILE" ]; then
+if [[ -f "$INVENTORY_FILE" ]]; then
     cp "$INVENTORY_FILE" "$BACKUP_FILE"
-    echo -e "${YELLOW}原配置文件已备份为: $BACKUP_FILE${NC}"
+    echo -e "${YELLOW}原 inventory 已备份为: ${BACKUP_FILE}${NC}"
 fi
 
-# 生成新的inventory文件
-cat > "$INVENTORY_FILE" << EOF
+cat > "$INVENTORY_FILE" <<EOF
 all:
   children:
     mysql_cluster:
@@ -81,89 +104,98 @@ all:
         mysql_primary:
           hosts:
             mysql-node1:
-              ansible_host: ${SERVER1_IP}
-              ansible_user: ${SERVER1_USER}
-              ansible_ssh_pass: "${SERVER1_PASS}"
+              ansible_host: ${MYSQL1_IP}
+              ansible_port: 22
+              ansible_user: ${MYSQL1_USER}
+              ansible_ssh_pass: "${MYSQL1_PASS}"
               mysql_server_id: 1
               mysql_role: primary
         mysql_secondary:
           hosts:
             mysql-node2:
-              ansible_host: ${SERVER2_IP}
-              ansible_user: ${SERVER2_USER}
-              ansible_ssh_pass: "${SERVER2_PASS}"
+              ansible_host: ${MYSQL2_IP}
+              ansible_port: 22
+              ansible_user: ${MYSQL2_USER}
+              ansible_ssh_pass: "${MYSQL2_PASS}"
               mysql_server_id: 2
               mysql_role: secondary
             mysql-node3:
-              ansible_host: ${SERVER3_IP}
-              ansible_user: ${SERVER3_USER}
-              ansible_ssh_pass: "${SERVER3_PASS}"
+              ansible_host: ${MYSQL3_IP}
+              ansible_port: 22
+              ansible_user: ${MYSQL3_USER}
+              ansible_ssh_pass: "${MYSQL3_PASS}"
               mysql_server_id: 3
               mysql_role: secondary
+
     mysql_router:
       hosts:
-        mysql-router1:
-          ansible_host: ${SERVER1_IP}
-          ansible_user: ${SERVER1_USER}
-          ansible_ssh_pass: "${SERVER1_PASS}"
+        mysql-router-1:
+          ansible_host: ${ROUTER1_IP}
+          ansible_port: 22
+          ansible_user: ${ROUTER1_USER}
+          ansible_ssh_pass: "${ROUTER1_PASS}"
+          router_role: "primary"
+          router_priority: 100
+          router_cpu_cores: 4
+          router_memory_gb: 8
+          router_disk_type: "SSD"
+        mysql-router-2:
+          ansible_host: ${ROUTER2_IP}
+          ansible_port: 22
+          ansible_user: ${ROUTER2_USER}
+          ansible_ssh_pass: "${ROUTER2_PASS}"
+          router_role: "secondary"
+          router_priority: 90
+          router_cpu_cores: 4
+          router_memory_gb: 8
+          router_disk_type: "SSD"
+
+    haproxy_lb:
+      hosts:
+        haproxy-1:
+          ansible_host: ${HAPROXY1_IP}
+          ansible_port: 22
+          ansible_user: ${HAPROXY1_USER}
+          ansible_ssh_pass: "${HAPROXY1_PASS}"
+          keepalived_priority: 150
+        haproxy-2:
+          ansible_host: ${HAPROXY2_IP}
+          ansible_port: 22
+          ansible_user: ${HAPROXY2_USER}
+          ansible_ssh_pass: "${HAPROXY2_PASS}"
+          keepalived_priority: 100
+
   vars:
-    # 全局SSH配置
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
     ansible_python_interpreter: /usr/bin/python3
-    ansible_host_key_checking: false
+    keepalived_vip: "${KEEPALIVED_VIP}"
 EOF
 
-echo -e "${GREEN}✓ inventory配置文件已生成: $INVENTORY_FILE${NC}"
-
-# 测试连接
+echo -e "${GREEN}inventory 已生成: ${INVENTORY_FILE}${NC}"
 echo
-echo -e "${BLUE}正在测试服务器连接...${NC}"
+echo -e "${YELLOW}下一步必须先配置 MySQL 密码:${NC}"
+echo "  vim inventory/group_vars/all.yml"
+echo
+echo "至少替换:"
+echo "  - mysql_root_password"
+echo "  - mysql_cluster_password"
+echo "  - mysql_replication_password"
+echo
 
-# 检查ansible是否安装
-if ! command -v ansible &> /dev/null; then
-    echo -e "${YELLOW}警告: 未检测到ansible，请先安装ansible${NC}"
-    echo "安装命令: pip3 install ansible"
-    echo
+if command -v ansible >/dev/null 2>&1; then
+    read -r -p "是否现在执行 ansible ping 连通性检查? (y/n): " RUN_PING
+    if [[ "$RUN_PING" == "y" || "$RUN_PING" == "Y" ]]; then
+        ansible all -i "$INVENTORY_FILE" -m ping
+    fi
 else
-    # 测试连接
-    echo "测试服务器1连接..."
-    if ansible mysql-node1 -m ping -o; then
-        echo -e "${GREEN}✓ 服务器1连接成功${NC}"
-    else
-        echo -e "${RED}✗ 服务器1连接失败${NC}"
-    fi
-
-    echo "测试服务器2连接..."
-    if ansible mysql-node2 -m ping -o; then
-        echo -e "${GREEN}✓ 服务器2连接成功${NC}"
-    else
-        echo -e "${RED}✗ 服务器2连接失败${NC}"
-    fi
-
-    echo "测试服务器3连接..."
-    if ansible mysql-node3 -m ping -o; then
-        echo -e "${GREEN}✓ 服务器3连接成功${NC}"
-    else
-        echo -e "${RED}✗ 服务器3连接失败${NC}"
-    fi
+    echo -e "${YELLOW}未检测到 ansible，跳过连通性检查。${NC}"
 fi
 
-echo
-echo -e "${GREEN}=========================================="
-echo "配置完成!"
-echo "=========================================="
-echo -e "${NC}"
-echo "下一步操作:"
-echo "1. 如果连接测试失败，请检查网络和SSH配置"
-echo "2. 连接成功后，运行部署脚本: ./deploy.sh"
-echo "3. 查看详细文档: docs/SERVER_CONFIGURATION.md"
-echo
-
-# 询问是否立即部署
-read -p "是否立即开始部署MySQL InnoDB Cluster? (y/n): " DEPLOY_NOW
-if [[ $DEPLOY_NOW == "y" || $DEPLOY_NOW == "Y" ]]; then
-    echo -e "${BLUE}开始部署...${NC}"
-    ./deploy.sh
+read -r -p "MySQL 密码已配置完成，并立即执行 preflight? (y/n): " RUN_PREFLIGHT
+if [[ "$RUN_PREFLIGHT" == "y" || "$RUN_PREFLIGHT" == "Y" ]]; then
+    ./scripts/deploy_dedicated_routers.sh --check-prereq -i "$INVENTORY_FILE"
 else
-    echo -e "${YELLOW}稍后可以运行 ./deploy.sh 开始部署${NC}"
-fi 
+    echo "稍后可运行:"
+    echo "  ./scripts/deploy_dedicated_routers.sh --check-prereq -i ${INVENTORY_FILE}"
+    echo "  ./scripts/deploy_dedicated_routers.sh --production-ready -i ${INVENTORY_FILE}"
+fi

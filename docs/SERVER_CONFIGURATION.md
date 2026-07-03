@@ -1,10 +1,48 @@
 # 服务器配置指南
 
-## 配置3台不同IP和密码的服务器
+本仓库当前推荐的生产候选拓扑是：
 
-### 1. 修改主机清单文件
+- MySQL InnoDB Cluster：3 节点
+- MySQL Router：2 节点
+- HAProxy + Keepalived：2 节点
 
-优先编辑 `inventory/hosts-with-dedicated-routers.yml` 或 `inventory/hosts-ha-reference.yml`，配置你的服务器信息：
+最小 HA 约束由 `playbooks/preflight-ha.yml` 执行。不要再使用旧的“三台服务器 + 单 Router”方式作为生产默认拓扑；这类拓扑会被当前预检查阻断或降级为测试用途。
+
+## 推荐方式：使用 HA inventory 向导
+
+```bash
+./scripts/setup-servers.sh inventory/hosts-with-dedicated-routers.yml
+```
+
+向导会收集：
+
+- 3 台 MySQL 节点
+- 2 台 MySQL Router 节点
+- 2 台 HAProxy / Keepalived 节点
+- 1 个 Keepalived VIP
+
+生成 inventory 后，还必须配置 MySQL 密码：
+
+```bash
+vim inventory/group_vars/all.yml
+```
+
+至少替换：
+
+- `mysql_root_password`
+- `mysql_cluster_password`
+- `mysql_replication_password`
+
+生产环境建议使用 Ansible Vault、SSH key、CI/CD Secret 或专用 Secret Manager，不建议把真实密码长期保存在明文 inventory 中。
+
+## 手动配置 inventory
+
+优先编辑：
+
+- `inventory/hosts-with-dedicated-routers.yml`
+- `inventory/hosts-ha-reference.yml`
+
+关键结构如下：
 
 ```yaml
 all:
@@ -14,139 +52,152 @@ all:
         mysql_primary:
           hosts:
             mysql-node1:
-              ansible_host: 你的第一台服务器IP    # 例如: 192.168.1.100
-              ansible_user: root                   # SSH用户名
-              ansible_ssh_pass: "你的第一台服务器密码"  # SSH密码
+              ansible_host: 192.168.1.10
+              ansible_port: 22
+              ansible_user: root
+              ansible_ssh_pass: "your_password_1"
               mysql_server_id: 1
               mysql_role: primary
         mysql_secondary:
           hosts:
             mysql-node2:
-              ansible_host: 你的第二台服务器IP    # 例如: 10.0.0.50
-              ansible_user: root                   # SSH用户名
-              ansible_ssh_pass: "你的第二台服务器密码"  # SSH密码
+              ansible_host: 192.168.1.11
+              ansible_port: 22
+              ansible_user: root
+              ansible_ssh_pass: "your_password_2"
               mysql_server_id: 2
               mysql_role: secondary
             mysql-node3:
-              ansible_host: 你的第三台服务器IP    # 例如: 172.16.0.200
-              ansible_user: root                   # SSH用户名
-              ansible_ssh_pass: "你的第三台服务器密码"  # SSH密码
+              ansible_host: 192.168.1.12
+              ansible_port: 22
+              ansible_user: root
+              ansible_ssh_pass: "your_password_3"
               mysql_server_id: 3
               mysql_role: secondary
+
     mysql_router:
       hosts:
-        mysql-router1:
-          ansible_host: 你的第一台服务器IP      # Router部署在第一台服务器
+        mysql-router-1:
+          ansible_host: 192.168.1.20
+          ansible_port: 22
           ansible_user: root
-          ansible_ssh_pass: "你的第一台服务器密码"
+          ansible_ssh_pass: "router_password_1"
+        mysql-router-2:
+          ansible_host: 192.168.1.21
+          ansible_port: 22
+          ansible_user: root
+          ansible_ssh_pass: "router_password_2"
+
+    haproxy_lb:
+      hosts:
+        haproxy-1:
+          ansible_host: 192.168.1.30
+          ansible_port: 22
+          ansible_user: root
+          ansible_ssh_pass: "haproxy_password_1"
+          keepalived_priority: 150
+        haproxy-2:
+          ansible_host: 192.168.1.31
+          ansible_port: 22
+          ansible_user: root
+          ansible_ssh_pass: "haproxy_password_2"
+          keepalived_priority: 100
+
   vars:
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
     ansible_python_interpreter: /usr/bin/python3
-    ansible_host_key_checking: false
+    keepalived_vip: "192.168.1.100"
 ```
 
-### 2. 配置示例
+## 使用 SSH key
 
-参考 `examples/hosts-with-passwords.yml` 文件中的示例配置：
-
-- **服务器1**: 192.168.1.100 (主节点 + Router)
-- **服务器2**: 10.0.0.50 (从节点)
-- **服务器3**: 172.16.0.200 (从节点)
-
-### 3. 安全注意事项
-
-#### 3.1 密码安全
-建议使用 Ansible Vault 加密密码：
-
-```bash
-# 创建加密的密码文件
-ansible-vault create inventory/vault.yml
-
-# 在vault.yml中添加密码变量
-vault_mysql_node1_password: "你的第一台服务器密码"
-vault_mysql_node2_password: "你的第二台服务器密码"
-vault_mysql_node3_password: "你的第三台服务器密码"
-```
-
-然后在hosts.yml中引用：
-```yaml
-ansible_ssh_pass: "{{ vault_mysql_node1_password }}"
-```
-
-#### 3.2 SSH密钥认证（推荐）
-如果可能，建议使用SSH密钥认证替代密码认证：
+如果可能，建议用 SSH key 替代明文 SSH 密码：
 
 ```yaml
 mysql-node1:
-  ansible_host: 192.168.1.100
+  ansible_host: 192.168.1.10
   ansible_user: root
-  ansible_ssh_private_key_file: ~/.ssh/server1_key
+  ansible_ssh_private_key_file: ~/.ssh/mysql_cluster_key
 ```
 
-### 4. 连接测试
+## 使用 Ansible Vault
 
-配置完成后，测试连接：
+创建 Vault 文件：
 
 ```bash
-# 测试所有服务器连接
-ansible all -m ping
-
-# 测试特定服务器
-ansible mysql-node1 -m ping
-ansible mysql-node2 -m ping
-ansible mysql-node3 -m ping
+ansible-vault create inventory/vault.yml
 ```
 
-### 5. 部署命令
+示例变量：
 
-连接测试成功后，开始部署：
-
-```bash
-# 使用统一主入口部署
-./scripts/deploy_dedicated_routers.sh --production-ready -i inventory/hosts-with-dedicated-routers.yml
-
-# 如果使用了Ansible Vault
-ansible-playbook -i inventory/hosts.yml playbooks/site.yml --ask-vault-pass
-```
-
-### 6. 常见问题
-
-#### 6.1 SSH连接失败
-- 检查IP地址是否正确
-- 确认SSH服务是否运行（端口22）
-- 验证用户名和密码是否正确
-- 检查防火墙设置
-
-#### 6.2 权限问题
-- 确保使用的用户有sudo权限
-- 如果不是root用户，添加become配置：
 ```yaml
-ansible_become: yes
-ansible_become_method: sudo
-ansible_become_pass: "sudo密码"
+vault_mysql_root_password: "替换为真实强密码"
+vault_mysql_cluster_password: "替换为真实强密码"
+vault_mysql_replication_password: "替换为真实强密码"
 ```
 
-#### 6.3 网络连通性
-- 确保3台服务器之间网络互通
-- 检查MySQL端口（3306, 33060, 33061）是否开放
-- 验证防火墙规则
+在 `inventory/group_vars/all.yml` 中引用：
 
-### 7. 服务器要求
+```yaml
+mysql_root_password: "{{ vault_mysql_root_password }}"
+mysql_cluster_password: "{{ vault_mysql_cluster_password }}"
+mysql_replication_password: "{{ vault_mysql_replication_password }}"
+```
 
-每台服务器需要满足：
-- **操作系统**: Ubuntu 22.04 / 24.04 / 25.10，或 RHEL/Rocky/Alma 8/9/10
-- **内存**: 最少2GB，推荐4GB+
-- **磁盘**: 最少20GB可用空间
-- **网络**: 服务器间网络互通
-- **架构**: 支持x86_64和ARM64
+执行时带上 Vault：
 
-### 8. 端口要求
+```bash
+ansible-playbook -i inventory/hosts-with-dedicated-routers.yml -e @inventory/vault.yml --ask-vault-pass playbooks/site.yml
+```
 
-确保以下端口在服务器间开放：
-- **3306**: MySQL服务端口
-- **33062**: MySQL X Protocol / 管理端口
-- **33061**: MySQL Group Replication端口
-- **6446**: MySQL Router读写端口
-- **6447**: MySQL Router只读端口
-- **3307**: HAProxy VIP 读写端口
-- **3308**: HAProxy VIP 只读端口
+## 连接测试
+
+```bash
+ansible all -i inventory/hosts-with-dedicated-routers.yml -m ping
+```
+
+## 前置检查与部署
+
+```bash
+./scripts/deploy_dedicated_routers.sh --check-prereq -i inventory/hosts-with-dedicated-routers.yml
+./scripts/deploy_dedicated_routers.sh --production-ready -i inventory/hosts-with-dedicated-routers.yml
+```
+
+## 常见问题
+
+### SSH 连接失败
+
+- 检查 IP、端口、用户名和认证方式。
+- 确认目标主机 SSH 服务运行。
+- 检查防火墙、堡垒机、VPN 或安全组。
+- 如果不是 root 用户，请配置 `ansible_become`。
+
+### Keepalived VIP 无法漂移
+
+- 确认 `keepalived_vip` 是未被占用的内网地址。
+- 确认 `keepalived_interface` 指向真实网卡。
+- 确认两台 HAProxy 节点处在同一可达二层或等价网络环境。
+
+### Preflight 提示密码未配置
+
+说明 `inventory/group_vars/all.yml` 仍然是 `CHANGE_ME_*` 占位符。请先替换真实密码，或通过 Ansible Vault 注入。
+
+## 端口要求
+
+- `3306`：MySQL 服务端口
+- `33062`：MySQL 管理端口
+- `33061`：MySQL Group Replication 端口
+- `6446`：MySQL Router 强制读写端口
+- `6447`：MySQL Router 强制只读端口
+- `6450`：MySQL Router 自动读写分离端口
+- `3307`：HAProxy VIP 强制读写端口
+- `3308`：HAProxy VIP 强制只读端口
+- `3309`：HAProxy VIP 自动读写分离端口
+- `8404`：HAProxy stats 端口
+
+## 系统要求
+
+- Ubuntu 22.04 / 24.04 / 25.10，或 RHEL/Rocky/Alma 8/9/10
+- 目标主机之间网络互通
+- 控制端已安装 Ansible 和所需 collections
+- 目标主机可使用 root 或具备 sudo 权限的用户执行自动化任务

@@ -9,6 +9,11 @@ CLUSTER_PASSWORD="${3:-${MYSQL_CLUSTER_PASSWORD:-CHANGE_ME_CLUSTER_PASSWORD}}"
 CLUSTER_NAME="${4:-${MYSQL_CLUSTER_NAME:-prodCluster}}"
 MEMBER_HOSTS="${MYSQL_CLUSTER_MEMBERS:-$PRIMARY_HOST,192.168.1.11,192.168.1.12}"
 
+if [[ "$CLUSTER_PASSWORD" == CHANGE_ME_* || -z "$CLUSTER_PASSWORD" ]]; then
+    echo "错误: 请通过第三个参数或 MYSQL_CLUSTER_PASSWORD 环境变量显式提供集群密码。" >&2
+    exit 1
+fi
+
 echo "=== MySQL InnoDB Cluster 状态检查 ==="
 echo "主节点: $PRIMARY_HOST"
 echo "集群名称: $CLUSTER_NAME"

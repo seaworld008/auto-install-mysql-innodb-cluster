@@ -7,6 +7,9 @@ cd auto-install-mysql-innodb-cluster
 # 1. 修改 inventory
 vim inventory/hosts-with-dedicated-routers.yml
 
+# 或使用 HA inventory 向导生成推荐拓扑
+./scripts/setup-servers.sh inventory/hosts-with-dedicated-routers.yml
+
 # 2. 检查主配置
 vim inventory/group_vars/all.yml
 

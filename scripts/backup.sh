@@ -2,4 +2,4 @@
 set -euo pipefail
 
 INV="${1:-inventory/hosts-ha-reference.yml}"
-ansible-playbook -i "$INV" playbooks/backup.yml
+exec ./scripts/deploy_dedicated_routers.sh --backup -i "$INV"

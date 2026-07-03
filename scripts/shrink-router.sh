@@ -9,4 +9,4 @@ if [[ -z "$LIMIT" ]]; then
     exit 1
 fi
 
-ansible-playbook -i "$INV" playbooks/shrink-router.yml --limit "$LIMIT"
+exec ./scripts/deploy_dedicated_routers.sh --shrink-router --limit "$LIMIT" -i "$INV"

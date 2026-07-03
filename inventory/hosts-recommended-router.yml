@@ -45,7 +45,7 @@ all:
           # 硬件配置 (可以是较小的服务器，如4核8G)
           router_cpu_cores: 4
           router_memory: "8GB"
-          
+
         mysql-router-2:
           ansible_host: 192.168.1.21               # 第五台服务器 (推荐)
           ansible_port: 22                          # 你的SSH端口
@@ -68,7 +68,7 @@ all:
           app_type: "web_frontend"
           # 如果选择应用侧部署，在这里也部署Router
           deploy_local_router: false                 # 设为true启用应用侧Router
-          
+
         app-server-2:
           ansible_host: 192.168.1.31               # 应用服务器2
           ansible_port: 22
@@ -76,7 +76,7 @@ all:
           ansible_ssh_pass: "app_password_2"
           app_type: "api_backend"
           deploy_local_router: false
-          
+
         app-server-3:
           ansible_host: 192.168.1.32               # 应用服务器3
           ansible_port: 22

@@ -10,9 +10,9 @@ if [[ -z "$TARGET" ]]; then
     exit 1
 fi
 
-EXTRA_VARS=("mysql_shrink_target=$TARGET")
+ARGS=(--scale-mysql-remove --target "$TARGET" -i "$INV")
 if [[ -n "$NEW_PRIMARY" ]]; then
-    EXTRA_VARS+=("mysql_shrink_new_primary=$NEW_PRIMARY")
+    ARGS+=(--new-primary "$NEW_PRIMARY")
 fi
 
-ansible-playbook -i "$INV" playbooks/shrink-mysql.yml --extra-vars "${EXTRA_VARS[*]}"
+exec ./scripts/deploy_dedicated_routers.sh "${ARGS[@]}"

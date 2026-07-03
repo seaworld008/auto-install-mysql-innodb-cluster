@@ -22,6 +22,27 @@ log_warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 log_step() { echo -e "${PURPLE}[STEP]${NC} $1"; }
 
+detect_python() {
+    if [[ -n "${PYTHON_BIN:-}" ]]; then
+        if command -v "$PYTHON_BIN" >/dev/null 2>&1; then
+            command -v "$PYTHON_BIN"
+            return 0
+        fi
+        log_error "PYTHON_BIN 指向的命令不可用: $PYTHON_BIN"
+        exit 1
+    fi
+    if command -v python3 >/dev/null 2>&1; then
+        command -v python3
+        return 0
+    fi
+    if command -v python >/dev/null 2>&1; then
+        command -v python
+        return 0
+    fi
+    log_error "缺少依赖: python3 或 python"
+    exit 1
+}
+
 show_help() {
     cat << EOF
 MySQL InnoDB Cluster 生产部署入口
@@ -69,13 +90,14 @@ require_project_root() {
 }
 
 require_dependencies() {
-    local deps=(ansible ansible-playbook python)
+    local deps=(ansible ansible-playbook ansible-inventory)
     for dep in "${deps[@]}"; do
         if ! command -v "$dep" >/dev/null 2>&1; then
             log_error "缺少依赖: $dep"
             exit 1
         fi
     done
+    detect_python >/dev/null
 
     if [[ ! -f "$INVENTORY" ]]; then
         log_error "inventory 文件不存在: $INVENTORY"
@@ -85,22 +107,24 @@ require_dependencies() {
 
 read_var_from_inventory() {
     local var_name="$1"
+    local python_bin
+    python_bin="$(detect_python)"
     if command -v ansible-inventory >/dev/null 2>&1; then
-        ansible-inventory -i "$INVENTORY" --list 2>/dev/null | python - "$var_name" << 'PY'
+        ansible-inventory -i "$INVENTORY" --list 2>/dev/null | "$python_bin" -c '
 import sys, json
 var_name = sys.argv[1]
 data = json.load(sys.stdin)
 value = data.get("all", {}).get("vars", {}).get(var_name, "")
 print(value if value is not None else "")
-PY
+' "$var_name"
     else
-        python - "$var_name" << 'PY'
+        "$python_bin" -c '
 import sys, yaml, pathlib
 var_name = sys.argv[1]
 data = yaml.safe_load(pathlib.Path("inventory/group_vars/all.yml").read_text(encoding="utf-8"))
 value = data.get(var_name, "")
 print(value if value is not None else "")
-PY
+' "$var_name"
     fi
 }
 
@@ -252,10 +276,18 @@ show_status() {
 }
 
 production_ready_deploy() {
-    check_prerequisites
-
-    log_step "执行全量部署"
-    ansible-playbook -i "$INVENTORY" playbooks/site.yml
+    if [[ "$SKIP_KERNEL_OPTIMIZATION" == "true" ]]; then
+        check_prerequisites
+        log_step "执行全量部署（跳过内核优化）"
+        ansible-playbook -i "$INVENTORY" playbooks/install-mysql.yml
+        ansible-playbook -i "$INVENTORY" playbooks/configure-cluster.yml
+        ansible-playbook -i "$INVENTORY" playbooks/install-router.yml
+        ansible-playbook -i "$INVENTORY" playbooks/install-haproxy.yml
+        ansible-playbook -i "$INVENTORY" playbooks/install-keepalived.yml
+    else
+        log_step "执行全量部署"
+        ansible-playbook -i "$INVENTORY" playbooks/site.yml
+    fi
 
     health_check
     show_connection_summary
@@ -331,16 +363,7 @@ main() {
 
     case "$action" in
         --production-ready)
-            if [[ "$SKIP_KERNEL_OPTIMIZATION" == "true" ]]; then
-                check_prerequisites
-                log_step "执行全量部署"
-                ansible-playbook -i "$INVENTORY" playbooks/site.yml --skip-tags kernel_optimization
-                health_check
-                show_connection_summary
-                log_success "生产部署流程执行完成"
-            else
             production_ready_deploy
-            fi
             ;;
         --mysql-only)
             check_prerequisites
@@ -376,7 +399,6 @@ main() {
             run_backup
             ;;
         --full-deploy)
-            apply_kernel_optimization "mysql_router:haproxy_lb"
             full_deploy
             ;;
         --check-prereq)
