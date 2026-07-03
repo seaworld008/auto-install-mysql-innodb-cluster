@@ -66,9 +66,16 @@
 ## 详细文档
 
 - 主说明：`README.md`
+- 英文入口：`README_EN.md`
 - 备份恢复：`docs/BACKUP_AND_RESTORE_GUIDE.md`
 - HA 蓝图：`docs/DEPLOYMENT_HA_BLUEPRINT_ZH.md`
+- 架构图与证据留存：`docs/ARCHITECTURE_AND_EVIDENCE.md`
+- 变量参考与配置示例：`docs/VARIABLE_REFERENCE.md`
 - 容量分析：`docs/HARDWARE_CAPACITY_ANALYSIS.md`
 - Router 说明：`docs/ROUTER_DEPLOYMENT_COMPLETE.md`
 - 交叉验证：`docs/MYSQL80_CLUSTER_CROSS_VALIDATION.md`
+- Staging 验证模板：`docs/templates/staging-validation-record.md`
+- 故障演练模板：`docs/templates/failover-drill-record.md`
+- 隔离恢复演练模板：`docs/templates/restore-drill-record.md`
+- 文档站点入口：`docs/index.md`
 - 发布清单：`docs/RELEASE_CHECKLIST_ZH.md`

@@ -1,0 +1,21 @@
+extends: default
+
+rules:
+  braces: disable
+  comments-indentation: disable
+  document-start: disable
+  empty-lines: disable
+  line-length: disable
+  new-line-at-end-of-file: disable
+  trailing-spaces: disable
+  truthy:
+    allowed-values:
+      - "true"
+      - "false"
+      - "yes"
+      - "no"
+      - "on"
+      - "off"
+ignore: |
+  .git/
+  .venv/

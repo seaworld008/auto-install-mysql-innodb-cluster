@@ -302,6 +302,10 @@ backup_config:
 3. 记录恢复耗时
 4. 形成恢复手册
 
+建议使用模板：
+
+- `docs/templates/restore-drill-record.md`
+
 ### 上线前建议
 
 至少做一次：

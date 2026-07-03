@@ -17,10 +17,14 @@
 ## 快速导航
 
 - [Quick Start](#quick-start)
+- [English Summary](README_EN.md)
 - [部署指南](DEPLOYMENT_COMPLETE_GUIDE.md)
 - [部署前检查清单](PRE_DEPLOYMENT_CHECKLIST.md)
 - [备份与恢复指南](docs/BACKUP_AND_RESTORE_GUIDE.md)
 - [高可用部署蓝图](docs/DEPLOYMENT_HA_BLUEPRINT_ZH.md)
+- [变量参考](docs/VARIABLE_REFERENCE.md)
+- [架构图与证据留存](docs/ARCHITECTURE_AND_EVIDENCE.md)
+- [文档站点入口](docs/index.md)
 - [故障排查](TROUBLESHOOTING.md)
 - [Release](https://github.com/seaworld008/auto-install-mysql-innodb-cluster/releases)
 - [Issues](https://github.com/seaworld008/auto-install-mysql-innodb-cluster/issues)
@@ -282,6 +286,11 @@ ansible-inventory -i inventory/hosts-with-dedicated-routers.yml --list >/tmp/inv
 
 # Diff 空白检查
 git diff --check
+
+# 可选文档质量检查（advisory）
+npx --yes markdownlint-cli2
+python -m pip install yamllint
+yamllint .
 ```
 
 ## 文档
@@ -290,11 +299,18 @@ git diff --check
 - [完整部署指南](DEPLOYMENT_COMPLETE_GUIDE.md)
 - [部署前检查清单](PRE_DEPLOYMENT_CHECKLIST.md)
 - [高可用部署蓝图](docs/DEPLOYMENT_HA_BLUEPRINT_ZH.md)
+- [架构图与证据留存指南](docs/ARCHITECTURE_AND_EVIDENCE.md)
+- [变量参考与配置示例](docs/VARIABLE_REFERENCE.md)
 - [备份与恢复指南](docs/BACKUP_AND_RESTORE_GUIDE.md)
+- [Staging 验证记录模板](docs/templates/staging-validation-record.md)
+- [故障演练记录模板](docs/templates/failover-drill-record.md)
+- [隔离环境恢复演练模板](docs/templates/restore-drill-record.md)
 - [MySQL 内核优化最佳实践](docs/MYSQL_KERNEL_BEST_PRACTICES.md)
 - [MySQL 8.0 / 8.4 交叉验证](docs/MYSQL80_CLUSTER_CROSS_VALIDATION.md)
+- [GitHub Pages 文档站点入口](docs/index.md)
 - [AI 维护说明](docs/AI_MAINTAINER_GUIDE.md)
 - [故障排查](TROUBLESHOOTING.md)
+- [English README](README_EN.md)
 
 ## 安全说明
 
@@ -305,15 +321,21 @@ git diff --check
 
 ## Roadmap
 
-当前更适合按以下方向继续增强：
+已完成的文档与协作增强：
 
-- 增加可复用的 staging 验证记录和故障演练模板。
-- 增加架构图、部署截图或 CLI 运行截图。
-- 增加英文摘要页或英文 README，便于全球开发者检索。
-- 增加更细的变量参考表和配置示例。
-- 增加可选 Markdown lint / YAML lint。
-- 增加恢复流程的隔离环境演练记录。
-- 增加 GitHub Pages 或文档站点。
+- 可复用的 staging 验证记录、故障演练和隔离恢复演练模板。
+- 架构图、端口视图、CLI 证据与截图留存规范。
+- 英文 README，便于全球开发者检索和初步评估。
+- 更细的变量参考表和配置示例。
+- 可选 Markdown lint / YAML lint advisory workflow。
+- GitHub Pages 文档站点入口与发布工作流。
+
+仍需要真实环境补充的内容：
+
+- 脱敏后的部署截图、HAProxy stats 截图和 CLI 运行截图。
+- staging 故障演练记录。
+- 隔离环境恢复演练记录。
+- 压测、容量评估和生产级观测数据。
 
 ## FAQ
 
@@ -354,3 +376,5 @@ git diff --check
 ## English Summary
 
 `auto-install-mysql-innodb-cluster` is an Ansible-based automation project for deploying and operating MySQL InnoDB Cluster with MySQL Router, HAProxy, Keepalived, scaling workflows, rolling configuration updates, kernel tuning, and optional logical or physical backups. The documentation is currently Chinese-first, with MySQL 8.4 LTS as the default release line and MySQL 8.0 compatibility retained.
+
+For a fuller English entrypoint, see [README_EN.md](README_EN.md).

@@ -35,6 +35,16 @@ ansible-playbook -i inventory/hosts-with-dedicated-routers.yml playbooks/site.ym
 git diff --check
 ```
 
+可选文档质量检查：
+
+```bash
+npx --yes markdownlint-cli2
+python -m pip install yamllint
+yamllint .
+```
+
+当前 Markdown / YAML lint 在 CI 中是 advisory，不作为部署正确性的证明。等现有文档完全按规则收敛后，可以再考虑提升为必过门禁。
+
 ## 分支命名建议
 
 - `docs/<topic>`
@@ -66,10 +76,12 @@ git diff --check
 变更类型不同，检查强度也不同：
 
 - 文档变更：`git diff --check`。
+- 文档质量变更：可选运行 `npx --yes markdownlint-cli2` 和 `yamllint .`。
 - Shell 变更：`bash -n deploy.sh validate_deployment.sh scripts/*.sh`。
 - Ansible 变更：至少运行主要 inventory 的 `--syntax-check`。
 - 配置或 playbook 行为变更：同步 README、部署指南、相关 runbook。
 - 备份、缩容、回滚类变更：请说明是否做过隔离环境验证。
+- HA、备份恢复和生产候选变更：优先使用 `docs/templates/` 下的记录模板沉淀证据。
 
 ## 安全
 

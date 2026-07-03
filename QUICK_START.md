@@ -35,4 +35,7 @@ vim inventory/group_vars/all.yml
 更多说明见：
 
 - `README.md`
+- `README_EN.md`
 - `DEPLOYMENT_COMPLETE_GUIDE.md`
+- `docs/VARIABLE_REFERENCE.md`
+- `docs/ARCHITECTURE_AND_EVIDENCE.md`
