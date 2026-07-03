@@ -7,6 +7,12 @@ This repository maintains a single production mainline for deploying and operati
 Keep this repo maintainable, production-oriented, and converged.
 Do not introduce parallel deployment flows, duplicate runtime configs, or "temporary" sidecar scripts that become permanent.
 
+## AI Agent Context
+
+Before making broad changes, read `AI_CONTEXT.md`.
+It gives AI agents a repository-wide map, supported workflows, validation commands, and maintenance boundaries.
+This file (`AGENTS.md`) remains the stricter rule set when the two documents overlap.
+
 ## Single Sources Of Truth
 
 - Runtime config: `inventory/group_vars/all.yml`

@@ -20,6 +20,7 @@
 - [English Summary](README_EN.md)
 - [部署指南](DEPLOYMENT_COMPLETE_GUIDE.md)
 - [部署前检查清单](PRE_DEPLOYMENT_CHECKLIST.md)
+- [AI Agent Context](AI_CONTEXT.md)
 - [备份与恢复指南](docs/runbooks/BACKUP_AND_RESTORE_GUIDE.md)
 - [高可用部署蓝图](docs/reference/DEPLOYMENT_HA_BLUEPRINT_ZH.md)
 - [变量参考](docs/reference/VARIABLE_REFERENCE.md)
@@ -303,6 +304,7 @@ yamllint .
 - [完整部署指南](DEPLOYMENT_COMPLETE_GUIDE.md)
 - [部署前检查清单](PRE_DEPLOYMENT_CHECKLIST.md)
 - [GitHub Pages 文档站点入口](docs/index.md)
+- [AI Agent Context](AI_CONTEXT.md)
 
 Runbook：
 

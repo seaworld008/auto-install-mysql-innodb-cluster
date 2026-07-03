@@ -15,6 +15,7 @@ title: MySQL InnoDB Cluster Automation Docs
 | 快速开始 | [QUICK_START](https://github.com/seaworld008/auto-install-mysql-innodb-cluster/blob/main/QUICK_START.md) |
 | 部署总览 | [DEPLOYMENT_COMPLETE_GUIDE](https://github.com/seaworld008/auto-install-mysql-innodb-cluster/blob/main/DEPLOYMENT_COMPLETE_GUIDE.md) |
 | 部署前检查 | [PRE_DEPLOYMENT_CHECKLIST](https://github.com/seaworld008/auto-install-mysql-innodb-cluster/blob/main/PRE_DEPLOYMENT_CHECKLIST.md) |
+| AI Agent Context | [AI_CONTEXT](https://github.com/seaworld008/auto-install-mysql-innodb-cluster/blob/main/AI_CONTEXT.md) |
 
 ## Runbooks
 

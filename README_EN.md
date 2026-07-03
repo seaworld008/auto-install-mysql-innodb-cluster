@@ -100,6 +100,7 @@ yamllint .
 - Quick start: `QUICK_START.md`
 - Deployment guide: `DEPLOYMENT_COMPLETE_GUIDE.md`
 - Pre-deployment checklist: `PRE_DEPLOYMENT_CHECKLIST.md`
+- AI agent context: `AI_CONTEXT.md`
 - Server configuration runbook: `docs/runbooks/SERVER_CONFIGURATION.md`
 - Troubleshooting runbook: `docs/runbooks/TROUBLESHOOTING.md`
 - HA blueprint: `docs/reference/DEPLOYMENT_HA_BLUEPRINT_ZH.md`
