@@ -5,25 +5,28 @@
 ```bash
 ansible-playbook -i inventory/hosts.yml playbooks/site.yml --syntax-check
 ansible-playbook -i inventory/hosts-ha-reference.yml playbooks/site.yml --syntax-check
+ansible-playbook -i inventory/hosts-with-dedicated-routers.yml playbooks/site.yml --syntax-check
+ansible-inventory -i inventory/hosts-with-dedicated-routers.yml --list >/tmp/inventory-dedicated.json
 ```
 
 ## 2. 高可用拓扑检查
 
 ```bash
-ANSIBLE_STDOUT_CALLBACK=default ansible-playbook -i inventory/hosts-ha-reference.yml playbooks/preflight-ha.yml
+ANSIBLE_STDOUT_CALLBACK=default ./scripts/deploy_dedicated_routers.sh --check-prereq -i inventory/hosts-with-dedicated-routers.yml
 ```
 
 ## 3. 入口层健康检查
 
 ```bash
-./scripts/health-check-ha.sh inventory/hosts-ha-reference.yml
+./scripts/health-check-ha.sh inventory/hosts-with-dedicated-routers.yml
 ```
 
-## 4. 扩容演练（可选）
+## 4. 入口层扩容或重配演练（可选）
 
 ```bash
-./scripts/scale-router.sh inventory/hosts-ha-reference.yml mysql_router
-./scripts/scale-haproxy.sh inventory/hosts-ha-reference.yml haproxy_lb
+# 先把新增 Router / HAProxy 主机加入 inventory，再通过主入口收敛配置
+./scripts/deploy_dedicated_routers.sh --install-routers -i inventory/hosts-with-dedicated-routers.yml
+./scripts/deploy_dedicated_routers.sh --configure-lb -i inventory/hosts-with-dedicated-routers.yml
 ```
 
 ## 5. 推送前确认

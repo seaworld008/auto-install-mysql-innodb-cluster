@@ -58,18 +58,20 @@
 
 ## 6. 一次部署建议流程
 
-1) 准备 inventory（推荐基于 `inventory/hosts-ha-reference.yml`）
+1) 准备 inventory（生产候选推荐基于 `inventory/hosts-with-dedicated-routers.yml`，差异说明见 `inventory/README.md`）
 
 2) 先做语法与拓扑预检查：
 
 ```bash
-ansible-playbook -i inventory/hosts-ha-reference.yml playbooks/preflight-ha.yml
+ansible-inventory -i inventory/hosts-with-dedicated-routers.yml --list >/tmp/inventory-dedicated.json
+ansible-playbook -i inventory/hosts-with-dedicated-routers.yml playbooks/site.yml --syntax-check
+./scripts/deploy_dedicated_routers.sh --check-prereq -i inventory/hosts-with-dedicated-routers.yml
 ```
 
 3) 执行全量部署：
 
 ```bash
-ansible-playbook -i inventory/hosts-ha-reference.yml playbooks/site.yml
+./scripts/deploy_dedicated_routers.sh --production-ready -i inventory/hosts-with-dedicated-routers.yml
 ```
 
 4) 交叉验证：
@@ -89,4 +91,3 @@ ansible-playbook -i inventory/hosts-ha-reference.yml playbooks/site.yml
 ansible-playbook -i inventory/hosts.yml playbooks/preflight-ha.yml \
   -e router_ha_required=false -e haproxy_ha_required=false
 ```
-

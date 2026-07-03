@@ -20,6 +20,7 @@
 - [English Summary](README_EN.md)
 - [部署指南](DEPLOYMENT_COMPLETE_GUIDE.md)
 - [部署前检查清单](PRE_DEPLOYMENT_CHECKLIST.md)
+- [操作员上手与变更指南](docs/runbooks/OPERATOR_GUIDE.md)
 - [AI Agent Context](AI_CONTEXT.md)
 - [备份与恢复指南](docs/runbooks/BACKUP_AND_RESTORE_GUIDE.md)
 - [高可用部署蓝图](docs/reference/DEPLOYMENT_HA_BLUEPRINT_ZH.md)
@@ -136,6 +137,8 @@ vim inventory/hosts-with-dedicated-routers.yml
 vim inventory/group_vars/all.yml
 ```
 
+不确定这些配置文件怎么选时，先看 [inventory 使用说明](inventory/README.md)。
+
 也可以使用 HA inventory 向导生成推荐拓扑：
 
 ```bash
@@ -154,6 +157,17 @@ vim inventory/group_vars/all.yml
 
 ### 4. 执行前置检查
 
+先做本地 dry-run 级别检查，不连接目标机器：
+
+```bash
+git diff --check
+bash -n deploy.sh validate_deployment.sh scripts/*.sh
+ansible-inventory -i inventory/hosts-with-dedicated-routers.yml --list >/tmp/inventory-dedicated.json
+ansible-playbook -i inventory/hosts-with-dedicated-routers.yml playbooks/site.yml --syntax-check
+```
+
+再执行会连接目标机器、但不安装服务的前置检查：
+
 ```bash
 ./scripts/deploy_dedicated_routers.sh --check-prereq -i inventory/hosts-with-dedicated-routers.yml
 ```
@@ -169,6 +183,8 @@ vim inventory/group_vars/all.yml
 ```bash
 ./scripts/deploy_dedicated_routers.sh --status -i inventory/hosts-with-dedicated-routers.yml
 ```
+
+首次部署、dry-run、重复执行和已部署后改配置的完整说明见 [操作员上手与变更指南](docs/runbooks/OPERATOR_GUIDE.md)。
 
 ## 常用操作
 
@@ -202,12 +218,25 @@ vim inventory/group_vars/all.yml
 ./scripts/deploy_dedicated_routers.sh --backup -i inventory/hosts-with-dedicated-routers.yml
 ```
 
+## 重复执行与幂等性
+
+仓库的目标是让部署流程尽量幂等和可重复收敛，但生产环境里“可重复执行”不等于“零影响”。
+
+- `--check-prereq`、`--status`、`--test-connection` 适合反复执行。
+- `--production-ready` 是完整部署 / 收敛入口，重复执行可能重新渲染配置、reload 或 restart 服务、再次执行内核优化，建议只在首次部署或维护窗口中使用。
+- 修改 `inventory/group_vars/all.yml` 后，优先用 `--apply-config` 滚动应用，而不是直接重复全量部署。
+- Router 默认 `mysql_router_rebootstrap: false`，不应在没有明确原因时重新 bootstrap。
+- 缩容、停止入口层、清理数据等破坏性动作必须显式执行，不能混入普通部署流程。
+
+更多边界和操作矩阵见 [操作员上手与变更指南](docs/runbooks/OPERATOR_GUIDE.md)。
+
 ## 配置说明
 
 主要配置入口：
 
 | 文件 | 用途 |
 | --- | --- |
+| `inventory/README.md` | inventory 文件选择说明，解释不同拓扑示例和 group_vars 的区别 |
 | `inventory/group_vars/all.yml` | 当前运行时主配置，仓库的单一真相源 |
 | `inventory/hosts-with-dedicated-routers.yml` | 推荐的独立 Router + HAProxy inventory 示例 |
 | `inventory/hosts-ha-reference.yml` | 高可用拓扑参考 inventory |
@@ -305,9 +334,11 @@ yamllint .
 - [部署前检查清单](PRE_DEPLOYMENT_CHECKLIST.md)
 - [GitHub Pages 文档站点入口](docs/index.md)
 - [AI Agent Context](AI_CONTEXT.md)
+- [操作员上手与变更指南](docs/runbooks/OPERATOR_GUIDE.md)
 
 Runbook：
 
+- [操作员上手与变更指南](docs/runbooks/OPERATOR_GUIDE.md)
 - [服务器配置指南](docs/runbooks/SERVER_CONFIGURATION.md)
 - [备份与恢复指南](docs/runbooks/BACKUP_AND_RESTORE_GUIDE.md)
 - [故障排查](docs/runbooks/TROUBLESHOOTING.md)
