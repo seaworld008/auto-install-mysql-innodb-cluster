@@ -30,18 +30,20 @@
 如果你是第一次接手，请按这个顺序读：
 
 1. `README.md`
-2. `inventory/group_vars/all.yml`
-3. `scripts/deploy_dedicated_routers.sh`
-4. `playbooks/site.yml`
-5. `playbooks/preflight-ha.yml`
-6. `playbooks/install-mysql.yml`
-7. `playbooks/configure-cluster.yml`
-8. `playbooks/install-router.yml`
-9. `playbooks/backup.yml`
-10. `.github/workflows/ansible-ci.yml`
-11. `docs/reference/VARIABLE_REFERENCE.md`
-12. `docs/reference/ARCHITECTURE_AND_EVIDENCE.md`
-13. `docs/templates/`
+2. `docs/runbooks/OPERATOR_GUIDE.md`
+3. `inventory/README.md`
+4. `inventory/group_vars/all.yml`
+5. `scripts/deploy_dedicated_routers.sh`
+6. `playbooks/site.yml`
+7. `playbooks/preflight-ha.yml`
+8. `playbooks/install-mysql.yml`
+9. `playbooks/configure-cluster.yml`
+10. `playbooks/install-router.yml`
+11. `playbooks/backup.yml`
+12. `.github/workflows/ansible-ci.yml`
+13. `docs/reference/VARIABLE_REFERENCE.md`
+14. `docs/reference/ARCHITECTURE_AND_EVIDENCE.md`
+15. `docs/templates/`
 
 ## 3. 单一真相源
 

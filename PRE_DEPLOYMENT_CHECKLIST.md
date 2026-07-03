@@ -18,6 +18,7 @@
 
 ## 配置检查
 
+- [ ] 已按 `inventory/README.md` 选择正确 inventory
 - [ ] `inventory/group_vars/all.yml` 已确认
 - [ ] `mysql_hardware_profile` 已确认
 - [ ] 已按 `docs/reference/VARIABLE_REFERENCE.md` 复核关键变量
@@ -36,6 +37,9 @@
 ## 推荐执行顺序
 
 ```bash
+git diff --check
+ansible-inventory -i inventory/hosts-with-dedicated-routers.yml --list >/tmp/inventory-dedicated.json
+ansible-playbook -i inventory/hosts-with-dedicated-routers.yml playbooks/site.yml --syntax-check
 ./scripts/deploy_dedicated_routers.sh --check-prereq -i inventory/hosts-with-dedicated-routers.yml
 ./scripts/deploy_dedicated_routers.sh --production-ready -i inventory/hosts-with-dedicated-routers.yml
 ./scripts/health-check-ha.sh inventory/hosts-with-dedicated-routers.yml
@@ -45,6 +49,8 @@
 
 - `README.md`
 - `DEPLOYMENT_COMPLETE_GUIDE.md`
+- `docs/runbooks/OPERATOR_GUIDE.md`
+- `inventory/README.md`
 - `docs/reference/VARIABLE_REFERENCE.md`
 - `docs/reference/ARCHITECTURE_AND_EVIDENCE.md`
 - `docs/runbooks/TROUBLESHOOTING.md`

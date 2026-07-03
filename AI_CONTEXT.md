@@ -289,11 +289,13 @@ ansible-galaxy collection install -r collections/requirements.yml
 
 1. 读 `AI_CONTEXT.md`
 2. 读 `AGENTS.md`
-3. 看 `git status --short --branch`
-4. 找到相关单一真相源
-5. 小步修改
-6. 跑验证
-7. 总结改动范围、未触碰内容和剩余风险
+3. 如涉及部署、配置或运维入口，读 `docs/runbooks/OPERATOR_GUIDE.md`
+4. 如涉及 inventory 或拓扑选择，读 `inventory/README.md`
+5. 看 `git status --short --branch`
+6. 找到相关单一真相源
+7. 小步修改
+8. 跑验证
+9. 总结改动范围、未触碰内容和剩余风险
 
 提交建议：
 

@@ -21,6 +21,7 @@ title: MySQL InnoDB Cluster Automation Docs
 
 | 主题 | 文档 |
 | --- | --- |
+| 操作员上手与变更 | [OPERATOR_GUIDE](runbooks/OPERATOR_GUIDE.md) |
 | 服务器配置 | [SERVER_CONFIGURATION](runbooks/SERVER_CONFIGURATION.md) |
 | 备份与恢复 | [BACKUP_AND_RESTORE_GUIDE](runbooks/BACKUP_AND_RESTORE_GUIDE.md) |
 | 故障排查 | [TROUBLESHOOTING](runbooks/TROUBLESHOOTING.md) |

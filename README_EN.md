@@ -101,6 +101,8 @@ yamllint .
 - Deployment guide: `DEPLOYMENT_COMPLETE_GUIDE.md`
 - Pre-deployment checklist: `PRE_DEPLOYMENT_CHECKLIST.md`
 - AI agent context: `AI_CONTEXT.md`
+- Operator onboarding and change guide: `docs/runbooks/OPERATOR_GUIDE.md`
+- Inventory selection guide: `inventory/README.md`
 - Server configuration runbook: `docs/runbooks/SERVER_CONFIGURATION.md`
 - Troubleshooting runbook: `docs/runbooks/TROUBLESHOOTING.md`
 - HA blueprint: `docs/reference/DEPLOYMENT_HA_BLUEPRINT_ZH.md`
