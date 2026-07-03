@@ -1,14 +1,14 @@
 # MySQL InnoDB Cluster 自动化部署
 
-[![quality gate](https://img.shields.io/github/actions/workflow/status/seaworld008/auto-install-mysql-innodb-cluster/ansible-ci.yml?branch=main&label=quality%20gate&logo=githubactions&logoColor=white&style=for-the-badge)](https://github.com/seaworld008/auto-install-mysql-innodb-cluster/actions/workflows/ansible-ci.yml)
-[![release](https://img.shields.io/github/v/release/seaworld008/auto-install-mysql-innodb-cluster?label=release&style=for-the-badge)](https://github.com/seaworld008/auto-install-mysql-innodb-cluster/releases)
-[![license MIT](https://img.shields.io/badge/license-MIT-2E8B57?style=for-the-badge)](LICENSE)
-[![automation Ansible](https://img.shields.io/badge/automation-Ansible-EE0000?logo=ansible&logoColor=white&style=for-the-badge)](collections/requirements.yml)
-[![MySQL 8.4 LTS | 8.0](https://img.shields.io/badge/MySQL-8.4%20LTS%20%7C%208.0-4479A1?logo=mysql&logoColor=white&style=for-the-badge)](inventory/group_vars/all.yml)
-[![InnoDB Cluster](https://img.shields.io/badge/InnoDB%20Cluster-group%20replication-005C84?logo=mysql&logoColor=white&style=for-the-badge)](playbooks/configure-cluster.yml)
-[![MySQL Router](https://img.shields.io/badge/MySQL%20Router-r%2Fw%20split-0F6CBD?style=for-the-badge)](playbooks/install-router.yml)
-[![HA entry](https://img.shields.io/badge/HAProxy%20%2B%20Keepalived-HA%20entry-106DA9?style=for-the-badge)](docs/DEPLOYMENT_HA_BLUEPRINT_ZH.md)
-[![operations](https://img.shields.io/badge/operations-scale%20%7C%20backup%20%7C%20rolling%20config-6A5ACD?style=for-the-badge)](DEPLOYMENT_COMPLETE_GUIDE.md)
+[![quality gate](https://img.shields.io/github/actions/workflow/status/seaworld008/auto-install-mysql-innodb-cluster/ansible-ci.yml?branch=main&label=quality%20gate&logo=githubactions&logoColor=white&style=flat-square)](https://github.com/seaworld008/auto-install-mysql-innodb-cluster/actions/workflows/ansible-ci.yml)
+[![release](https://img.shields.io/github/v/release/seaworld008/auto-install-mysql-innodb-cluster?label=release&style=flat-square)](https://github.com/seaworld008/auto-install-mysql-innodb-cluster/releases)
+[![license MIT](https://img.shields.io/badge/license-MIT-2E8B57?style=flat-square)](LICENSE)
+[![automation Ansible](https://img.shields.io/badge/automation-Ansible-EE0000?logo=ansible&logoColor=white&style=flat-square)](collections/requirements.yml)
+[![MySQL 8.4 LTS | 8.0](https://img.shields.io/badge/MySQL-8.4%20LTS%20%7C%208.0-4479A1?logo=mysql&logoColor=white&style=flat-square)](inventory/group_vars/all.yml)
+[![InnoDB Cluster](https://img.shields.io/badge/InnoDB%20Cluster-group%20replication-005C84?logo=mysql&logoColor=white&style=flat-square)](playbooks/configure-cluster.yml)
+[![MySQL Router](https://img.shields.io/badge/MySQL%20Router-r%2Fw%20split-0F6CBD?style=flat-square)](playbooks/install-router.yml)
+[![HA entry](https://img.shields.io/badge/HAProxy%20%2B%20Keepalived-HA%20entry-106DA9?style=flat-square)](docs/DEPLOYMENT_HA_BLUEPRINT_ZH.md)
+[![operations](https://img.shields.io/badge/operations-scale%20%7C%20backup%20%7C%20rolling%20config-6A5ACD?style=flat-square)](DEPLOYMENT_COMPLETE_GUIDE.md)
 
 面向运维和平台团队的 MySQL InnoDB Cluster 自动化部署与运维方案，基于 Ansible 编排 MySQL Server、MySQL Router、HAProxy、Keepalived、扩缩容、滚动配置应用和可选备份流程。
 
