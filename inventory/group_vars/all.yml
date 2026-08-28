@@ -19,7 +19,11 @@ mysql_replication_password: "CHANGE_ME_REPLICATION_PASSWORD"
 
 # MySQL集群配置
 mysql_cluster_name: "prodCluster"
-mysql_group_replication_group_name: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+mysql_group_replication_group_name: >-
+  {{
+    mysql_group_replication_group_name_override
+    | default('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
+  }}
 mysql_cluster_recovery_method: "clone"
 
 # MySQL端口配置
@@ -158,14 +162,6 @@ router_ha_min_nodes: 2
 haproxy_ha_required: true
 haproxy_ha_min_nodes: 2
 
-# 部署能力开关（统一真相源）
-deployment_features:
-  mysql_cluster: true
-  mysql_router: true
-  haproxy: true
-  keepalived: true
-  backup: false
-
 # 扩缩容与配置升级策略
 scale_policy:
   mysql_min_nodes: 3
@@ -191,9 +187,14 @@ backup_config:
   remote_user: "backup"
   remote_dir: ""
   ssh_key_path: ""
-  rsync_opts: "-az --delete-delay"
+  ssh_known_hosts_file: "/root/.ssh/known_hosts"
   run_on_host_group: "mysql_primary"
   logical_tool: "mysqlsh-dump-instance"
+  percona_release:
+    deb_url: "https://repo.percona.com/apt/percona-release_1.0-33.generic_all.deb"
+    deb_sha256: "313ebd0fbab685bf448ff41d7d62f5ee3b2bcd8a45b0c52ed842606a2d5deeae"
+    rpm_url: "https://repo.percona.com/yum/percona-release-1.0-33.noarch.rpm"
+    rpm_sha256: "b644b932670501cf42445382b208cada2c01888026326f9cd2668d938d6f57aa"
   xtrabackup:
     parallel: 4
     compress: false
@@ -202,16 +203,16 @@ backup_config:
     prepare: false
     target_subdir: "xtrabackup"
     use_memory: "1G"
-    extra_args: ""
 
-# HAProxy 配置（默认接入 Router 层；如无 Router 可改为 mysql）
-haproxy_backend_target: "router"   # 可选: router, mysql
+# HAProxy 只接入 Router 层，避免静态 primary 在主从切换后继续接收写流量
+haproxy_backend_target: "router"
 haproxy_bind_address: "0.0.0.0"
 haproxy_balance_algorithm: "leastconn"
 haproxy_health_check_interval_ms: 2000
 haproxy_mysql_rw_port: 3307
 haproxy_mysql_ro_port: 3308
 haproxy_mysql_rwsplit_port: 3309
+haproxy_stats_bind_address: "127.0.0.1"
 haproxy_stats_port: 8404
 haproxy_stats_uri: "/stats"
 haproxy_global_maxconn: 100000
@@ -221,12 +222,16 @@ haproxy_timeout_server: "1m"
 haproxy_retries: 3
 
 # Keepalived VIP 配置（HAProxy 高可用漂移）
-keepalived_enabled: true
 keepalived_interface: "{{ ansible_default_ipv4.interface | default('eth0') }}"
 keepalived_virtual_router_id: 51
-keepalived_auth_pass: "MySQLHApass"
-keepalived_vip: "192.168.1.100"
+keepalived_auth_pass: "CHANGE_ME"
+# RFC 5737 文档地址；preflight 会阻断，必须由目标环境显式覆盖。
+keepalived_vip: "192.0.2.100"
 keepalived_vip_cidr: 24
+keepalived_check_interval: 2
+keepalived_check_timeout: 2
+keepalived_check_fall: 2
+keepalived_check_rise: 2
 
 # MySQL Router配置 - 针对4核8G优化
 mysql_router_port: 6446
@@ -277,8 +282,14 @@ mysql_architecture_map:
 
 # 官方 MySQL 仓库与支持矩阵
 mysql_repo_gpg_keys:
-  - "https://repo.mysql.com/RPM-GPG-KEY-mysql-2023"
-  - "https://repo.mysql.com/RPM-GPG-KEY-mysql-2025"
+  - url: "https://repo.mysql.com/RPM-GPG-KEY-mysql-2023"
+    path: "/etc/mysql-repo-keys/RPM-GPG-KEY-mysql-2023.asc"
+    file_url: "file:///etc/mysql-repo-keys/RPM-GPG-KEY-mysql-2023.asc"
+    sha256: "d11149d51dfc5ad854be7b0b510ed1489cdfd24dc630543b9ffec717435e2025"
+  - url: "https://repo.mysql.com/RPM-GPG-KEY-mysql-2025"
+    path: "/etc/mysql-repo-keys/RPM-GPG-KEY-mysql-2025.asc"
+    file_url: "file:///etc/mysql-repo-keys/RPM-GPG-KEY-mysql-2025.asc"
+    sha256: "a4bcd9f16a53cc763f87b9955dbcdced33c7aa90296b157eb6ceef0f156f4327"
 mysql_repo_series_map:
   "8.0": "8.0"
   "8.4": "8.4-lts"

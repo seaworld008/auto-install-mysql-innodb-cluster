@@ -2,45 +2,90 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 的组织方式，并尽量使用语义化版本。
 
-> 说明：当前运行时真相源请以 `inventory/group_vars/all.yml`、`README.md` 和 `DEPLOYMENT_COMPLETE_GUIDE.md` 为准。
+> 当前运行时真相源是 `inventory/group_vars/all.yml`；静态检查通过不等于真实环境验证完成。
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-28
+
 ### 新增
 
-- 新增英文入口 `README_EN.md`，便于全球开发者检索和评估。
-- 新增 GitHub Pages 文档站点入口与发布工作流：`docs/index.md`、`.github/workflows/pages.yml`。
-- 新增架构图、端口视图和证据留存指南：`docs/ARCHITECTURE_AND_EVIDENCE.md`。
-- 新增变量参考与配置示例：`docs/VARIABLE_REFERENCE.md`。
-- 新增 staging 验证、故障演练和隔离恢复演练记录模板。
-- 新增可选 Markdown / YAML advisory lint 工作流与配置。
-- 新增开源协作文件：`LICENSE`、`CONTRIBUTING.md`、`CODE_OF_CONDUCT.md`、`SECURITY.md`。
-- 新增 GitHub Issue Templates 和 Pull Request Template。
-- 新增 `.gitignore` 和 `.editorconfig`，减少本地开发噪声和误提交风险。
-- 新增下一次文档与仓库展示优化版本的 Release 草案。
+- 新增 `validate-ha.yml` 组合门，先执行 preflight，再执行 fail-closed 健康
+  playbook；要求每个 inventory MySQL 节点 `ONLINE`、Cluster 为 `OK` 且成员数
+  匹配，并检查启用的 Router、HAProxy、Keepalived、端口及 VIP 唯一归属。
+- 新增 GitHub Actions CodeQL 扫描和 Dependabot 的 pip / Actions 周期更新。
+- 新增 Python 仓库契约与主入口测试，并在 Python 3.12 / 3.13 CI 矩阵执行。
+- 新增 `validate_deployment.ps1` PowerShell parser 门，并在两个 Python matrix
+  job 中执行。
+- 新增 GitHub Pages 文档站、英文入口、staging / 故障 / 恢复演练模板，以及
+  开源协作文件。
+- 新增 Git 忽略的本地 inventory 与 Vault 工作流；服务器向导会为独立集群生成
+  唯一 Group Replication UUID。
 
 ### 变更
 
-- 重构 `README.md`，补齐项目定位、Quick Start、配置说明、常用操作、本地检查、FAQ 和英文摘要。
-- 更新 `PROJECT_STRUCTURE.md`，使其匹配当前仓库真实结构。
-- 将看起来像真实密码的示例值替换为明确的 `CHANGE_ME_*` 或占位值。
-- 在 GitHub Actions 中增加 shell 语法检查。
-- 将旧的 `setup-servers.sh` 三机向导升级为 3 MySQL + 2 Router + 2 HAProxy 的 HA inventory 向导。
-- 将辅助脚本 `apply-config.sh`、`backup.sh`、`scale-mysql.sh`、`shrink-*.sh`、`deploy-ha-stack.sh` 收敛到统一主入口。
-- 将 MySQL 用户管理模块从 `community.mysql.mysql_user` 迁移到 `ansible.mysql.mysql_user`，消除新版 collection 弃用警告。
-- 明确 `--skip-kernel-optimization` 的执行路径，避免依赖不确定的 tag 跳过行为。
+- 作为 pre-1.0 非兼容安全收敛，移除
+  `haproxy_backend_target: mysql` 路径，并默认启用严格 SSH host-key 校验。
+- 主入口支持 `-e` / `--extra-vars`、`--ask-vault-pass` 和
+  `--vault-password-file`，并把参数透传到 preflight、部署和健康检查。
+- Router 仅在首次部署或显式设置 `mysql_router_rebootstrap: true` 时
+  bootstrap；bootstrap 和 MySQL Shell 调用通过标准输入传递密码。
+- 集群配置先识别成员状态，只对 standalone 节点执行配置检查并加入集群，已有成员
+  不再重复运行 `configureInstance`，最终等待全部 inventory 成员 `ONLINE`。
+- MySQL、Router 和入口层缩容增加单目标与最小节点数校验；MySQL 缩容还包含
+  primary 切换和剩余成员健康复核。
+- HAProxy 只使用 Router 后端；stats 默认仅监听 `127.0.0.1`。
+- Keepalived 使用 HAProxy systemd 检查，连续失败时进入 `FAULT` 并释放 VIP。
+- 自定义 MySQL datadir 只从已初始化且受支持的默认目录迁移，拒绝覆盖非空未知目录，
+  通过中断标记支持安全重跑，同时收敛 AppArmor / SELinux 文件上下文并校验最终
+  运行时 datadir。
+- MySQL GPG key 与 Percona release 包使用固定 SHA-256 校验；rsync 备份要求
+  预置并严格校验 SSH `known_hosts`。
+- 文档 Markdown / YAML lint 从 advisory 提升为阻断门；GitHub Actions 均固定到
+  完整 commit SHA。
+- 控制节点 `requirements.txt` 收敛为仅安装带版本范围的 `ansible-core`；
+  collections 单独声明，目标 PyMySQL 由可信系统仓库安装。
+- 控制节点要求 Python 3.12+，preflight 在所选目标组首次模块连接前探测
+  Python 3.9+。
+- 主文档和项目结构说明更新到当前统一入口、本地 inventory、逻辑 / XtraBackup
+  备份及验证边界。
 
 ### 安全
 
-- 明确建议生产环境使用 Ansible Vault、SSH key、CI/CD Secret 或专用 Secret Manager。
-- 降低从公开示例中复制默认样式凭据的误用风险。
-- `cluster-status.sh`、`failover-test.sh` 在未显式提供集群密码时会直接阻断，避免使用占位密码发起连接。
+- tracked inventory 只保留脱敏示例，禁止写入真实 IP、SSH 凭据、私钥路径或明文
+  Secret。
+- SSH 默认启用严格主机密钥校验，移除跳过 `known_hosts` 校验的示例和配置。
+- Keepalived 口令改为明确占位符，并由 preflight 阻断默认值或不合法长度。
+- Keepalived 配置以 `0600` 写入，模板任务保持 `no_log`；默认 VIP 改为会被
+  preflight 阻断的 RFC 5737 地址 `192.0.2.100`。
+- MySQL Shell、Router bootstrap 和 XtraBackup 不再把数据库密码放入命令行参数。
+- `cluster-status.sh` 与 `failover-test.sh` 隐藏读取密码或使用受保护环境变量，
+  并通过 stdin 交给 mysqlsh，不把密码写入 argv。
 
 ### 修复
 
-- 修复 `deploy_dedicated_routers.sh` 与 `health-check-ha.sh` 中 inventory 变量读取时 `python -` 与管道 stdin 冲突导致的 JSON 解析失败。
-- 修复 `validate_deployment.sh` 在 `set -e` 下因后缀自增提前退出的问题。
-- 修复 `--full-deploy` 重复执行入口层内核优化的问题。
+- 修复 health/status 对 inventory 变量读取错误和健康命令失败被吞掉的问题。
+- 修复健康检查只打印提示却未阻断非健康 Cluster、服务、端口或 VIP 的问题。
+- 修复 HAProxy 直连静态 MySQL primary 在主从切换后可能继续接收写流量的问题。
+- 修复 Keepalived 健康脚本失败后仍可能保留 VIP 的问题。
+- 修复健康门只检查 VIP 存在、未阻断双主同时持有 VIP 的问题；现在要求 VIP
+  恰好出现在一个入口节点。
+- 修复 Router 共享 bootstrap 账号和无条件重复配置集群成员的非幂等路径。
+- 修复自定义 datadir 在安装后未安全迁移、迁移中断无法恢复、RedHat SELinux
+  上下文缺失与未验证运行时目录的问题。
+- 修复 MySQL / Percona 仓库下载缺少摘要校验，以及 rsync 备份关闭 SSH 主机密钥
+  校验的问题。
+- 修复 RedHat 重跑无条件依赖首次临时 root 密码的问题；现在先用 0600 临时
+  option file 探测目标密码，必要时才执行密码重置，并在无安全恢复路径时阻断。
+- 修复压缩 XtraBackup 同时启用 prepare 时未先解压的问题。
+- 修复 rsync 备份未验证 `known_hosts` / 私钥 owner 与权限的问题。
+- 修复旧文档指向不存在的 `docs/*.md` 路径。
+
+### 验证边界
+
+- 本版本包含静态检查、仓库契约测试、Ansible syntax / inventory 校验和 CI 门。
+- 尚未在真实 staging 执行完整部署、故障切换、扩缩容、备份恢复或性能容量验证，
+  因此不据此宣称生产验收完成。
 
 ## [0.2.0] - 2026-03-25
 
@@ -50,23 +95,17 @@
 - 统一主入口：`scripts/deploy_dedicated_routers.sh`。
 - 默认使用 MySQL 8.4 LTS，同时保留 MySQL 8.0 兼容。
 - 新增单端口自动读写分离入口：
-  - HAProxy VIP: `3309`
-  - MySQL Router 直连: `6450`
+  - HAProxy VIP：`3309`
+  - MySQL Router 直连：`6450`
 - 保留显式读写和只读入口：
-  - HAProxy VIP: `3307 / 3308`
-  - MySQL Router 直连: `6446 / 6447`
-- 新增 MySQL 扩容和缩容流程。
-- 新增 Router 与 HAProxy 缩容流程。
-- 新增滚动应用当前配置流程。
+  - HAProxy VIP：`3307 / 3308`
+  - MySQL Router 直连：`6446 / 6447`
+- 新增 MySQL、Router 与 HAProxy 扩缩容和滚动应用当前配置流程。
 - 新增独立内核优化动作：`--kernel-optimize-only`。
-- 新增可选备份流程：
-  - MySQL Shell 逻辑备份。
-  - Percona XtraBackup 物理备份。
-  - 本地目录、NFS、SSH + rsync 远端目录。
-- 新增备份与恢复 runbook：`docs/BACKUP_AND_RESTORE_GUIDE.md`。
-- 新增 AI 维护说明：
-  - `AGENTS.md`
-  - `docs/AI_MAINTAINER_GUIDE.md`
+- 新增可选 MySQL Shell 逻辑备份与 Percona XtraBackup 物理备份，支持本地目录、
+  NFS 及 SSH + rsync 目标。
+- 新增备份恢复 runbook：`docs/runbooks/BACKUP_AND_RESTORE_GUIDE.md`。
+- 新增 AI 维护说明：`AGENTS.md`、`docs/maintainers/AI_MAINTAINER_GUIDE.md`。
 - 增强 GitHub Actions 静态质量门，覆盖 Ansible syntax-check 和 inventory 校验。
 
 ### 变更
@@ -80,7 +119,8 @@
 ### 新增
 
 - MySQL InnoDB Cluster 自动化仓库首次公开发布。
-- 提供 MySQL Server 安装、InnoDB Cluster 配置和 MySQL Router 设置的基础 Ansible 结构。
+- 提供 MySQL Server 安装、InnoDB Cluster 配置和 MySQL Router 设置的基础
+  Ansible 结构。
 
 ## 历史记录
 

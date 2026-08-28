@@ -18,6 +18,20 @@ PASSED_CHECKS=0
 FAILED_CHECKS=0
 WARNING_CHECKS=0
 
+if [[ -n "${PYTHON_BIN:-}" ]]; then
+    VALIDATION_PYTHON="$PYTHON_BIN"
+elif [[ -x ".venv/bin/python" ]]; then
+    VALIDATION_PYTHON=".venv/bin/python"
+else
+    VALIDATION_PYTHON="python3"
+fi
+
+if [[ -x ".venv/bin/ansible" ]]; then
+    VALIDATION_ANSIBLE=".venv/bin/ansible"
+else
+    VALIDATION_ANSIBLE="ansible"
+fi
+
 # 日志函数
 log_info() {
     echo -e "${BLUE}[INFO]${NC} $1"
@@ -90,8 +104,29 @@ check_yaml_syntax() {
     ((TOTAL_CHECKS+=1))
     local file="$1"
     
-    if command -v python3 >/dev/null 2>&1; then
-        if python3 -c "import yaml; yaml.safe_load(open('$file'))" >/dev/null 2>&1; then
+    if command -v "$VALIDATION_PYTHON" >/dev/null 2>&1 || [[ -x "$VALIDATION_PYTHON" ]]; then
+        if "$VALIDATION_PYTHON" - "$file" <<'PY' >/dev/null 2>&1
+import pathlib
+import sys
+import yaml
+
+class AnsibleLoader(yaml.SafeLoader):
+    pass
+
+def construct_unknown(loader, node):
+    if isinstance(node, yaml.ScalarNode):
+        return loader.construct_scalar(node)
+    if isinstance(node, yaml.SequenceNode):
+        return loader.construct_sequence(node)
+    return loader.construct_mapping(node)
+
+AnsibleLoader.add_constructor(None, construct_unknown)
+yaml.load(
+    pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"),
+    Loader=AnsibleLoader,
+)
+PY
+        then
             log_success "YAML语法检查: $file"
         else
             log_error "YAML语法检查: $file 语法错误"
@@ -133,7 +168,9 @@ check_file_exists "playbooks/shrink-mysql.yml" "MySQL缩容playbook"
 check_file_exists "playbooks/shrink-router.yml" "Router缩容playbook"
 check_file_exists "playbooks/shrink-haproxy.yml" "HAProxy缩容playbook"
 check_file_exists "playbooks/apply-config.yml" "配置滚动应用playbook"
-check_file_exists "playbooks/backup.yml" "逻辑备份playbook"
+check_file_exists "playbooks/backup.yml" "可选备份playbook"
+check_file_exists "playbooks/health-check-ha.yml" "运行时健康检查playbook"
+check_file_exists "playbooks/validate-ha.yml" "组合预检与健康检查playbook"
 
 # 4. 检查inventory文件
 log_info "4. 检查Inventory配置文件"
@@ -219,7 +256,7 @@ fi
 # 10. 检查Python依赖
 log_info "10. 检查Python依赖"
 if [ -f "requirements.txt" ]; then
-    required_packages=("ansible" "PyMySQL" "mysql-connector-python")
+    required_packages=("ansible-core")
     for package in "${required_packages[@]}"; do
         ((TOTAL_CHECKS+=1))
         if grep -q "$package" requirements.txt; then
@@ -233,44 +270,58 @@ fi
 # 11. 检查系统兼容性
 log_info "11. 检查系统兼容性要求"
 ((TOTAL_CHECKS+=1))
-if command -v python3 >/dev/null 2>&1; then
-    log_success "Python3 可用"
+if command -v "$VALIDATION_PYTHON" >/dev/null 2>&1 || [[ -x "$VALIDATION_PYTHON" ]]; then
+    if "$VALIDATION_PYTHON" -c 'import sys; raise SystemExit(sys.version_info < (3, 12))'; then
+        python_version="$("$VALIDATION_PYTHON" -c 'import platform; print(platform.python_version())')"
+        log_success "控制节点 Python 版本受支持: $python_version"
+    else
+        log_error "控制节点需要 Python 3.12+（ansible-core 2.20/2.21）"
+    fi
 else
-    log_warning "Python3 未安装（部署时需要）"
+    log_error "Python3 未安装（控制节点需要 Python 3.12+）"
 fi
 
 ((TOTAL_CHECKS+=1))
-if command -v ansible >/dev/null 2>&1; then
-    ansible_version=$(ansible --version | head -1 | awk '{print $3}')
+if command -v "$VALIDATION_ANSIBLE" >/dev/null 2>&1 || [[ -x "$VALIDATION_ANSIBLE" ]]; then
+    ansible_version="$(
+        "$VALIDATION_ANSIBLE" --version |
+            head -1 |
+            sed -E 's/^ansible \\[core ([^]]+)\\].*/\\1/'
+    )"
     log_success "Ansible 已安装 (版本: $ansible_version)"
 else
     log_warning "Ansible 未安装（部署时需要）"
 fi
 
-# 12. 检查网络配置示例
-log_info "12. 检查网络配置示例"
+# 12. 检查 tracked inventory 保持脱敏
+log_info "12. 检查 tracked inventory 脱敏状态"
 inventory_files=("inventory/hosts.yml" "inventory/hosts-recommended-router.yml")
 for inv_file in "${inventory_files[@]}"; do
     if [ -f "$inv_file" ]; then
         ((TOTAL_CHECKS+=1))
         if grep -q "192.168.1" "$inv_file"; then
-            log_warning "网络配置: $inv_file 使用示例IP地址，部署前需要修改"
+            log_success "网络配置: $inv_file 保持示例 IP"
         else
-            log_success "网络配置: $inv_file 已自定义IP地址"
+            log_error "网络配置: $inv_file 不再包含约定的脱敏示例 IP"
         fi
         
         ((TOTAL_CHECKS+=1))
         if grep -q "your_password" "$inv_file"; then
-            log_warning "密码配置: $inv_file 使用示例密码，部署前需要修改"
+            log_success "密码配置: $inv_file 保持明确占位值"
         else
-            log_success "密码配置: $inv_file 已自定义密码"
+            log_error "密码配置: $inv_file 缺少约定的明确占位值"
         fi
     fi
 done
 
 # 13. 检查文档完整性
 log_info "13. 检查文档完整性"
-doc_files=("README.md" "DEPLOYMENT_COMPLETE_GUIDE.md" "TROUBLESHOOTING.md" "QUICK_START.md")
+doc_files=(
+    "README.md"
+    "DEPLOYMENT_COMPLETE_GUIDE.md"
+    "QUICK_START.md"
+    "docs/runbooks/TROUBLESHOOTING.md"
+)
 for doc in "${doc_files[@]}"; do
     check_file_exists "$doc" "文档文件"
 done
@@ -291,7 +342,7 @@ for config in "${config_files[@]}"; do
 done
 
 ((TOTAL_CHECKS+=1))
-if python3 - <<'PY' >/dev/null 2>&1
+if "$VALIDATION_PYTHON" - <<'PY' >/dev/null 2>&1
 import yaml, pathlib, sys
 data = yaml.safe_load(pathlib.Path("inventory/group_vars/all.yml").read_text(encoding="utf-8"))
 profile = data.get("mysql_hardware_profile")
@@ -323,9 +374,8 @@ done
 # 16. 最终安全检查
 log_info "16. 安全配置检查"
 ((TOTAL_CHECKS+=1))
-secret_pattern_file="${TMPDIR:-/tmp}/mysql-secret-patterns.txt"
-if grep -R -n -E "MyS3cur3P|Clust3rP|R3pl1c|ProductionRootPassword|ProductionClusterPassword|ProductionReplicationPassword|BackupEncryptionKey|MonitoringAPIKey" inventory examples scripts docs >"$secret_pattern_file" 2>/dev/null; then
-    log_error "默认凭据检查: 发现疑似真实默认密码或示例密钥，请检查 $secret_pattern_file"
+if git grep -n -E "MyS3cur3P|Clust3rP|R3pl1c|ProductionRootPassword|ProductionClusterPassword|ProductionReplicationPassword|BackupEncryptionKey|MonitoringAPIKey" -- inventory examples scripts docs >/dev/null 2>&1; then
+    log_error "默认凭据检查: tracked 文件中发现疑似真实默认密码或示例密钥"
 else
     log_success "默认凭据检查: 未发现已知默认样式密码或示例密钥"
 fi
@@ -348,11 +398,12 @@ echo -e "成功率: ${BLUE}$success_rate%${NC}"
 # 总体评估
 if [ $FAILED_CHECKS -eq 0 ]; then
     if [ $WARNING_CHECKS -eq 0 ]; then
-        echo -e "\n${GREEN}✅ 项目完全通过验证，可以安全部署！${NC}"
+        echo -e "\n${GREEN}✅ 仓库静态完整性检查通过。${NC}"
+        echo "真实部署、故障切换和恢复能力仍需在隔离或 staging 环境验证"
         exit 0
     else
         echo -e "\n${YELLOW}⚠️  项目基本通过验证，但有 $WARNING_CHECKS 个警告项需要注意${NC}"
-        echo "请检查警告项目，建议解决后再部署"
+        echo "请检查警告项目；真实环境验证仍是部署前必需步骤"
         exit 1
     fi
 else

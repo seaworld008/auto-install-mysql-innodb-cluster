@@ -3,12 +3,23 @@
   hosts: localhost
   gather_facts: false
   vars:
-    mysql_primary_host: "{{ groups['mysql_primary'][0] }}"
-    mysql_shrink_target_address: "{{ hostvars[mysql_shrink_target].ansible_host | default(hostvars[mysql_shrink_target].ansible_default_ipv4.address) }}"
-    mysql_shrink_new_primary_address: "{{ (mysql_shrink_new_primary is defined and mysql_shrink_new_primary | length > 0) | ternary(hostvars[mysql_shrink_new_primary].ansible_host | default(hostvars[mysql_shrink_new_primary].ansible_default_ipv4.address), '') }}"
+    mysql_inventory_primary_host: "{{ groups['mysql_primary'][0] }}"
+    mysql_shrink_target_address: >-
+      {{
+        hostvars[mysql_shrink_target].ansible_host
+        | default(mysql_shrink_target)
+      }}
+    mysql_shrink_new_primary_address: >-
+      {{
+        hostvars[mysql_shrink_new_primary].ansible_host
+        | default(mysql_shrink_new_primary)
+        if mysql_shrink_new_primary is defined
+        and mysql_shrink_new_primary | length > 0
+        else ''
+      }}
   tasks:
     - name: 检查缩容目标参数
-      assert:
+      ansible.builtin.assert:
         that:
           - mysql_shrink_target is defined
           - mysql_shrink_target in groups['mysql_cluster']
@@ -16,61 +27,134 @@
         fail_msg: "缩容参数非法，或当前节点数已达到最小限制，不能继续缩容。"
         success_msg: "缩容参数检查通过"
 
-    - name: 获取当前集群主节点
-      shell: |
-        mysqlsh --uri {{ mysql_cluster_user }}:{{ mysql_cluster_password }}@{{ hostvars[mysql_primary_host].ansible_host | default(hostvars[mysql_primary_host].ansible_default_ipv4.address) }}:{{ mysql_port }} \
-        -e "var s=dba.getCluster('{{ mysql_cluster_name }}').status(); for (var k in s.defaultReplicaSet.topology) { if (s.defaultReplicaSet.topology[k].mode == 'R/W') { print(k); break; } }"
-      register: mysql_current_primary
+    - name: 读取缩容目标 server UUID
+      ansible.mysql.mysql_query:
+        login_user: "{{ mysql_cluster_user }}"
+        login_password: "{{ mysql_cluster_password }}"
+        login_unix_socket: "{{ mysql_datadir }}/mysql.sock"
+        config_file: ""
+        query: "SELECT @@server_uuid AS server_uuid"
+      delegate_to: "{{ mysql_shrink_target }}"
+      become: true
+      register: mysql_shrink_target_uuid
       changed_when: false
+      no_log: true
 
-    - name: 主节点缩容前要求指定新主节点
-      assert:
+    - name: 读取当前动态 primary UUID
+      ansible.mysql.mysql_query:
+        login_user: "{{ mysql_cluster_user }}"
+        login_password: "{{ mysql_cluster_password }}"
+        login_unix_socket: "{{ mysql_datadir }}/mysql.sock"
+        config_file: ""
+        query: |
+          SELECT MEMBER_ID AS primary_uuid
+          FROM performance_schema.replication_group_members
+          WHERE MEMBER_ROLE = 'PRIMARY'
+            AND MEMBER_STATE = 'ONLINE'
+      delegate_to: "{{ mysql_inventory_primary_host }}"
+      become: true
+      register: mysql_current_primary_uuid
+      changed_when: false
+      no_log: true
+
+    - name: 要求当前 primary 可被唯一识别
+      ansible.builtin.assert:
         that:
+          - mysql_current_primary_uuid.rowcount[0] | int == 1
+        fail_msg: "无法唯一识别当前 ONLINE primary，缩容已中止。"
+
+    - name: 记录缩容目标是否为当前 primary
+      ansible.builtin.set_fact:
+        mysql_shrink_target_is_primary: >-
+          {{
+            mysql_shrink_target_uuid.query_result[0][0].server_uuid
+            ==
+            mysql_current_primary_uuid.query_result[0][0].primary_uuid
+          }}
+
+    - name: 当前 primary 缩容前要求指定新 primary
+      ansible.builtin.assert:
+        that:
+          - scale_policy.require_primary_switchover_before_removal | bool
           - mysql_shrink_new_primary is defined
           - mysql_shrink_new_primary | length > 0
           - mysql_shrink_new_primary in groups['mysql_cluster']
           - mysql_shrink_new_primary != mysql_shrink_target
-        fail_msg: "当前缩容目标是集群主节点，请先指定 mysql_shrink_new_primary。"
-        success_msg: "主节点切换参数已提供"
-      when:
-        - scale_policy.require_primary_switchover_before_removal | bool
-        - mysql_shrink_target_address in mysql_current_primary.stdout
+        fail_msg: "缩容目标是当前 primary，请使用 --new-primary 指定在线的新主节点。"
+        success_msg: "新 primary 参数检查通过"
+      when: mysql_shrink_target_is_primary
 
-    - name: 主节点切换
-      shell: |
-        mysqlsh --uri {{ mysql_cluster_user }}:{{ mysql_cluster_password }}@{{ hostvars[mysql_primary_host].ansible_host | default(hostvars[mysql_primary_host].ansible_default_ipv4.address) }}:{{ mysql_port }} \
-        -e "var c=dba.getCluster('{{ mysql_cluster_name }}'); c.setPrimaryInstance('{{ mysql_shrink_new_primary_address }}:{{ mysql_port }}')"
-      when:
-        - mysql_shrink_new_primary is defined
-        - mysql_shrink_new_primary | length > 0
-        - mysql_shrink_target_address in mysql_current_primary.stdout
+    - name: 切换当前 primary
+      ansible.builtin.command:
+        argv:
+          - mysqlsh
+          - --no-wizard
+          - --passwords-from-stdin
+          - --uri
+          - "{{ mysql_cluster_user }}@127.0.0.1:{{ mysql_port }}"
+          - --js
+          - -e
+          - >-
+            dba.getCluster('{{ mysql_cluster_name }}').setPrimaryInstance(
+              '{{ mysql_cluster_user }}@{{ mysql_shrink_new_primary_address }}:{{ mysql_port }}'
+            );
+        stdin: "{{ mysql_cluster_password }}\n{{ mysql_cluster_password }}\n"
+        stdin_add_newline: false
+      delegate_to: "{{ mysql_inventory_primary_host }}"
+      become: true
+      when: mysql_shrink_target_is_primary
+      no_log: true
+
+    - name: 选择摘除操作执行节点
+      ansible.builtin.set_fact:
+        mysql_shrink_management_host: >-
+          {{
+            mysql_shrink_new_primary
+            if mysql_shrink_target_is_primary
+            else mysql_inventory_primary_host
+          }}
 
     - name: 将节点从集群中移除
-      shell: |
-        mysqlsh --uri {{ mysql_cluster_user }}:{{ mysql_cluster_password }}@{{ hostvars[mysql_primary_host].ansible_host | default(hostvars[mysql_primary_host].ansible_default_ipv4.address) }}:{{ mysql_port }} \
-        -e "var c=dba.getCluster('{{ mysql_cluster_name }}'); c.removeInstance('{{ mysql_shrink_target_address }}:{{ mysql_port }}')"
+      ansible.builtin.command:
+        argv:
+          - mysqlsh
+          - --no-wizard
+          - --passwords-from-stdin
+          - --uri
+          - "{{ mysql_cluster_user }}@127.0.0.1:{{ mysql_port }}"
+          - --js
+          - -e
+          - >-
+            dba.getCluster('{{ mysql_cluster_name }}').removeInstance(
+              '{{ mysql_cluster_user }}@{{ mysql_shrink_target_address }}:{{ mysql_port }}'
+            );
+        stdin: "{{ mysql_cluster_password }}\n{{ mysql_cluster_password }}\n"
+        stdin_add_newline: false
+      delegate_to: "{{ mysql_shrink_management_host }}"
+      become: true
       register: mysql_remove_result
+      no_log: true
 
     - name: 显示缩容结果
-      debug:
-        var: mysql_remove_result.stdout
+      ansible.builtin.debug:
+        msg: "{{ mysql_shrink_target }} 已从 InnoDB Cluster 拆除。"
 
 - name: MySQL 节点缩容后的服务处理
   hosts: "{{ mysql_shrink_target }}"
   gather_facts: true
-  become: yes
+  become: true
   vars:
     mysql_service_name: "{{ 'mysqld' if ansible_os_family == 'RedHat' else 'mysql' }}"
   tasks:
     - name: 停止 MySQL 服务
-      systemd:
+      ansible.builtin.systemd_service:
         name: "{{ mysql_service_name }}"
         state: stopped
-        enabled: no
+        enabled: false
       when: scale_policy.mysql_remove_stop_service | bool
 
     - name: 可选清理 MySQL 数据目录
-      file:
+      ansible.builtin.file:
         path: "{{ item }}"
         state: absent
       loop:
@@ -79,17 +163,51 @@
       when: scale_policy.mysql_remove_cleanup_data | bool
 
 - name: 缩容后集群状态复核
-  hosts: mysql_primary
-  gather_facts: true
-  become: yes
+  hosts: localhost
+  gather_facts: false
+  vars:
+    mysql_expected_members_after_shrink: "{{ groups['mysql_cluster'] | length - 1 }}"
   tasks:
-    - name: 检查集群状态
-      shell: |
-        mysqlsh --uri {{ mysql_cluster_user }}:{{ mysql_cluster_password }}@{{ ansible_default_ipv4.address }}:{{ mysql_port }} \
-        -e "var c=dba.getCluster('{{ mysql_cluster_name }}'); print(c.status()['defaultReplicaSet']['status'])"
+    - name: 等待剩余成员恢复完整健康
+      ansible.builtin.command:
+        argv:
+          - mysqlsh
+          - --no-wizard
+          - --passwords-from-stdin
+          - --uri
+          - "{{ mysql_cluster_user }}@127.0.0.1:{{ mysql_port }}"
+          - --js
+          - -e
+          - >-
+            var replicaSet = dba.getCluster(
+              '{{ mysql_cluster_name }}'
+            ).status().defaultReplicaSet;
+            var topology = replicaSet.topology;
+            var online = Object.keys(topology).filter(
+              function(key) { return topology[key].status === 'ONLINE'; }
+            ).length;
+            print(
+              'ANSIBLE_CLUSTER=' + replicaSet.status + '|' +
+              online + '|' + Object.keys(topology).length
+            );
+        stdin: "{{ mysql_cluster_password }}\n"
+        stdin_add_newline: false
+      delegate_to: "{{ mysql_shrink_management_host }}"
+      become: true
       register: mysql_shrink_cluster_health
       changed_when: false
+      retries: 30
+      delay: 10
+      until: >-
+        'ANSIBLE_CLUSTER=OK|'
+        ~ (mysql_expected_members_after_shrink | string)
+        ~ '|'
+        ~ (mysql_expected_members_after_shrink | string)
+        in mysql_shrink_cluster_health.stdout
+      no_log: true
 
     - name: 输出缩容后状态
-      debug:
-        msg: "缩容后集群状态: {{ mysql_shrink_cluster_health.stdout | trim }}"
+      ansible.builtin.debug:
+        msg: >-
+          缩容后集群状态为 OK，
+          {{ mysql_expected_members_after_shrink }} 个成员均为 ONLINE。

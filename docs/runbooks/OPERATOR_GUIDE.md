@@ -1,394 +1,385 @@
 # 操作员上手与变更指南
 
-这份指南面向第一次接手本仓库的人，目标是回答四个问题：
+本文面向首次接手部署或维护的 DBA / SRE。目标是使用唯一主入口完成安全准备、
+部署、状态检查、配置变更、扩缩容和备份，并区分静态结果与真实环境证据。
 
-- 应该用哪份配置安装
-- 修改配置时改哪里
-- 部署前如何检查和 dry-run
-- 已经部署过以后再次执行是否安全
-
-如果只想快速跑通主线，按本文顺序执行即可。
-
-## 1. 先记住主线
-
-当前仓库只有一条推荐主线：
+## 1. 唯一主线
 
 ```text
-inventory/hosts-with-dedicated-routers.yml
-  + inventory/group_vars/all.yml
-  -> scripts/deploy_dedicated_routers.sh
+inventory/hosts.local.yml                  # Git 忽略，本地拓扑
+inventory/vault.local.yml                  # Git 忽略，Ansible Vault
+inventory/group_vars/all.yml               # tracked 非敏感运行时真相源
+  -> scripts/deploy_dedicated_routers.sh    # 唯一主操作入口
 ```
 
-含义：
+tracked `inventory/hosts*.yml` 只用于脱敏示例与 CI。不要直接在其中写入真实 IP、
+SSH 密码、私钥路径或 Secret。历史 `inventory/group_vars/all-*.yml` 不是运行时
+配置。
 
-- `inventory/hosts-with-dedicated-routers.yml`：推荐生产候选拓扑，定义哪些机器属于 MySQL、Router、HAProxy。
-- `inventory/group_vars/all.yml`：唯一运行时主配置，定义版本、密码、端口、profile、备份、HAProxy、Keepalived、Router 参数。
-- `scripts/deploy_dedicated_routers.sh`：主操作入口，部署、检查、扩缩容、滚动配置和备份都从这里走。
+推荐拓扑：
 
-不要把 `inventory/group_vars/all-*.yml` 当作当前配置，它们只是历史快照。
+- 3 个 MySQL InnoDB Cluster 节点
+- 至少 2 个独立 Router 节点
+- 至少 2 个 HAProxy + Keepalived 节点
 
-## 2. 第一次部署怎么做
+应用链路固定为：
+
+```text
+App -> HAProxy VIP -> MySQL Router -> InnoDB Cluster
+```
+
+HAProxy 不支持直接指向静态 MySQL primary。
+
+## 2. 首次准备
 
 ### 2.1 安装本地依赖
+
+控制节点要求 Python 3.12+。所有目标节点必须预装 Python 3.9+；
+RHEL 8 在首次连接前需安装 `python39`。
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install --upgrade pip
-pip install -r requirements.txt
-ansible-galaxy collection install -r collections/requirements.yml
+python -m pip install --requirement requirements.txt
+ansible-galaxy collection install --requirements-file collections/requirements.yml
+python -m pip check
 ```
 
-### 2.2 选择 inventory
+`requirements.txt` 只安装控制节点的 `ansible-core`。Ansible collections 由
+`collections/requirements.yml` 安装；目标 PyMySQL 由安装 playbook 从可信系统
+仓库部署。
 
-推荐直接使用：
+### 2.2 创建本地 inventory
 
 ```bash
-inventory/hosts-with-dedicated-routers.yml
+./scripts/setup-servers.sh
 ```
 
-这份 inventory 表达的是：
+默认输出是 Git 忽略的 `inventory/hosts.local.yml`。向导会：
 
-- 3 台 MySQL InnoDB Cluster 节点
-- 2 台独立 MySQL Router 节点
-- 2 台 HAProxy + Keepalived 节点
+- 收集 3 MySQL + 2 Router + 2 HAProxy 拓扑
+- 写入 `StrictHostKeyChecking=yes`
+- 为该集群生成唯一 `mysql_group_replication_group_name_override`
+- 不向 inventory 写入 MySQL 明文密码
 
-如果不知道其他 inventory 是什么，先看 `inventory/README.md`，不要猜。
+先通过可信渠道核验每台主机的 SSH fingerprint，再将公钥写入本机
+`~/.ssh/known_hosts`。不得使用 `StrictHostKeyChecking=no` 或
+`UserKnownHostsFile=/dev/null` 绕过校验。
 
-### 2.3 修改主机拓扑
+每个 MySQL 节点必须有唯一 `mysql_server_id`，每个 HAProxy 节点应设置不同的
+`keepalived_priority`。
 
-编辑：
+### 2.3 创建 Vault
 
 ```bash
-vim inventory/hosts-with-dedicated-routers.yml
+ansible-vault create inventory/vault.local.yml
 ```
 
-至少替换：
+加密文件至少包含：
 
-- `ansible_host`
-- `ansible_user`
-- `ansible_ssh_pass` 或 SSH key 配置
-- MySQL 节点的 `mysql_server_id`
-- HAProxy 节点的 `keepalived_priority`
+```yaml
+mysql_root_password: "CHANGE_ME_ROOT_PASSWORD"
+mysql_cluster_password: "CHANGE_ME_CLUSTER_PASSWORD"
+mysql_replication_password: "CHANGE_ME_REPLICATION_PASSWORD"
+keepalived_auth_pass: "CHANGE_ME"
+```
 
-要求：
+`keepalived_auth_pass` 必须不是占位值，且最长 8 个字符。Vault 文件可以保留在
+本地 inventory 目录，也可以由 CI/CD Secret 或外部 Secret Manager 在运行时
+生成；不得提交解密后的值或 Vault 口令。
 
-- MySQL 至少 3 节点。
-- Router 至少 2 节点。
-- HAProxy / Keepalived 至少 2 节点。
-- 每个 MySQL 节点的 `mysql_server_id` 必须唯一。
+主入口支持三类 Ansible 参数透传：
 
-### 2.4 修改运行时主配置
+```text
+-e / --extra-vars <表达式或 @文件>
+--ask-vault-pass
+--vault-password-file <受保护文件>
+```
 
-编辑：
+后文以交互式 Vault 为例：
 
 ```bash
-vim inventory/group_vars/all.yml
+INVENTORY=inventory/hosts.local.yml
+COMMON_ARGS=(--ask-vault-pass -e @inventory/vault.local.yml)
 ```
 
-第一次部署至少确认：
+### 2.4 修改非敏感主配置
+
+编辑 `inventory/group_vars/all.yml`，至少确认：
 
 ```yaml
 mysql_release_line: "8.4"
 mysql_hardware_profile: "optimized_8c32g"
-
-mysql_root_password: "CHANGE_ME_ROOT_PASSWORD"
-mysql_cluster_password: "CHANGE_ME_CLUSTER_PASSWORD"
-mysql_replication_password: "CHANGE_ME_REPLICATION_PASSWORD"
+mysql_datadir: "/data/mysql"
 
 keepalived_interface: "{{ ansible_default_ipv4.interface | default('eth0') }}"
-keepalived_vip: "192.168.1.100"
+keepalived_vip: "10.20.30.100"
 ```
 
-必须替换所有 `CHANGE_ME_*`。生产环境建议使用 Ansible Vault 或外部 Secret，不要提交真实密码。
+主配置中的 `192.0.2.100` 是 RFC 5737 文档地址，preflight 必定阻断。必须覆盖为
+目标环境已确认且未冲突的 IPv4；真实私网中的 `192.168.1.100` 是合法候选。
 
-### 2.5 部署前检查
+集群 UUID 不直接修改默认表达式，而是由本地 inventory 覆盖：
 
-先跑不改目标机器的本地检查：
+```yaml
+mysql_group_replication_group_name_override: "UNIQUE-UUID-FOR-THIS-CLUSTER"
+```
+
+## 3. 部署前检查
+
+### 3.1 本地静态门
 
 ```bash
 git diff --check
 bash -n deploy.sh validate_deployment.sh scripts/*.sh
-./.venv/bin/ansible-inventory -i inventory/hosts-with-dedicated-routers.yml --list >/tmp/inventory-dedicated.json
-./.venv/bin/ansible-playbook -i inventory/hosts-with-dedicated-routers.yml playbooks/site.yml --syntax-check
+./.venv/bin/python -m unittest discover tests
+npx --yes markdownlint-cli2@0.23.2
+./.venv/bin/yamllint .
+./.venv/bin/ansible-inventory -i "$INVENTORY" \
+  "${COMMON_ARGS[@]}" --list >/tmp/mysql-cluster-inventory.json
+./.venv/bin/ansible-playbook -i "$INVENTORY" \
+  "${COMMON_ARGS[@]}" playbooks/site.yml --syntax-check
 ```
-
-再跑会连接目标机器、但不安装服务的前置检查：
-
-```bash
-./scripts/deploy_dedicated_routers.sh --check-prereq -i inventory/hosts-with-dedicated-routers.yml
-```
-
-`--check-prereq` 会验证：
-
-- MySQL / Router / HAProxy 节点数量是否满足最小 HA 要求
-- MySQL 密码是否仍是占位符
-- inventory 中 SSH 密码是否仍是示例值
-- `mysql_server_id` 是否存在且唯一
-- MySQL 发行线配置是否一致
-- 备份配置在启用时是否完整
-- Keepalived 网卡名是否存在
-
-### 2.6 执行部署
-
-确认以上检查通过后执行：
-
-```bash
-./scripts/deploy_dedicated_routers.sh --production-ready -i inventory/hosts-with-dedicated-routers.yml
-```
-
-部署完成后查看状态：
-
-```bash
-./scripts/deploy_dedicated_routers.sh --status -i inventory/hosts-with-dedicated-routers.yml
-```
-
-## 3. Dry-run 应该怎么理解
-
-本仓库把 dry-run 分成三层。
-
-### 3.1 本地静态 dry-run
-
-不连接目标机器，只验证仓库、YAML、inventory 和 playbook 语法：
-
-```bash
-git diff --check
-bash -n deploy.sh validate_deployment.sh scripts/*.sh
-./.venv/bin/ansible-inventory -i inventory/hosts-with-dedicated-routers.yml --list >/tmp/inventory-dedicated.json
-./.venv/bin/ansible-playbook -i inventory/hosts-with-dedicated-routers.yml playbooks/site.yml --syntax-check
-```
-
-适合：
-
-- PR 前验证
-- 修改 inventory 后确认 YAML 和分组没写坏
-- 修改 playbook 后确认语法没写坏
 
 ### 3.2 目标环境 preflight
 
-连接目标机器，验证部署前条件，但不安装 MySQL、Router、HAProxy：
-
 ```bash
-./scripts/deploy_dedicated_routers.sh --check-prereq -i inventory/hosts-with-dedicated-routers.yml
+./scripts/deploy_dedicated_routers.sh --check-prereq \
+  -i "$INVENTORY" "${COMMON_ARGS[@]}"
 ```
 
-适合：
+preflight 会阻断：
 
-- 首次部署前
-- 改 inventory 后
-- 改密码、VIP、版本线、备份配置后
+- 节点数低于 HA 最小值
+- 密码、Keepalived 口令或 UUID 仍为占位值
+- MySQL `server_id` 缺失或重复
+- `mysql_datadir` 不是绝对路径
+- HAProxy 后端不是 `router`
+- VIP 是默认 `192.0.2.100`、其他 RFC 5737 文档地址、无效 / 回环 / 组播地址
+- 版本线、备份目标或 rsync `known_hosts` 参数不合法
+- 所选目标节点无法找到 Python 3.9+
+- Keepalived 网卡不存在
 
-### 3.3 Ansible check mode
+`--mysql-only` 会显式关闭 Router / HAProxy 数量要求，但不会放宽 MySQL 或 Secret
+检查。
 
-Ansible 支持 `--check --diff`，但本仓库包含包安装、MySQL Shell、Router bootstrap、系统服务和 shell 命令，并不是每个任务都能完整模拟。
+### 3.3 Check mode 的边界
 
-可以在 staging 中把它当作“额外预览”：
-
-```bash
-./.venv/bin/ansible-playbook -i inventory/hosts-with-dedicated-routers.yml playbooks/site.yml --check --diff
-```
-
-不要把 check mode 通过理解成真实部署一定成功。最终仍以 staging 部署、健康检查、故障演练和恢复演练为准。
-
-## 4. 已经部署过，再执行会不会有风险
-
-设计目标是保持幂等和收敛，但不是“零影响”。
-
-### 4.1 相对安全的重复操作
-
-这些操作可以反复执行，用于检查或读取状态：
+可以在隔离 staging 预览：
 
 ```bash
-./scripts/deploy_dedicated_routers.sh --check-prereq -i inventory/hosts-with-dedicated-routers.yml
-./scripts/deploy_dedicated_routers.sh --status -i inventory/hosts-with-dedicated-routers.yml
-./scripts/deploy_dedicated_routers.sh --test-connection -i inventory/hosts-with-dedicated-routers.yml
+./.venv/bin/ansible-playbook -i "$INVENTORY" \
+  "${COMMON_ARGS[@]}" playbooks/site.yml --check --diff
 ```
 
-### 4.2 首次部署后不建议随手重复全量部署
+包安装、MySQL Shell、Router bootstrap 和 systemd 任务不能全部被 check mode
+真实模拟。该结果不是部署成功证据。
 
-`--production-ready` 是完整部署 / 收敛入口。它会执行：
+## 4. 首次部署与状态门
 
-- preflight
-- 内核优化
-- MySQL 安装与配置
-- InnoDB Cluster 配置
-- Router 部署
-- HAProxy / Keepalived 部署
-- 健康检查
+```bash
+./scripts/deploy_dedicated_routers.sh --production-ready \
+  -i "$INVENTORY" "${COMMON_ARGS[@]}"
+```
 
-这些 playbook 尽量使用 Ansible 幂等模块和条件判断，但重复执行仍可能：
+默认顺序是 preflight、内核优化、MySQL、Cluster、Router、HAProxy、Keepalived 和
+健康检查。仅在明确不希望本轮改变内核参数时添加
+`--skip-kernel-optimization`。
 
-- 重新渲染配置
-- 重启或 reload 服务
-- 再次执行内核优化
-- 触发包管理器检查
-- 对入口层产生短暂扰动
+部署后可重复执行：
 
-所以生产环境中不要把 `--production-ready` 当作日常状态检查命令。已经部署后，优先使用 `--status`、`--check-prereq`、`--apply-config` 或具体的扩缩容入口。
+```bash
+./scripts/deploy_dedicated_routers.sh --status \
+  -i "$INVENTORY" "${COMMON_ARGS[@]}"
+```
 
-如确实需要重新收敛全量部署，应在维护窗口执行，并先在 staging 验证。
+`--status` 调用 `scripts/health-check-ha.sh`，后者执行
+`playbooks/validate-ha.yml`：先运行 profile 对应的 preflight，再运行
+fail-closed 健康检查。`--test-connection` 使用同一组合门，并不是绕过 preflight
+的单纯端口探测。
 
-### 4.3 Router bootstrap 的幂等边界
+以下任何一项失败都会返回非零：
 
-Router 默认不会重复 bootstrap：
+- 任一 inventory MySQL 节点不是本地 Group Replication `ONLINE` 成员
+- InnoDB Cluster 状态不严格等于 `OK`，或 topology / ONLINE 数量与 inventory
+  不一致
+- 任一 Router 的服务或 `6446 / 6447 / 6450` 监听失败
+- 任一入口节点的 HAProxy / Keepalived 服务失败
+- `3307 / 3308 / 3309` 任一 HAProxy 端口未监听
+- VIP 未绑定，或同时绑定到多个 `haproxy_lb` 节点；健康状态要求恰好一处
+
+不要使用 `|| true`、禁用失败检查或只读日志文本来绕过该门。
+
+## 5. 重复执行与配置变更
+
+### 5.1 全量部署不是日常状态命令
+
+`--production-ready` 以收敛为目标，但可能重新渲染配置、检查软件包、reload /
+restart 服务和再次应用内核参数。已部署环境优先使用 `--status`、
+`--check-prereq`、`--apply-config` 或具体操作，并在维护窗口执行有扰动的变更。
+
+### 5.2 Router bootstrap
+
+默认：
 
 ```yaml
 mysql_router_rebootstrap: false
 ```
 
-只有在明确需要重新 bootstrap Router 时才改为 `true`。改完后应再改回 `false`，避免后续重复执行造成不必要扰动。
+存在 bootstrap 配置时会跳过。只有明确恢复或重建 Router 时才临时设置为 `true`；
+完成后恢复 `false`。bootstrap 不配置跨节点共享 Router 账号，密码通过标准输入
+传递。
 
-### 4.4 破坏性操作必须显式
+### 5.3 集群配置
 
-这些操作不会隐藏在普通部署中，必须显式指定：
+集群 playbook 会查询成员身份：
+
+- 已是成员：跳过 `configureInstance`
+- standalone：运行 `checkInstanceConfiguration`，要求 Ansible 管理的配置已合格，
+  再加入集群
+- 结束时：要求 Cluster `OK` 且 inventory 预期成员全部 `ONLINE`
+
+这仍不能替代真实维护窗口中的重复执行和故障演练。
+
+### 5.4 自定义 datadir
+
+安装流程会先让发行包在默认 `/var/lib/mysql` 完成初始化，再在目标
+`mysql_datadir` 未初始化且为空时使用 rsync 迁移。它会：
+
+- 拒绝覆盖非空、未识别的目标目录
+- 迁移前写入 0600 中断标记；重跑发现标记时允许继续幂等 rsync，完成后写入
+  完成标记并清理中断标记
+- 停止 MySQL 后迁移并收敛 owner / mode
+- 为 Debian / Ubuntu 配置 AppArmor
+- 为启用 SELinux 的 RedHat 节点持久配置 datadir / logdir 文件上下文并运行
+  `restorecon`
+- 运行 `mysqld --validate-config`
+- 启动后查询 `@@datadir` 并要求与配置一致
+
+RedHat 重跑还会先创建 0600 临时 option file，用目标 root 密码执行无副作用
+`SELECT 1`。密码已生效时跳过临时密码重置；只有探测失败且找到首次临时密码时才
+重置，二者均不可用时 fail closed。临时文件和相关任务保持 `no_log`。
+
+已有数据的迁移仍应先备份，并在 staging 验证停机窗口和回滚。
+
+### 5.5 滚动应用
+
+修改 `inventory/group_vars/all.yml` 后：
 
 ```bash
-./scripts/deploy_dedicated_routers.sh --scale-mysql-remove --target <host> --new-primary <host> -i inventory/hosts-with-dedicated-routers.yml
-./scripts/deploy_dedicated_routers.sh --shrink-router --limit <router-host> -i inventory/hosts-with-dedicated-routers.yml
-./scripts/deploy_dedicated_routers.sh --shrink-lb --limit <haproxy-host> -i inventory/hosts-with-dedicated-routers.yml
+./scripts/deploy_dedicated_routers.sh --check-prereq \
+  -i "$INVENTORY" "${COMMON_ARGS[@]}"
+./scripts/deploy_dedicated_routers.sh --apply-config \
+  -i "$INVENTORY" "${COMMON_ARGS[@]}"
 ```
 
-MySQL 缩容默认不清理数据目录：
+`--apply-config` 完成后运行同一 fail-closed 健康门。
+
+## 6. 扩缩容
+
+### 6.1 新增 MySQL 节点
+
+先将新节点加入本地 inventory，再执行：
+
+```bash
+./scripts/deploy_dedicated_routers.sh --scale-mysql-add \
+  --limit mysql-node4 -i "$INVENTORY" "${COMMON_ARGS[@]}"
+```
+
+`--limit` 必须精确匹配一台 MySQL 主机。
+
+### 6.2 移除 MySQL 节点
+
+```bash
+./scripts/deploy_dedicated_routers.sh --scale-mysql-remove \
+  --target mysql-node3 --new-primary mysql-node2 \
+  -i "$INVENTORY" "${COMMON_ARGS[@]}"
+```
+
+流程会唯一识别目标 UUID 和当前 ONLINE primary。移除当前 primary 时必须提供
+不同且有效的 `--new-primary`；缩容后必须满足最小节点数，并再次确认 Cluster
+`OK` 和剩余成员全部 `ONLINE`。默认：
 
 ```yaml
 scale_policy:
   mysql_remove_cleanup_data: false
+  mysql_remove_stop_service: true
 ```
 
-只有确认备份、恢复路径和回滚方案后，才考虑改成清理数据。
+只有已确认备份、隔离恢复和回滚方案时才启用数据清理。
 
-## 5. 已部署后如何改配置
+缩容 playbook 结束时旧 inventory 仍包含已摘除节点，因此不会立即运行全栈
+`validate-ha.yml`。先从本地 inventory 删除目标，再执行 `--status`。
 
-### 5.1 修改 MySQL 参数
-
-1. 修改 `inventory/group_vars/all.yml`
-2. 确认变量已被 `roles/mysql-server/templates/my.cnf.j2` 使用
-3. 跑静态检查和 preflight
-4. 使用滚动配置入口
+### 6.3 缩容 Router 或入口节点
 
 ```bash
-./scripts/deploy_dedicated_routers.sh --apply-config -i inventory/hosts-with-dedicated-routers.yml
+./scripts/deploy_dedicated_routers.sh --shrink-router \
+  --limit router-node2 -i "$INVENTORY" "${COMMON_ARGS[@]}"
+./scripts/deploy_dedicated_routers.sh --shrink-lb \
+  --limit lb-node2 -i "$INVENTORY" "${COMMON_ARGS[@]}"
 ```
 
-`--apply-config` 会按当前主配置滚动应用 MySQL、Router、HAProxy、Keepalived 相关配置。生产环境建议维护窗口执行。
+`--limit` 必须在对应组中精确匹配一台主机，且删除后不能低于配置的最小节点数。
 
-### 5.2 切换硬件 profile
+## 7. 入口层
 
-只切换：
+- HAProxy 只连接 Router 的 RW、RO 和 R/W Split 端口。
+- 应用默认使用 VIP `3309`；显式 RW / RO 为 `3307 / 3308`。
+- stats 默认只监听 `127.0.0.1:8404`，如需远程查看请使用 SSH tunnel 或受控
+  监控代理。
+- Keepalived 使用 `/usr/bin/systemctl is-active --quiet haproxy`，
+  `weight 0`；连续 `keepalived_check_fall` 次失败后实例进入 `FAULT` 并释放 VIP，
+  连续 `keepalived_check_rise` 次成功后恢复。
+- `/etc/keepalived/keepalived.conf` 含认证口令，保持 root 所有、`0600`，Ansible
+  模板渲染任务使用 `no_log`。
+- `--rollback` 按 Keepalived、HAProxy、Router 顺序停止入口层；任一步失败会返回
+  非零，且不会删除 MySQL 数据。恢复应重新运行相应安装 / 配置入口并通过健康门。
 
-```yaml
-mysql_hardware_profile: "optimized_8c32g"
-```
+## 8. 备份
 
-不要新增或复制整份 `group_vars/all-xxx.yml` 作为运行配置。
+`backup_config.enabled` 默认是 `false`。支持：
 
-可使用：
+- `method: logical`：MySQL Shell `util.dumpInstance`
+- `method: xtrabackup`：Percona XtraBackup
+- `type: local | nfs | rsync`
+
+执行：
 
 ```bash
-./scripts/config_manager.sh
+./scripts/deploy_dedicated_routers.sh --backup \
+  -i "$INVENTORY" "${COMMON_ARGS[@]}"
 ```
 
-切换后执行：
+供应链与传输约束：
 
-```bash
-./scripts/deploy_dedicated_routers.sh --check-prereq -i inventory/hosts-with-dedicated-routers.yml
-./scripts/deploy_dedicated_routers.sh --apply-config -i inventory/hosts-with-dedicated-routers.yml
-```
+- MySQL GPG key 和 Percona release 安装包必须匹配 `all.yml` 固定 SHA-256。
+- Percona 仓库只通过 HTTPS 启用。
+- rsync 目标必须预先核验 fingerprint，并配置绝对路径
+  `backup_config.ssh_known_hosts_file`。
+- rsync 强制 BatchMode 和严格主机密钥校验。
+- `known_hosts` 必须是 root 所有的普通文件，且 group / other 不可写；可选
+  `ssh_key_path` 必须是 root 所有普通文件，权限只能为 `0400` 或 `0600`。
+- 压缩 XtraBackup 同时启用 `prepare: true` 时，先运行
+  `xtrabackup --decompress`，再运行 `xtrabackup --prepare`。
+- 数据库密码不放入命令行参数。
 
-### 5.3 修改 VIP 或 HAProxy 入口
+备份任务成功不代表可恢复。至少选择一种备份方法在隔离环境执行 restore drill。
 
-修改：
+辅助 `cluster-status.sh` / `failover-test.sh` 只允许隐藏交互输入，或由自动化通过
+受保护的 `MYSQL_CLUSTER_PASSWORD` 环境变量注入；密码经
+`--passwords-from-stdin` 送入 mysqlsh，不得作为位置参数或 `--password` argv。
+`failover-test.sh` 还要求隔离环境显式设置 `ALLOW_FAILOVER_DRILL=1`。
 
-```yaml
-keepalived_interface: "ens192"
-keepalived_vip: "10.20.30.100"
-haproxy_mysql_rw_port: 3307
-haproxy_mysql_ro_port: 3308
-haproxy_mysql_rwsplit_port: 3309
-```
+## 9. 真实环境验收
 
-然后执行：
+静态检查和 CI 仅证明仓库可解析、契约检查通过。生产变更前仍需留存：
 
-```bash
-./scripts/deploy_dedicated_routers.sh --check-prereq -i inventory/hosts-with-dedicated-routers.yml
-./scripts/deploy_dedicated_routers.sh --configure-lb -i inventory/hosts-with-dedicated-routers.yml
-./scripts/deploy_dedicated_routers.sh --status -i inventory/hosts-with-dedicated-routers.yml
-```
+- staging 首次部署与重复收敛记录
+- MySQL / Router / HAProxy / Keepalived 故障演练
+- VIP 漂移和业务端重连验证
+- 扩容、切主、缩容记录
+- 逻辑或物理备份的隔离恢复记录
+- 容量和性能验证
 
-### 5.4 修改备份配置
-
-修改 `backup_config`，例如：
-
-```yaml
-backup_config:
-  enabled: true
-  method: "logical"
-  type: "rsync"
-  base_dir: "/backup/mysql"
-  remote_host: "10.20.40.20"
-  remote_user: "backup"
-  remote_dir: "/data/mysql-backups"
-```
-
-先检查：
-
-```bash
-./scripts/deploy_dedicated_routers.sh --check-prereq -i inventory/hosts-with-dedicated-routers.yml
-```
-
-再手动执行一次备份：
-
-```bash
-./scripts/deploy_dedicated_routers.sh --backup -i inventory/hosts-with-dedicated-routers.yml
-```
-
-备份恢复验证必须在隔离环境执行，不能只看备份命令成功。
-
-## 6. 常见任务入口
-
-| 任务 | 推荐命令 |
-| --- | --- |
-| 部署前检查 | `./scripts/deploy_dedicated_routers.sh --check-prereq -i inventory/hosts-with-dedicated-routers.yml` |
-| 完整首次部署 | `./scripts/deploy_dedicated_routers.sh --production-ready -i inventory/hosts-with-dedicated-routers.yml` |
-| 查看状态 | `./scripts/deploy_dedicated_routers.sh --status -i inventory/hosts-with-dedicated-routers.yml` |
-| 修改配置后滚动应用 | `./scripts/deploy_dedicated_routers.sh --apply-config -i inventory/hosts-with-dedicated-routers.yml` |
-| 仅部署 / 重配 Router | `./scripts/deploy_dedicated_routers.sh --install-routers -i inventory/hosts-with-dedicated-routers.yml` |
-| 仅部署 / 重配 HAProxy + Keepalived | `./scripts/deploy_dedicated_routers.sh --configure-lb -i inventory/hosts-with-dedicated-routers.yml` |
-| 新增 MySQL 节点 | `./scripts/deploy_dedicated_routers.sh --scale-mysql-add --limit <new-host> -i inventory/hosts-with-dedicated-routers.yml` |
-| 移除 MySQL 节点 | `./scripts/deploy_dedicated_routers.sh --scale-mysql-remove --target <host> --new-primary <host> -i inventory/hosts-with-dedicated-routers.yml` |
-| 缩容 Router | `./scripts/deploy_dedicated_routers.sh --shrink-router --limit <router-host> -i inventory/hosts-with-dedicated-routers.yml` |
-| 缩容 HAProxy | `./scripts/deploy_dedicated_routers.sh --shrink-lb --limit <haproxy-host> -i inventory/hosts-with-dedicated-routers.yml` |
-| 执行一次备份 | `./scripts/deploy_dedicated_routers.sh --backup -i inventory/hosts-with-dedicated-routers.yml` |
-
-## 7. 每次变更后的最低验收
-
-文档或 inventory 变更：
-
-```bash
-git diff --check
-npx --yes markdownlint-cli2
-./.venv/bin/ansible-inventory -i inventory/hosts-with-dedicated-routers.yml --list >/tmp/inventory-dedicated.json
-./.venv/bin/ansible-playbook -i inventory/hosts-with-dedicated-routers.yml playbooks/site.yml --syntax-check
-```
-
-脚本、playbook、模板或变量行为变更：
-
-```bash
-git diff --check
-bash -n deploy.sh validate_deployment.sh scripts/*.sh
-./.venv/bin/ansible-playbook -i inventory/hosts.yml playbooks/site.yml --syntax-check
-./.venv/bin/ansible-playbook -i inventory/hosts-ha-reference.yml playbooks/site.yml --syntax-check
-./.venv/bin/ansible-playbook -i inventory/hosts-with-dedicated-routers.yml playbooks/site.yml --syntax-check
-./.venv/bin/ansible-inventory -i inventory/hosts.yml --list >/tmp/inventory-hosts.json
-./.venv/bin/ansible-inventory -i inventory/hosts-ha-reference.yml --list >/tmp/inventory-ha.json
-./.venv/bin/ansible-inventory -i inventory/hosts-with-dedicated-routers.yml --list >/tmp/inventory-dedicated.json
-```
-
-真实上线前还需要：
-
-- staging 部署记录
-- HA 故障演练记录
-- 备份恢复演练记录
-- 业务连接验证
-
-静态检查通过只能说明语法和 inventory 解析通过，不能证明生产就绪。
+记录模板在 `docs/templates/`。如果没有执行，应准确写“真实环境验证仍待完成”。

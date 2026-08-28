@@ -15,12 +15,21 @@
   gather_facts: true
   become: yes
   tasks:
+    - name: 要求缩容精确匹配一台 LB 且保留最小节点数
+      ansible.builtin.assert:
+        that:
+          - ansible_play_hosts_all | length == 1
+          - (groups['haproxy_lb'] | length - 1) >= (haproxy_ha_min_nodes | int)
+        fail_msg: >-
+          LB 缩容必须精确匹配一台主机，且缩容后不得低于
+          haproxy_ha_min_nodes。
+      run_once: true
+
     - name: 停止 Keepalived
       systemd:
         name: keepalived
         state: stopped
         enabled: no
-      failed_when: false
 
     - name: 停止 HAProxy
       systemd:

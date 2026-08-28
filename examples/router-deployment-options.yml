@@ -9,8 +9,8 @@ recommended:
   inventory: "inventory/hosts-with-dedicated-routers.yml"
   apply_command: "./scripts/deploy_dedicated_routers.sh --production-ready -i inventory/hosts-with-dedicated-routers.yml"
   connections:
-    vip_rw: "mysql://user:password@192.168.1.100:3307/database"
-    vip_ro: "mysql://user:password@192.168.1.100:3308/database"
+    vip_rw: "mysql://user:password@192.0.2.100:3307/database"
+    vip_ro: "mysql://user:password@192.0.2.100:3308/database"
     router_rw: "mysql://user:password@192.168.1.20:6446/database"
     router_ro: "mysql://user:password@192.168.1.20:6447/database"
 

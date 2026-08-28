@@ -38,9 +38,8 @@ all:
     # SSH连接配置
     ansible_user: ansible
     ansible_ssh_private_key_file: ~/.ssh/production_key
-    ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
-    
+
     # 生产环境安全配置
     mysql_root_password: "{{ vault_mysql_root_password }}"
     mysql_cluster_password: "{{ vault_mysql_cluster_password }}"
-    mysql_replication_password: "{{ vault_mysql_replication_password }}" 
+    mysql_replication_password: "{{ vault_mysql_replication_password }}"

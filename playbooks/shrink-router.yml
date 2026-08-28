@@ -15,6 +15,16 @@
   gather_facts: true
   become: yes
   tasks:
+    - name: 要求缩容精确匹配一台 Router 且保留最小节点数
+      ansible.builtin.assert:
+        that:
+          - ansible_play_hosts_all | length == 1
+          - (groups['mysql_router'] | length - 1) >= (router_ha_min_nodes | int)
+        fail_msg: >-
+          Router 缩容必须精确匹配一台主机，且缩容后不得低于
+          router_ha_min_nodes。
+      run_once: true
+
     - name: 停止 Router 服务
       systemd:
         name: mysqlrouter

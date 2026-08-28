@@ -21,7 +21,7 @@
 - 支持 MySQL 扩容与缩容
 - 支持 Router / HAProxy 缩容
 - 支持滚动应用当前配置
-- 支持可选备份流程
+- 支持可选 MySQL Shell 逻辑备份与 Percona XtraBackup 物理备份
 - 提供部署前检查、静态校验、证据留存和演练模板
 
 仓库的维护目标不是堆更多脚本，而是把部署、运维和文档持续收敛到同一条生产候选主线。
@@ -36,6 +36,9 @@ Application
   -> MySQL Router cluster
   -> MySQL InnoDB Cluster
 ```
+
+HAProxy 后端只允许指向 Router。不要恢复“HAProxy 直接连接静态 MySQL
+primary”的路径；该路径会在主从切换后把写流量继续送往旧主节点。
 
 默认高可用基线：
 
@@ -53,6 +56,10 @@ Application
 - Router 强制读写：`6446`
 - Router 强制只读：`6447`
 
+`keepalived_vip` 的仓库默认值是 RFC 5737 文档地址 `192.0.2.100`，会被
+preflight 主动阻断。部署时必须覆盖为目标环境已确认的合法 IPv4；例如真实私网中
+可使用未冲突的 `192.168.1.100`。
+
 ## 3. Single Sources Of Truth
 
 运行时主配置：
@@ -63,6 +70,12 @@ Application
 
 - `scripts/deploy_dedicated_routers.sh`
 
+组合验证入口：
+
+- `playbooks/validate-ha.yml`
+- 顺序导入 `preflight-ha.yml` 和 `health-check-ha.yml`
+- `scripts/health-check-ha.sh`、`--status` 与 `--test-connection` 使用该组合门
+
 兼容包装入口：
 
 - `deploy.sh`
@@ -72,9 +85,12 @@ Application
 - `scripts/config_manager.sh`
 - 只应切换 `mysql_hardware_profile`
 
-CI 静态质量门：
+CI 与依赖治理：
 
 - `.github/workflows/ansible-ci.yml`
+- `.github/workflows/docs-quality.yml`
+- `.github/workflows/codeql.yml`
+- `.github/dependabot.yml`
 
 主用户文档：
 
@@ -106,6 +122,8 @@ CI 静态质量门：
 ├── playbooks/
 ├── roles/
 ├── scripts/
+├── tests/
+├── .github/dependabot.yml
 ├── docs/
 │   ├── index.md
 │   ├── runbooks/
@@ -115,6 +133,10 @@ CI 静态质量门：
 │   ├── templates/
 │   └── decisions/
 └── .github/workflows/
+    ├── ansible-ci.yml
+    ├── codeql.yml
+    ├── docs-quality.yml
+    └── pages.yml
 ```
 
 文档分层：
@@ -167,6 +189,10 @@ CI 静态质量门：
 - 不要绕过 `scripts/deploy_dedicated_routers.sh` 新建主流程。
 - 兼容入口 `deploy.sh` 不应承载新能力。
 - 破坏性操作必须显式，不能隐藏在普通部署流程里。
+- Ansible Vault 参数必须由主入口通过 `-e`、`--ask-vault-pass` 或
+  `--vault-password-file` 透传，不要创建绕过主入口的秘密加载脚本。
+- 真实 inventory、Vault 文件、私钥和主机指纹文件只能放在 Git 忽略的本地文件中；
+  tracked inventory 只保留脱敏示例。
 
 文档规则：
 
@@ -180,10 +206,32 @@ CI 静态质量门：
 
 - 重复部署不能摧毁健康节点。
 - Router 不应在未明确要求时重新 bootstrap。
+- InnoDB Cluster 重复执行时应识别已有成员；只有 standalone 节点才运行
+  `checkInstanceConfiguration` 并加入集群，已有成员不得重复运行
+  `configureInstance`，最终必须确认预期成员全部 `ONLINE`。
 - 配置应用应尽量滚动执行。
+- MySQL 缩容必须唯一识别目标成员和当前 primary；移除当前 primary 前必须显式切主，
+  缩容后必须再次确认集群为 `OK` 且剩余成员全部 `ONLINE`。
+- Router / HAProxy 缩容必须精确匹配一台主机，并满足缩容后的最小节点数。
 - 缩容、删除、覆盖数据等动作必须显式。
 - 备份默认 opt-in，不能默认开启。
 - 恢复流程应要求人工确认，不做一键覆盖生产数据。
+- 自定义 datadir 迁移必须保留中断标记和可重入 rsync；Debian / Ubuntu 同步
+  AppArmor，启用 SELinux 的 RedHat 节点持久设置文件上下文并执行 `restorecon`。
+- RedHat root 初始化重跑时应先用 0600 临时 option file 探测目标密码；目标密码
+  已生效时跳过临时密码重置，无法探测且找不到首次临时密码时 fail closed。
+- Keepalived 配置含 VRRP 口令，模板目标权限必须保持 `0600`，渲染任务保持
+  `no_log: true`。
+- SSH 必须严格校验主机密钥；不得加入
+  `StrictHostKeyChecking=no` 或 `UserKnownHostsFile=/dev/null`。
+- rsync 备份的 `known_hosts` 必须是 root 所有、不可被 group/other 写入的普通
+  文件；可选私钥必须是 root 所有且权限为 `0400` 或 `0600`。
+- 压缩 XtraBackup 在同一任务要求 prepare 时必须先执行 `--decompress`，再执行
+  `--prepare`。
+- `cluster-status.sh` 与 `failover-test.sh` 等辅助脚本不得把 MySQL 密码放入
+  argv；交互时隐藏读取，自动化使用受保护环境变量，并通过 stdin 交给 mysqlsh。
+- 每个独立集群必须通过 `mysql_group_replication_group_name_override`
+  提供唯一 UUID，不能使用仓库占位 UUID。
 
 高风险文件：
 
@@ -191,6 +239,8 @@ CI 静态质量门：
 - `playbooks/install-mysql.yml`
 - `playbooks/configure-cluster.yml`
 - `playbooks/install-router.yml`
+- `playbooks/validate-ha.yml`
+- `playbooks/health-check-ha.yml`
 - `playbooks/backup.yml`
 - `roles/mysql-server/templates/my.cnf.j2`
 - `roles/mysql-router/templates/mysqlrouter.service.j2`
@@ -207,8 +257,9 @@ CI 静态质量门：
 ```bash
 git diff --check
 bash -n deploy.sh validate_deployment.sh scripts/*.sh
-npx --yes markdownlint-cli2
+npx --yes markdownlint-cli2@0.23.2
 ./.venv/bin/yamllint .
+./.venv/bin/python -m unittest discover tests
 ./.venv/bin/ansible-playbook -i inventory/hosts.yml playbooks/site.yml --syntax-check
 ./.venv/bin/ansible-playbook -i inventory/hosts-ha-reference.yml playbooks/site.yml --syntax-check
 ./.venv/bin/ansible-playbook -i inventory/hosts-with-dedicated-routers.yml playbooks/site.yml --syntax-check
@@ -222,15 +273,25 @@ npx --yes markdownlint-cli2
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install --upgrade pip
-pip install -r requirements.txt
-ansible-galaxy collection install -r collections/requirements.yml
+python -m pip install --requirement requirements.txt
+ansible-galaxy collection install --requirements-file collections/requirements.yml
 ```
 
 注意：
 
+- 控制节点要求 Python 3.12+，且 `requirements.txt` 只安装 `ansible-core`；
+  collections 由 `collections/requirements.yml` 安装。目标节点在首次 Ansible
+  模块连接前必须预装 Python 3.9+，目标 PyMySQL 由可信系统仓库安装。
 - 静态验证通过只能说明语法和 inventory 解析通过。
 - 不能据此宣称生产可用、故障切换已验证或备份恢复已验证。
+- `--status` / `--test-connection` 通过 `validate-ha.yml` 先执行 preflight，
+  再执行 fail-closed 运行时健康门：每个 inventory MySQL 节点必须 `ONLINE`，
+  Cluster 为 `OK` 且成员数一致，启用的 Router、HAProxy、Keepalived 及端口必须
+  可用，VIP 必须恰好出现在一个 `haproxy_lb` 节点上。
+- CI 使用固定 SHA 的 Actions、Python 3.12/3.13 矩阵、仓库契约测试、全部
+  playbook syntax-check、PowerShell parser、三个主 inventory 解析、阻断式
+  文档 lint 和 GitHub Actions CodeQL；Dependabot 每周检查 pip 与 Actions
+  依赖。
 
 ## 9. Common Maintenance Tasks
 

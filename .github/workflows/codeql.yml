@@ -1,0 +1,44 @@
+name: codeql
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  schedule:
+    - cron: "23 3 * * 1"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze-actions:
+    name: Analyze GitHub Actions
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
+
+    # The Actions extractor covers workflow source only. Shell and Ansible
+    # remain covered by the repository's dedicated static validation gates.
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@cdf488f595d80d6e07e03d4674febd5ab45fa938  # v4
+        with:
+          languages: actions
+          build-mode: none
+
+      - name: Analyze GitHub Actions
+        uses: github/codeql-action/analyze@cdf488f595d80d6e07e03d4674febd5ab45fa938  # v4
+        with:
+          category: /language:actions

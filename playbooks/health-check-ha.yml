@@ -1,0 +1,186 @@
+---
+- name: 校验每个 inventory MySQL 节点都是 ONLINE 集群成员
+  hosts: mysql_cluster
+  gather_facts: false
+  become: true
+  tasks:
+    - name: 查询本机 Group Replication 成员状态
+      ansible.builtin.command:
+        argv:
+          - mysqlsh
+          - --no-wizard
+          - --passwords-from-stdin
+          - --uri
+          - "{{ mysql_cluster_user }}@127.0.0.1:{{ mysql_port }}"
+          - --js
+          - -e
+          - >-
+            var row = session.runSql(
+              "SELECT COUNT(*) FROM performance_schema.replication_group_members
+              WHERE MEMBER_ID = @@server_uuid AND MEMBER_STATE = 'ONLINE'"
+            ).fetchOne();
+            print('ANSIBLE_SELF_ONLINE=' + row[0]);
+        stdin: "{{ mysql_cluster_password }}\n"
+        stdin_add_newline: false
+      register: mysql_self_membership
+      changed_when: false
+      no_log: true
+
+    - name: 要求本机属于当前在线集群
+      ansible.builtin.assert:
+        that:
+          - "'ANSIBLE_SELF_ONLINE=1' in mysql_self_membership.stdout"
+        fail_msg: >-
+          {{ inventory_hostname }} 不在当前 Group Replication ONLINE 成员中。
+        success_msg: "{{ inventory_hostname }} 是 ONLINE 集群成员"
+
+- name: 校验 MySQL InnoDB Cluster 状态与成员数量
+  hosts: mysql_primary
+  gather_facts: false
+  become: true
+  vars:
+    mysql_expected_members: "{{ groups['mysql_cluster'] | length }}"
+  tasks:
+    - name: 读取集群健康状态
+      ansible.builtin.command:
+        argv:
+          - mysqlsh
+          - --no-wizard
+          - --passwords-from-stdin
+          - --uri
+          - "{{ mysql_cluster_user }}@127.0.0.1:{{ mysql_port }}"
+          - --js
+          - -e
+          - >-
+            var replicaSet = dba.getCluster(
+              '{{ mysql_cluster_name }}'
+            ).status().defaultReplicaSet;
+            var topology = replicaSet.topology;
+            var online = Object.keys(topology).filter(
+              function(key) { return topology[key].status === 'ONLINE'; }
+            ).length;
+            print(
+              'ANSIBLE_CLUSTER=' + replicaSet.status + '|' +
+              online + '|' + Object.keys(topology).length
+            );
+        stdin: "{{ mysql_cluster_password }}\n"
+        stdin_add_newline: false
+      register: mysql_cluster_health
+      changed_when: false
+      no_log: true
+
+    - name: 要求集群处于完整健康状态且成员数匹配 inventory
+      ansible.builtin.assert:
+        that:
+          - >-
+            (
+              'ANSIBLE_CLUSTER=OK|'
+              ~ (mysql_expected_members | string)
+              ~ '|'
+              ~ (mysql_expected_members | string)
+            ) in mysql_cluster_health.stdout
+        fail_msg: >-
+          InnoDB Cluster 未达到状态 OK、全部成员 ONLINE 且成员数与
+          inventory 一致的完整健康条件。
+        success_msg: >-
+          InnoDB Cluster 状态为 OK，{{ mysql_expected_members }}
+          个 inventory 成员均为 ONLINE
+
+- name: 校验 MySQL Router 服务和监听端口
+  hosts: >-
+    {{
+      'mysql_router'
+      if health_require_router | default(true) | bool
+      else 'localhost'
+    }}
+  gather_facts: false
+  become: "{{ health_require_router | default(true) | bool }}"
+  tasks:
+    - name: 检查 mysqlrouter 服务
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - is-active
+          - --quiet
+          - mysqlrouter
+      changed_when: false
+      when: health_require_router | default(true) | bool
+
+    - name: 检查 Router 监听端口
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: "{{ item }}"
+        state: started
+        timeout: 5
+      loop:
+        - "{{ mysql_router_port }}"
+        - "{{ mysql_router_ro_port }}"
+        - "{{ mysql_router_rwsplit_port }}"
+      when: health_require_router | default(true) | bool
+
+- name: 校验 HAProxy 和 Keepalived 服务
+  hosts: >-
+    {{
+      'haproxy_lb'
+      if health_require_haproxy | default(true) | bool
+      else 'localhost'
+    }}
+  gather_facts: "{{ health_require_haproxy | default(true) | bool }}"
+  become: "{{ health_require_haproxy | default(true) | bool }}"
+  tasks:
+    - name: 检查入口层服务
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - is-active
+          - --quiet
+          - "{{ item }}"
+      changed_when: false
+      loop:
+        - haproxy
+        - keepalived
+      when: health_require_haproxy | default(true) | bool
+
+    - name: 检查 HAProxy 监听端口
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: "{{ item }}"
+        state: started
+        timeout: 5
+      loop:
+        - "{{ haproxy_mysql_rw_port }}"
+        - "{{ haproxy_mysql_ro_port }}"
+        - "{{ haproxy_mysql_rwsplit_port }}"
+      when: health_require_haproxy | default(true) | bool
+
+- name: 校验 Keepalived VIP 归属
+  hosts: localhost
+  gather_facts: false
+  vars:
+    haproxy_ipv4_addresses: >-
+      {{
+        groups['haproxy_lb']
+        | map('extract', hostvars, 'ansible_all_ipv4_addresses')
+        | flatten
+        | list
+      }}
+  tasks:
+    - name: 要求 VIP 只出现在一个入口节点
+      ansible.builtin.assert:
+        that:
+          - >-
+            haproxy_ipv4_addresses
+            | select('equalto', keepalived_vip)
+            | list
+            | length == 1
+        fail_msg: >-
+          Keepalived VIP {{ keepalived_vip }} 未绑定，或同时出现在多个
+          haproxy_lb 节点上。
+        success_msg: "Keepalived VIP {{ keepalived_vip }} 已唯一绑定"
+      when: health_require_haproxy | default(true) | bool
+
+    - name: 输出健康检查结论
+      ansible.builtin.debug:
+        msg: >-
+          已启用的 MySQL Cluster、Router、HAProxy、Keepalived 和 VIP
+          健康检查均通过。

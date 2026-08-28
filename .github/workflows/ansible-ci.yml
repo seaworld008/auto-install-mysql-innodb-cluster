@@ -3,37 +3,179 @@ name: ansible-ci
 on:
   push:
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ansible-ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   validate:
+    name: Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version:
+          - "3.12"
+          - "3.13"
+
     steps:
-      - uses: actions/checkout@v4
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
-          python-version: '3.11'
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install ansible-core
+          python -m pip install --requirement requirements.txt
           ansible-galaxy collection install -r collections/requirements.yml
+          python -m pip check
+
       - name: Shell syntax check
+        run: bash -n deploy.sh validate_deployment.sh scripts/*.sh
+
+      - name: PowerShell syntax check
+        shell: pwsh
         run: |
-          bash -n deploy.sh validate_deployment.sh scripts/*.sh
-      - name: Syntax check
+          $tokens = $null
+          $parseErrors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path "validate_deployment.ps1"),
+            [ref] $tokens,
+            [ref] $parseErrors
+          ) > $null
+          if ($parseErrors.Count -gt 0) {
+            $parseErrors | ForEach-Object { Write-Error $_ }
+            exit 1
+          }
+
+      - name: Changed-lines whitespace validation
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
-          ansible-playbook -i inventory/hosts.yml playbooks/site.yml --syntax-check
-          ansible-playbook -i inventory/hosts-ha-reference.yml playbooks/site.yml --syntax-check
-          ansible-playbook -i inventory/hosts-with-dedicated-routers.yml playbooks/site.yml --syntax-check
-      - name: Inventory validation
+          zero_sha="0000000000000000000000000000000000000000"
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            base_sha="$PR_BASE_SHA"
+          elif [[ "$EVENT_NAME" == "push" &&
+                  "$PUSH_BEFORE_SHA" != "$zero_sha" ]]; then
+            base_sha="$PUSH_BEFORE_SHA"
+          elif git show-ref --verify --quiet \
+            "refs/remotes/origin/$DEFAULT_BRANCH"; then
+            merge_base="$(
+              git merge-base HEAD "refs/remotes/origin/$DEFAULT_BRANCH"
+            )"
+            if [[ "$merge_base" != "$(git rev-parse HEAD)" ]]; then
+              base_sha="$merge_base"
+            elif git rev-parse --verify HEAD^ >/dev/null 2>&1; then
+              base_sha="HEAD^"
+            else
+              base_sha="$(git hash-object -t tree /dev/null)"
+            fi
+          elif git rev-parse --verify HEAD^ >/dev/null 2>&1; then
+            base_sha="HEAD^"
+          else
+            base_sha="$(git hash-object -t tree /dev/null)"
+          fi
+          git diff --check "$base_sha" HEAD
+
+      - name: Python unit tests
+        run: python -m unittest discover tests
+
+      - name: Syntax-check every playbook
+        shell: bash
         run: |
-          ansible-inventory -i inventory/hosts.yml --list >/tmp/inv1.json
-          python -m json.tool /tmp/inv1.json >/dev/null
-          ansible-inventory -i inventory/hosts-ha-reference.yml --list >/tmp/inv2.json
-          python -m json.tool /tmp/inv2.json >/dev/null
-          ansible-inventory -i inventory/hosts-with-dedicated-routers.yml --list >/tmp/inv3.json
-          python -m json.tool /tmp/inv3.json >/dev/null
+          shopt -s nullglob
+          playbooks=(playbooks/*.yml)
+          if (( ${#playbooks[@]} == 0 )); then
+            echo "No playbooks found under playbooks/" >&2
+            exit 1
+          fi
+
+          for playbook in "${playbooks[@]}"; do
+            extra_vars=()
+            if [[ "$playbook" == "playbooks/shrink-mysql.yml" ]]; then
+              extra_vars=(
+                --extra-vars
+                "mysql_shrink_target=mysql-node3 mysql_shrink_new_primary=mysql-node2"
+              )
+            fi
+            ansible-playbook \
+              -i inventory/hosts-with-dedicated-routers.yml \
+              "$playbook" \
+              --syntax-check \
+              "${extra_vars[@]}"
+          done
+
+      - name: Primary inventory site syntax and JSON validation
+        shell: bash
+        run: |
+          inventories=(
+            inventory/hosts.yml
+            inventory/hosts-ha-reference.yml
+            inventory/hosts-with-dedicated-routers.yml
+          )
+
+          for inventory in "${inventories[@]}"; do
+            ansible-playbook -i "$inventory" playbooks/site.yml --syntax-check
+            ansible-inventory -i "$inventory" --list \
+              | python -m json.tool >/dev/null
+          done
+
       - name: Deprecated option guard
+        shell: bash
         run: |
-          ! rg -n "innodb_log_file_size|query_cache|NO_AUTO_CREATE_USER|expire_logs_days|log_slave_updates|slave_parallel|slave_preserve" roles/mysql-server/templates/my.cnf.j2 inventory/group_vars examples/hardware_profiles.yml
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          import sys
+
+          targets = (
+              Path("roles/mysql-server/templates/my.cnf.j2"),
+              Path("inventory/group_vars"),
+              Path("examples/hardware_profiles.yml"),
+          )
+          deprecated = re.compile(
+              r"innodb_log_file_size|query_cache|NO_AUTO_CREATE_USER|"
+              r"expire_logs_days|log_slave_updates|slave_parallel|slave_preserve"
+          )
+          violations: list[str] = []
+
+          for target in targets:
+              if not target.exists():
+                  raise FileNotFoundError(f"guard target does not exist: {target}")
+              files = (
+                  sorted(path for path in target.rglob("*") if path.is_file())
+                  if target.is_dir()
+                  else [target]
+              )
+              for path in files:
+                  for line_number, line in enumerate(
+                      path.read_text(encoding="utf-8").splitlines(),
+                      start=1,
+                  ):
+                      match = deprecated.search(line)
+                      if match:
+                          violations.append(
+                              f"{path}:{line_number}:{match.group(0)}"
+                          )
+
+          if violations:
+              print("Deprecated MySQL options detected:", file=sys.stderr)
+              print("\n".join(violations), file=sys.stderr)
+              raise SystemExit(1)
+          PY

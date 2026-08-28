@@ -41,21 +41,29 @@ Default high availability baseline:
 ## Quick Start
 
 ```bash
+# Control node: Python 3.12+; managed nodes: Python 3.9+
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install --upgrade pip
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 ansible-galaxy collection install -r collections/requirements.yml
 
-vim inventory/hosts-with-dedicated-routers.yml
-vim inventory/group_vars/all.yml
+./scripts/setup-servers.sh
+ansible-vault create inventory/vault.local.yml
 
-./scripts/deploy_dedicated_routers.sh --check-prereq -i inventory/hosts-with-dedicated-routers.yml
-./scripts/deploy_dedicated_routers.sh --production-ready -i inventory/hosts-with-dedicated-routers.yml
-./scripts/deploy_dedicated_routers.sh --status -i inventory/hosts-with-dedicated-routers.yml
+./scripts/deploy_dedicated_routers.sh --check-prereq \
+  -i inventory/hosts.local.yml \
+  --ask-vault-pass -e @inventory/vault.local.yml
+./scripts/deploy_dedicated_routers.sh --production-ready \
+  -i inventory/hosts.local.yml \
+  --ask-vault-pass -e @inventory/vault.local.yml
+./scripts/deploy_dedicated_routers.sh --status \
+  -i inventory/hosts.local.yml \
+  --ask-vault-pass -e @inventory/vault.local.yml
 ```
 
-Replace all `CHANGE_ME_*` placeholders before deployment. Production usage should rely on Ansible Vault, SSH keys, CI/CD secrets, or a dedicated secrets manager.
+The generated local inventory and Vault file are ignored by Git. Replace every
+`CHANGE_ME_*` value, use a unique Group Replication UUID per cluster, and verify
+each SSH host-key fingerprint through a trusted channel before connecting.
 
 ## Main Operations
 
@@ -78,6 +86,8 @@ All supported operator workflows should route through `scripts/deploy_dedicated_
 ```bash
 git diff --check
 bash -n deploy.sh validate_deployment.sh scripts/*.sh
+python -m unittest discover tests
+./validate_deployment.sh
 ansible-playbook -i inventory/hosts.yml playbooks/site.yml --syntax-check
 ansible-playbook -i inventory/hosts-ha-reference.yml playbooks/site.yml --syntax-check
 ansible-playbook -i inventory/hosts-with-dedicated-routers.yml playbooks/site.yml --syntax-check
@@ -86,11 +96,10 @@ ansible-inventory -i inventory/hosts-ha-reference.yml --list
 ansible-inventory -i inventory/hosts-with-dedicated-routers.yml --list
 ```
 
-Optional advisory documentation lint:
+Blocking documentation and YAML lint:
 
 ```bash
-npx --yes markdownlint-cli2
-python -m pip install yamllint
+npx --yes markdownlint-cli2@0.23.2
 yamllint .
 ```
 

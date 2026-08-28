@@ -56,5 +56,4 @@ all:
         #   ansible_host: 192.168.1.32
 
   vars:
-    ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
-    ansible_python_interpreter: /usr/bin/python3
+    ansible_python_interpreter: auto_silent

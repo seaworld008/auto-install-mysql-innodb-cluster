@@ -7,6 +7,7 @@
 ```text
 .
 ├── AGENTS.md
+├── AI_CONTEXT.md
 ├── CHANGELOG.md
 ├── CONTRIBUTING.md
 ├── CODE_OF_CONDUCT.md
@@ -19,12 +20,17 @@
 ├── SECURITY.md
 ├── ansible.cfg
 ├── collections/
+├── deploy.sh
 ├── docs/
 ├── examples/
 ├── inventory/
 ├── playbooks/
 ├── roles/
 ├── scripts/
+├── tests/
+├── .github/
+│   ├── dependabot.yml
+│   └── workflows/
 ├── validate_deployment.ps1
 └── validate_deployment.sh
 ```
@@ -37,8 +43,10 @@
 | `deploy.sh` | 兼容旧操作习惯的包装入口，内部转发到主入口 |
 | `inventory/group_vars/all.yml` | 当前唯一运行时主配置 |
 | `.github/workflows/ansible-ci.yml` | GitHub Actions 静态质量门 |
-| `.github/workflows/docs-quality.yml` | 可选 Markdown / YAML advisory lint |
+| `.github/workflows/docs-quality.yml` | 阻断式 Markdown / YAML lint |
+| `.github/workflows/codeql.yml` | GitHub Actions CodeQL 扫描 |
 | `.github/workflows/pages.yml` | GitHub Pages 文档站点发布 |
+| `.github/dependabot.yml` | pip 与 GitHub Actions 周期依赖更新 |
 
 ## 目录说明
 
@@ -50,6 +58,8 @@ Ansible inventory 与全局变量。
 - `inventory/hosts-with-dedicated-routers.yml`：推荐的独立 Router + HAProxy 拓扑示例。
 - `inventory/hosts-ha-reference.yml`：高可用参考拓扑。
 - `inventory/hosts.yml`：基础示例拓扑。
+- `inventory/hosts.local.yml`：向导默认生成的 Git 忽略真实拓扑，不随仓库分发。
+- `inventory/vault.local.yml`：Git 忽略的加密 Secret 文件，不随仓库分发。
 - `inventory/group_vars/all-8c32g-optimized.yml`、`inventory/group_vars/all-original-10k-config.yml`：历史快照，不是运行时真相源。
 
 ### `playbooks/`
@@ -58,11 +68,13 @@ Ansible playbooks。
 
 - `site.yml`：完整部署入口。
 - `preflight-ha.yml`：高可用拓扑与关键参数预检查。
+- `validate-ha.yml`：组合导入 preflight 与 fail-closed 运行时健康检查。
 - `install-mysql.yml`：安装 MySQL Server。
 - `configure-cluster.yml`：配置 InnoDB Cluster。
 - `install-router.yml`：安装 MySQL Router。
 - `install-haproxy.yml`：安装 HAProxy。
 - `install-keepalived.yml`：安装 Keepalived。
+- `health-check-ha.yml`：fail-closed 检查 Cluster、服务、端口与 VIP。
 - `apply-config.yml`：滚动应用当前主配置。
 - `backup.yml`：可选逻辑 / 物理备份。
 - `scale-*.yml`、`shrink-*.yml`：扩容和缩容流程。
@@ -83,9 +95,28 @@ Ansible 角色模板。
 - `deploy_dedicated_routers.sh`：统一部署和运维入口。
 - `config_manager.sh`：切换 `mysql_hardware_profile`。
 - `optimize_mysql_kernel_stable.sh`：单机内核优化辅助脚本。
-- `health-check-ha.sh`：高可用健康检查。
+- `health-check-ha.sh`：调用 `validate-ha.yml` 的组合 preflight + health 入口。
+- `cluster-status.sh`：stdin 密码传递的辅助集群查询，不替代全栈组合门。
+- `failover-test.sh`：仅供隔离环境显式启用的故障演练辅助脚本。
 - `backup.sh`：备份辅助脚本。
 - `scale-*.sh`、`shrink-*.sh`：扩缩容辅助入口。
+
+### `tests/`
+
+不连接真实基础设施的 Python 测试。
+
+- `tests/test_operator_cli.py`：主入口参数、错误传播和 inventory 读取契约。
+- `tests/test_repository_contracts.py`：SSH、凭据、Action pin、HA 模板和本地
+  inventory 等仓库级不变量。
+
+### `.github/`
+
+- `.github/workflows/ansible-ci.yml`：Python 3.12 / 3.13、shell / PowerShell
+  parser、测试、全部 playbook 和三个主 inventory。
+- `.github/workflows/docs-quality.yml`：固定版本、阻断式 Markdown / YAML lint。
+- `.github/workflows/codeql.yml`：GitHub Actions CodeQL。
+- `.github/workflows/pages.yml`：文档站构建与发布。
+- `.github/dependabot.yml`：每周检查 pip 和 GitHub Actions 依赖。
 
 ### `docs/`
 
@@ -112,22 +143,37 @@ Ansible 角色模板。
 
 ```bash
 # 1. 安装依赖
-pip install -r requirements.txt
-ansible-galaxy collection install -r collections/requirements.yml
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --requirement requirements.txt
+ansible-galaxy collection install --requirements-file collections/requirements.yml
 
-# 2. 修改 inventory 和主配置
-vim inventory/hosts-with-dedicated-routers.yml
-vim inventory/group_vars/all.yml
+# 2. 生成 Git 忽略的本地 inventory，并准备加密 Vault
+./scripts/setup-servers.sh
+ansible-vault create inventory/vault.local.yml
 
 # 3. 前置检查
-./scripts/deploy_dedicated_routers.sh --check-prereq -i inventory/hosts-with-dedicated-routers.yml
+./scripts/deploy_dedicated_routers.sh --check-prereq \
+  -i inventory/hosts.local.yml \
+  --ask-vault-pass -e @inventory/vault.local.yml
 
 # 4. 完整部署
-./scripts/deploy_dedicated_routers.sh --production-ready -i inventory/hosts-with-dedicated-routers.yml
+./scripts/deploy_dedicated_routers.sh --production-ready \
+  -i inventory/hosts.local.yml \
+  --ask-vault-pass -e @inventory/vault.local.yml
 
 # 5. 查看状态
-./scripts/deploy_dedicated_routers.sh --status -i inventory/hosts-with-dedicated-routers.yml
+./scripts/deploy_dedicated_routers.sh --status \
+  -i inventory/hosts.local.yml \
+  --ask-vault-pass -e @inventory/vault.local.yml
 ```
+
+控制节点要求 Python 3.12+，`requirements.txt` 只安装 `ansible-core`。目标节点在
+首次 Ansible 模块连接前要求 Python 3.9+；目标 PyMySQL 由可信系统仓库安装。
+
+主配置默认 VIP `192.0.2.100` 是 preflight 会阻断的 RFC 5737 文档地址，部署时
+必须由 Git 忽略的本地 inventory 覆盖。真实私网中的 `192.168.1.100` 可用，但
+仍需确认没有地址冲突。
 
 ## 维护原则
 
@@ -135,4 +181,6 @@ vim inventory/group_vars/all.yml
 - 不复制新的运行时主配置文件。
 - 新配置优先进入 `inventory/group_vars/all.yml` 的结构化变量。
 - 行为变更需要同步 README、部署指南和相关 runbook。
-- 发布前至少运行 shell 语法、Ansible syntax-check、inventory 校验和 `git diff --check`。
+- 发布前至少运行 shell 语法、Python 测试、阻断式文档 lint、全部 Ansible
+  syntax-check、inventory 校验和 `git diff --check`。
+- 静态与 CI 结果不能替代真实 staging、故障、扩缩容和恢复演练。
