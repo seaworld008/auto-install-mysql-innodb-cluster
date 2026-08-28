@@ -1,2 +1,2 @@
 # 控制节点只需要 ansible-core；目标节点的 PyMySQL 由受信任的系统仓库安装。
-ansible-core>=2.20.0,<2.22.0
+ansible-core>=2.21.3,<2.22.0
