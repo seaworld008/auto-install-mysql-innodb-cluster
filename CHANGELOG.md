@@ -43,6 +43,8 @@
   预置并严格校验 SSH `known_hosts`。
 - 文档 Markdown / YAML lint 从 advisory 提升为阻断门；GitHub Actions 均固定到
   完整 commit SHA。
+- Dependabot 的 pip 更新仅在现有版本范围无法覆盖新版本时调整约束，避免无理由
+  抬高仍受支持的 `ansible-core` 最低版本。
 - 控制节点 `requirements.txt` 收敛为仅安装带版本范围的 `ansible-core`；
   collections 单独声明，目标 PyMySQL 由可信系统仓库安装。
 - 控制节点要求 Python 3.12+，preflight 在所选目标组首次模块连接前探测
