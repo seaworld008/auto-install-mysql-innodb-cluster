@@ -1,6 +1,6 @@
 # AGENTS.md
 
-This repository maintains a single production mainline for deploying and operating MySQL InnoDB Cluster with Router, HAProxy, Keepalived, scaling workflows, and optional logical backups.
+This repository maintains a single production mainline for deploying and operating MySQL InnoDB Cluster with Router, HAProxy, Keepalived, scaling workflows, and optional logical or Percona XtraBackup backups.
 
 ## Mission
 
@@ -18,7 +18,10 @@ This file (`AGENTS.md`) remains the stricter rule set when the two documents ove
 - Runtime config: `inventory/group_vars/all.yml`
 - Main operator entrypoint: `scripts/deploy_dedicated_routers.sh`
 - Compatibility wrapper only: `deploy.sh`
-- CI static quality gate: `.github/workflows/ansible-ci.yml`
+- CI runtime/static quality gate: `.github/workflows/ansible-ci.yml`
+- Blocking documentation quality gate: `.github/workflows/docs-quality.yml`
+- GitHub Actions security analysis: `.github/workflows/codeql.yml`
+- Dependency update policy: `.github/dependabot.yml`
 - Main user docs:
   - `README.md`
   - `DEPLOYMENT_COMPLETE_GUIDE.md`
@@ -80,13 +83,19 @@ Minimum expected checks before claiming completion:
 
 - YAML parses successfully
 - Shell scripts pass `bash -n`
+- Python contract tests pass
 - `git diff --check` passes
+- Markdown and YAML lint pass
 - `ansible-playbook ... --syntax-check` passes for primary inventories
 - `ansible-inventory --list` passes for primary inventories
 
 Required collections are declared in:
 
 - `collections/requirements.yml`
+
+The control-node `requirements.txt` intentionally contains only `ansible-core`.
+The control node requires Python 3.12+, while targets must have Python 3.9+
+before the first Ansible module connection.
 
 ## High-Risk Files
 
@@ -96,8 +105,12 @@ Treat these as sensitive:
 - `playbooks/install-mysql.yml`
 - `playbooks/configure-cluster.yml`
 - `playbooks/install-router.yml`
+- `playbooks/validate-ha.yml`
+- `playbooks/health-check-ha.yml`
 - `playbooks/backup.yml`
 - `roles/mysql-server/templates/my.cnf.j2`
+- `roles/haproxy/templates/haproxy.cfg.j2`
+- `roles/keepalived/templates/keepalived.conf.j2`
 - `scripts/deploy_dedicated_routers.sh`
 
 Changes here usually require doc updates too.
@@ -112,7 +125,16 @@ Supported targets:
 - `nfs`
 - `rsync`
 
-Current backup implementation is logical backup via MySQL Shell dump.
+Supported methods:
+
+- `logical`: MySQL Shell `util.dumpInstance`
+- `xtrabackup`: Percona XtraBackup
+
+Backups remain opt-in. A successful backup task is not restore evidence; restore
+must be verified in an isolated environment.
+
+When compressed XtraBackup output is prepared in the same run, decompression
+must complete before `xtrabackup --prepare`.
 
 ## What Not To Claim
 

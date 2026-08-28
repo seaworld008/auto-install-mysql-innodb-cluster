@@ -4,32 +4,53 @@
 git clone <this-repo>
 cd auto-install-mysql-innodb-cluster
 
-# 1. 修改 inventory
-vim inventory/hosts-with-dedicated-routers.yml
+# 控制节点需要 Python 3.12+；所有目标节点需预装 Python 3.9+
+# RHEL 8 请先预装 python39
 
-# 或使用 HA inventory 向导生成推荐拓扑
-./scripts/setup-servers.sh inventory/hosts-with-dedicated-routers.yml
+# 1. 生成被 Git 忽略的本地 inventory（默认权限 0600）
+./scripts/setup-servers.sh
 
-# 2. 检查主配置
+# 2. 在加密编辑器中写入三个 MySQL 密码和不超过 8 个字符的
+#    keepalived_auth_pass
+ansible-vault create inventory/vault.local.yml
+
+# 3. 只检查非敏感主配置，不要写入真实 IP 或明文密码
 vim inventory/group_vars/all.yml
 
-# 3. 本地 dry-run 级别检查（不连接目标机器）
+# 4. 按 docs/runbooks/SERVER_CONFIGURATION.md 核验每台主机的
+#    SSH fingerprint，确认一致后写入 ~/.ssh/known_hosts
+
+# 5. 本地 dry-run 级别检查（不连接目标机器）
 git diff --check
-ansible-inventory -i inventory/hosts-with-dedicated-routers.yml --list >/tmp/inventory-dedicated.json
-ansible-playbook -i inventory/hosts-with-dedicated-routers.yml playbooks/site.yml --syntax-check
+ansible-inventory -i inventory/hosts.local.yml --list >/tmp/inventory-local.json
+ansible-playbook -i inventory/hosts.local.yml playbooks/site.yml --syntax-check \
+  --ask-vault-pass -e @inventory/vault.local.yml
 
-# 4. 前置检查（连接目标机器，但不安装服务）
-./scripts/deploy_dedicated_routers.sh --check-prereq -i inventory/hosts-with-dedicated-routers.yml
+# 6. 前置检查（连接目标机器，但不安装服务）
+./scripts/deploy_dedicated_routers.sh --check-prereq \
+  -i inventory/hosts.local.yml \
+  --ask-vault-pass -e @inventory/vault.local.yml
 
-# 5. 完整部署
-./scripts/deploy_dedicated_routers.sh --production-ready -i inventory/hosts-with-dedicated-routers.yml
+# 7. 完整部署
+./scripts/deploy_dedicated_routers.sh --production-ready \
+  -i inventory/hosts.local.yml \
+  --ask-vault-pass -e @inventory/vault.local.yml
 
-# 6. 查看状态
-./scripts/deploy_dedicated_routers.sh --status -i inventory/hosts-with-dedicated-routers.yml
+# 8. 查看状态
+./scripts/deploy_dedicated_routers.sh --status \
+  -i inventory/hosts.local.yml \
+  --ask-vault-pass -e @inventory/vault.local.yml
 
-# 7. 如只需批量执行内核优化
-./scripts/deploy_dedicated_routers.sh --kernel-optimize-only -i inventory/hosts-with-dedicated-routers.yml
+# 9. 如只需批量执行内核优化
+./scripts/deploy_dedicated_routers.sh --kernel-optimize-only \
+  -i inventory/hosts.local.yml \
+  --ask-vault-pass -e @inventory/vault.local.yml
 ```
+
+`inventory/hosts.local.yml`、`inventory/vault.local.yml` 和本地备份均不会被 Git 跟踪。仓库内 `hosts-*.yml` 仅用于脱敏示例与 CI；禁止向其中写入真实 IP、密码或私钥路径。向导会为当前独立集群生成唯一 `mysql_group_replication_group_name_override`，不能跨集群复用。SSH host key 校验默认启用，不能使用跳过校验的参数。
+
+`--ask-vault-pass` 在多阶段流程中可能重复询问。自动化推荐改用仓库外、
+权限 `0600` 的 `--vault-password-file`；禁止把 Vault 口令文件提交到 Git。
 
 连接信息：
 

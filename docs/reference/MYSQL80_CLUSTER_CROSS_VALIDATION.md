@@ -1,94 +1,86 @@
-# MySQL InnoDB Cluster 安装/配置/扩容交叉验证（官方实践对照）
+# MySQL InnoDB Cluster 安装、配置与扩缩容交叉验证
 
-> 更新时间：2026-03-12  
-> 说明：本次为**仓库静态交叉验证**（安装编排、配置模板、扩容流程、运行态检查项），对照 MySQL 8.0/8.4 官方 AdminAPI、Group Replication、MySQL Router 的通用最佳实践，以及 Percona 等社区生产实践。
+> 更新时间：2026-08-28
+> 证据边界：本文记录当前仓库的静态实现对照，不代表真实环境部署、故障切换、
+> 备份恢复或性能验收已经完成。
 
 ## 1. 验证范围
 
-- 安装与初始化：`playbooks/install-mysql.yml`、`playbooks/configure-cluster.yml`
-- 关键配置：`roles/mysql-server/templates/my.cnf.j2`、`inventory/group_vars/all.yml`
-- Router/入口层：`playbooks/install-router.yml`、`playbooks/scale-router.yml`、`playbooks/install-haproxy.yml`
-- 扩容动作：`configure-cluster.yml`（加节点）、`scale-router.yml`、`scale-haproxy.yml`
-- 观测与验收：`scripts/cluster-status.sh`、`validate_deployment.sh`
+- 安装与初始化：`playbooks/install-mysql.yml`
+- 集群配置与扩缩容：`playbooks/configure-cluster.yml`、
+  `playbooks/scale-mysql.yml`、`playbooks/shrink-mysql.yml`
+- Router 与入口层：`playbooks/install-router.yml`、
+  `playbooks/install-haproxy.yml`、`playbooks/install-keepalived.yml`
+- 配置真相源：`inventory/group_vars/all.yml`
+- 运行态健康门：`playbooks/validate-ha.yml`、
+  `playbooks/health-check-ha.yml`
+- 操作入口：`scripts/deploy_dedicated_routers.sh`
 
----
+## 2. 当前静态结论
 
-## 2. 交叉验证结论（摘要）
+### 与当前支持线一致
 
-### ✅ 与官方/主流实践一致的部分
+1. MySQL 发行线由 `mysql_release_line` 统一选择 `8.0` 或 `8.4`，并校验
+   repository series 与 major version 一致。
+2. 模板启用 GTID、ROW binlog、`log_replica_updates`、单主 Group Replication
+   及现代 `replica_*` 参数。
+3. standalone 实例先运行 `dba.checkInstanceConfiguration()`；已有成员跳过
+   `configureInstance()`，避免重复配置破坏幂等性。
+4. 集群不存在时才执行 `dba.createCluster()`；secondary 仅在尚未成为成员时执行
+   `addInstance()`，恢复方式由 `mysql_cluster_recovery_method` 显式配置。
+5. 最终门要求 Cluster 为 `OK`、全部 inventory 成员为 `ONLINE`，且 topology
+   成员数与 inventory 一致。
+6. Router 只在首次部署或显式 `mysql_router_rebootstrap: true` 时 bootstrap；
+   每台 Router 使用独立生成的 Router 账号。
+7. HAProxy 只连接 Router 后端；Keepalived 通过 HAProxy systemd 状态决定是否
+   进入 `FAULT` 并释放 VIP。
 
-1. **复制与 GR 核心前置项完整**  
-   已启用 `gtid_mode=ON`、`enforce_gtid_consistency=ON`、`log_replica_updates=ON`、`binlog_format=ROW`，满足 InnoDB Cluster 关键前置要求。
+### 安全与供应链状态
 
-2. **8.0 参数命名已现代化**  
-   已采用 `replica_*`、`log_replica_updates`、`binlog_expire_logs_seconds`、`innodb_redo_log_capacity`，避开大量旧参数命名。
+- MySQL repository key 和 Percona release 包均使用固定 SHA-256 校验。
+- MySQL Shell、Router bootstrap 和 XtraBackup 不把数据库密码写入命令行参数；
+  密码通过 stdin 或临时 `0600` option file 传入，并配合 `no_log`。
+- SSH host-key 校验默认严格；rsync 备份要求预置可信 `known_hosts`，并校验文件
+  所有权与私钥权限。
+- tracked inventory 只保留脱敏示例；真实 inventory、Vault 文件与备份输出必须
+  留在 Git 忽略范围。
 
-3. **集群编排逻辑清晰**  
-   先 `dba.configureInstance()`，再 `dba.createCluster()`，随后 `cluster.addInstance()`，流程与官方 AdminAPI 建议顺序一致。
+## 3. 关键配置核验
 
-4. **扩容入口已标准化**  
-   Router 与 HAProxy 分别有独立扩容 playbook（`scale-router.yml`、`scale-haproxy.yml`），适合分层横向扩展。
+| 检查项 | 当前实现 | 静态结论 |
+| --- | --- | --- |
+| GTID 与一致性 | `gtid_mode=ON`、`enforce_gtid_consistency=ON` | 通过 |
+| Binlog | `binlog_format=ROW`、`log_replica_updates=ON` | 通过 |
+| Group Replication | 单主、唯一 UUID、显式 allowlist 与 seeds | 通过 |
+| 过时参数 guard | CI 阻断已移除的 MySQL 参数 | 通过 |
+| Cluster 幂等 | 识别成员后再决定 create/add | 通过 |
+| Router bootstrap | 已有配置默认跳过，显式开关才重建 | 通过 |
+| Repository 完整性 | 固定 key/package SHA-256 | 通过 |
+| 健康门 | Cluster、成员、服务、端口、唯一 VIP | 通过 |
 
-### ⚠️ 建议尽快改进的部分
+## 4. 扩缩容边界
 
-1. **Router 仓库安装关闭了 GPG 校验**  
-   `install-router.yml` 中 `disable_gpg_check: yes` 不符合生产供应链安全基线，建议改为严格校验。
+### MySQL
 
-2. **Router bootstrap 使用集群管理员明文口令**  
-   当前命令行直接拼接账号密码，建议切换为 Ansible Vault + 临时登录路径（login-path）或环境变量注入，减少泄露面。
+- 扩容通过 `--scale-mysql-add --limit <new-host>` 精确限制目标。
+- `mysql_cluster_recovery_method` 当前默认 `clone`，目标节点必须是可重建节点；
+  如环境策略不同，应在部署前显式评审并覆盖。
+- 缩容要求单一目标并保留最小节点数；若目标为动态 primary，必须先通过
+  `--new-primary` 显式切主。
+- MySQL 摘除后先在 shrink playbook 内验证剩余 topology；操作员从 inventory
+  删除旧节点后，再运行全栈 `--status`。
 
-3. **`cluster.addInstance()` 固定 `recoveryMethod: 'clone'`**  
-   对大数据量恢复效率高，但会覆盖目标实例数据；建议在文档中明确适用边界，或支持 `auto` 可配置切换。
+### Router 与 HAProxy
 
-4. **状态检查脚本主机列表硬编码**  
-   `scripts/cluster-status.sh` 中节点 IP 固定为 `192.168.1.10~12`，不利于多环境复用，建议读取 inventory 或传参列表。
+- Router 与 HAProxy/Keepalived 扩容复用各自安装 playbook。
+- 缩容入口只允许精确匹配一个节点，并在停服前检查剩余数量不低于 HA 下限。
+- 停服后必须先更新 inventory，再执行全栈健康检查，避免用旧拓扑制造误报。
 
----
+## 5. 真实环境验证建议
 
-## 3. 配置项逐条核验（安装与配置）
-
-| 检查项 | 当前状态 | 结论 |
-|---|---|---|
-| GTID（`gtid_mode` + `enforce_gtid_consistency`） | 已开启 | ✅ |
-| Binlog 行格式（`binlog_format=ROW`） | 已开启 | ✅ |
-| 写入转发（`log_replica_updates=ON`） | 已开启 | ✅ |
-| Group Replication 插件（`plugin_load_add='group_replication.so'`） | 已配置 | ✅ |
-| 单主模式（`group_replication_single_primary_mode=ON`） | 已配置 | ✅ |
-| 复制并行回放（`replica_parallel_workers`） | 已配置为 `read_io_threads/2` | ✅ |
-| 过期日志保留（`binlog_expire_logs_seconds=604800`） | 7 天 | ✅ |
-| 已移除参数规避（如 Query Cache、`NO_AUTO_CREATE_USER`） | 未发现旧参数 | ✅ |
-| Router YUM 安装 GPG 校验 | 被禁用 | ⚠️ |
-
----
-
-## 4. 扩容流程核验（MySQL/Router/HAProxy）
-
-### 4.1 MySQL 节点扩容
-
-- 当前通过 `cluster.addInstance(..., {recoveryMethod: 'clone'})` 执行加入。  
-- 优点：新节点追平速度快、步骤简化。  
-- 风险：目标实例会被 clone 覆盖，必须保证是“可重建节点”。
-
-**建议**：在 `group_vars` 增加 `mysql_cluster_recovery_method`（`clone|auto|incremental`），按环境显式选择。
-
-### 4.2 Router 横向扩容
-
-- `scale-router.yml` 实际复用 `install-router.yml`，一致性好。  
-- `mysqlrouter --bootstrap ... --account-create always --force` 可快速重建节点。
-
-**建议**：为 bootstrap 增加“幂等保护 + 凭据保护”策略（Vault/Secrets 管理 + 仅必要权限账号）。
-
-### 4.3 HAProxy/Keepalived 扩容
-
-- `scale-haproxy.yml` 复用安装 playbook，符合“不可变基础设施”思路。  
-- 与 Router 分层部署思路一致，满足高可用入口扩展。
-
----
-
-## 5. 推荐运行态交叉验证 SQL（上线后每次变更执行）
+每次 staging 变更至少保存以下证据：
 
 ```sql
--- 版本与关键参数
 SHOW VARIABLES WHERE Variable_name IN (
   'version',
   'gtid_mode',
@@ -101,41 +93,29 @@ SHOW VARIABLES WHERE Variable_name IN (
   'group_replication_ip_allowlist'
 );
 
--- 集群成员与角色
 SELECT MEMBER_ID, MEMBER_HOST, MEMBER_PORT, MEMBER_STATE, MEMBER_ROLE
 FROM performance_schema.replication_group_members
 ORDER BY MEMBER_HOST, MEMBER_PORT;
-
--- 复制线程与延迟（在只读副本或诊断场景）
-SHOW REPLICA STATUS\G
 ```
 
-验收标准：
-- 所有成员 `MEMBER_STATE=ONLINE`
-- 单主模式下仅 1 个 `PRIMARY`
-- `Replica_IO_Running/Replica_SQL_Running=Yes`
-- 参数值与 inventory 期望一致
+同时执行：
 
----
+```bash
+./scripts/deploy_dedicated_routers.sh --status \
+  -i inventory/hosts.local.yml \
+  --ask-vault-pass -e @inventory/vault.local.yml
+```
 
-## 6. 建议整改优先级
+验收时应确认：
 
-### P0（安全与合规）
-1. Router 安装恢复 GPG 校验。  
-2. 删除命令行明文口令，改为 Vault 或受控密文注入。
+- Cluster 为 `OK`，全部预期成员为 `ONLINE`，且仅一个 `PRIMARY`
+- Router、HAProxy、Keepalived 与所有公开业务端口正常
+- VIP 恰好归属一个入口节点
+- 扩缩容、故障切换与回滚均保留变更记录
+- 备份已在隔离环境完成实际恢复，而不只是生成归档
 
-### P1（可运维性）
-1. `cluster-status.sh` 改为 inventory 驱动。  
-2. `recoveryMethod` 参数化，减少误用 clone 的风险。
+## 6. 最终判断
 
-### P2（持续改进）
-1. 增加 “扩容后自动健康检查” 任务（SQL + Router 连通性）。  
-2. 将交叉验证 SQL 固化到 `validate_deployment.sh` 的 post-check 阶段。
-
----
-
-## 7. 最终判断
-
-- 当前仓库在 **MySQL InnoDB Cluster 主干能力（安装、建群、基础扩容）上可用且结构清晰**。  
-- 与官方/主流生产实践相比，主要差距集中在 **供应链安全（GPG）与凭据管理（明文口令）**。  
-- 若先完成 P0 项整改，再执行一次全链路演练（建群→扩容→故障切换→回滚），即可达到更稳健的生产落地标准。
+当前代码的静态安全性、幂等性和 fail-closed 门禁已经收敛；剩余发布边界是目标
+环境资格验证。只有完成 staging 全链路部署、切换、扩缩容及恢复演练后，才能据此
+作出生产接受结论。

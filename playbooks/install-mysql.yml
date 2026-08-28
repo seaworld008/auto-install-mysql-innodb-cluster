@@ -8,6 +8,13 @@
     mysql_service_name: "{{ 'mysqld' if ansible_os_family == 'RedHat' else 'mysql' }}"
     mysql_config_file: "{{ '/etc/my.cnf' if ansible_os_family == 'RedHat' else '/etc/mysql/mysql.conf.d/zz-innodb-cluster.cnf' }}"
     mysql_socket_path: "{{ mysql_datadir }}/mysql.sock"
+    mysql_default_datadir: "/var/lib/mysql"
+    mysql_default_socket_path: >-
+      {{
+        '/var/lib/mysql/mysql.sock'
+        if ansible_os_family == 'RedHat'
+        else '/var/run/mysqld/mysqld.sock'
+      }}
     mysql_error_log_path: "{{ '/var/log/mysqld.log' if ansible_os_family == 'RedHat' else '/var/log/mysql/error.log' }}"
     mysql_release_apt_components: "{{ 'mysql-8.0 mysql-tools' if mysql_release_line == '8.0' else 'mysql-8.4-lts mysql-tools' }}"
     mysql_release_yum_server_repo_name: "{{ 'mysql80-community' if mysql_release_line == '8.0' else 'mysql-84-lts-community' }}"
@@ -19,8 +26,10 @@
       - curl
       - libaio
       - numactl
-      - python3
-      - python3-pip
+      - "{{ 'python39' if ansible_distribution_major_version == '8' else 'python3' }}"
+      - "{{ 'python39-PyMySQL' if ansible_distribution_major_version == '8' else 'python3-PyMySQL' }}"
+      - policycoreutils-python-utils
+      - rsync
     mysql_common_packages_debian:
       - wget
       - curl
@@ -28,7 +37,8 @@
       - numactl
       - gnupg
       - python3
-      - python3-pip
+      - python3-pymysql
+      - rsync
     mysql_server_packages_redhat:
       - mysql-community-server
       - mysql-community-client
@@ -59,34 +69,29 @@
           服务名: {{ mysql_service_name }}
           配置文件: {{ mysql_config_file }}
 
-    - name: 停止并禁用MariaDB服务（如果存在）
-      systemd:
-        name: mariadb
-        state: stopped
-        enabled: no
-      ignore_errors: yes
+    - name: 收集已安装软件包
+      ansible.builtin.package_facts:
+        manager: auto
 
-    - name: 卸载MariaDB相关包（RedHat）
-      package:
-        name:
-          - mariadb
-          - mariadb-server
-          - mariadb-libs
-        state: absent
-      when: ansible_os_family == 'RedHat'
-      ignore_errors: yes
+    - name: 检测 MariaDB Server 软件包
+      ansible.builtin.set_fact:
+        mysql_detected_mariadb_server_packages: >-
+          {{
+            ansible_facts.packages.keys()
+            | select('match', '^(MariaDB-server|mariadb-server)(-|$)')
+            | list
+          }}
 
-    - name: 卸载MariaDB相关包（Debian）
-      apt:
-        name:
-          - mariadb-server
-          - mariadb-client
-          - mariadb-common
-        state: absent
-        purge: yes
-        autoremove: yes
-      when: ansible_os_family == 'Debian'
-      ignore_errors: yes
+    - name: 检测到 MariaDB 时中止普通部署
+      ansible.builtin.assert:
+        that:
+          - mysql_detected_mariadb_server_packages | length == 0
+        fail_msg: >-
+          检测到 MariaDB Server 软件包
+          {{ mysql_detected_mariadb_server_packages | join(', ') }}。
+          普通部署不会自动停止、purge 或迁移现有数据库；
+          请先完成独立备份、迁移和回滚评审。
+        success_msg: "未检测到 MariaDB Server 冲突"
 
     - name: 安装必要的系统包（RedHat）
       package:
@@ -101,10 +106,23 @@
         update_cache: yes
       when: ansible_os_family == 'Debian'
 
-    - name: 安装PyMySQL模块
-      pip:
-        name: PyMySQL
-        state: present
+    - name: 创建 MySQL 仓库密钥目录
+      ansible.builtin.file:
+        path: /etc/mysql-repo-keys
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: 下载并校验 MySQL 仓库密钥
+      ansible.builtin.get_url:
+        url: "{{ item.url }}"
+        dest: "{{ item.path }}"
+        checksum: "sha256:{{ item.sha256 }}"
+        owner: root
+        group: root
+        mode: '0644'
+      loop: "{{ mysql_repo_gpg_keys }}"
 
     - name: 配置 MySQL YUM 仓库（RedHat）
       yum_repository:
@@ -114,7 +132,7 @@
         enabled: yes
         gpgcheck: yes
         repo_gpgcheck: no
-        gpgkey: "{{ mysql_repo_gpg_keys | join('\n') }}"
+        gpgkey: "{{ mysql_repo_gpg_keys | map(attribute='file_url') | list }}"
       loop:
         - name: "{{ mysql_release_yum_server_repo_name }}"
           description: MySQL {{ mysql_repo_series }} Server
@@ -131,27 +149,12 @@
       changed_when: "'Nothing to do.' not in (dnf_module_disable.stdout | default(''))"
       failed_when: false
 
-    - name: 下载 MySQL APT 仓库密钥
-      get_url:
-        url: "{{ mysql_repo_gpg_keys[-1] }}"
-        dest: /tmp/mysql.gpg
-        mode: '0644'
-      when: ansible_os_family == 'Debian'
-
-    - name: 安装 MySQL APT keyring
-      shell: |
-        set -euo pipefail
-        gpg --dearmor --yes --output /usr/share/keyrings/mysql.gpg /tmp/mysql.gpg
-      args:
-        creates: /usr/share/keyrings/mysql.gpg
-      when: ansible_os_family == 'Debian'
-
     - name: 配置 MySQL APT 仓库
       copy:
         dest: /etc/apt/sources.list.d/mysql.list
         mode: '0644'
         content: |
-          deb [signed-by=/usr/share/keyrings/mysql.gpg] http://repo.mysql.com/apt/{{ ansible_distribution | lower }} {{ ansible_distribution_release }} {{ mysql_release_apt_components }}
+          deb [signed-by={{ mysql_repo_gpg_keys[-1].path }}] https://repo.mysql.com/apt/{{ ansible_distribution | lower }} {{ ansible_distribution_release }} {{ mysql_release_apt_components }}
       when: ansible_os_family == 'Debian'
 
     - name: 更新 APT 缓存
@@ -173,6 +176,12 @@
       environment:
         DEBIAN_FRONTEND: noninteractive
       when: ansible_os_family == 'Debian'
+
+    - name: 确保发行包完成首次初始化
+      ansible.builtin.systemd_service:
+        name: "{{ mysql_service_name }}"
+        state: started
+        enabled: true
 
     - name: 创建 MySQL 运行目录
       file:
@@ -197,6 +206,131 @@
         owner: "{{ mysql_user }}"
         group: "{{ mysql_group }}"
         mode: '0750'
+
+    - name: 检查目标 datadir 是否已初始化
+      ansible.builtin.stat:
+        path: "{{ mysql_datadir }}/mysql"
+      register: mysql_target_system_database
+
+    - name: 检查 datadir 迁移中断标记
+      ansible.builtin.stat:
+        path: "{{ mysql_datadir }}/.ansible-datadir-migration-in-progress"
+      register: mysql_datadir_migration_in_progress
+
+    - name: 计算 datadir 迁移状态
+      ansible.builtin.set_fact:
+        mysql_datadir_migration_required: >-
+          {{
+            mysql_datadir != mysql_default_datadir
+            and (
+              not mysql_target_system_database.stat.exists
+              or mysql_datadir_migration_in_progress.stat.exists
+            )
+          }}
+
+    - name: 检查发行包默认 datadir 是否已初始化
+      ansible.builtin.stat:
+        path: "{{ mysql_default_datadir }}/mysql"
+      register: mysql_default_system_database
+
+    - name: 检查未初始化目标 datadir 的现有内容
+      ansible.builtin.find:
+        paths: "{{ mysql_datadir }}"
+        file_type: any
+        hidden: true
+        recurse: false
+      register: mysql_target_datadir_contents
+      when:
+        - mysql_datadir != mysql_default_datadir
+        - not mysql_target_system_database.stat.exists
+
+    - name: 拒绝覆盖非空且未初始化的目标 datadir
+      ansible.builtin.assert:
+        that:
+          - mysql_target_datadir_contents.matched | int == 0
+        fail_msg: >-
+          {{ mysql_datadir }} 非空但未发现 MySQL system database。
+          为避免覆盖未知数据，自动迁移已中止。
+      when:
+        - mysql_datadir != mysql_default_datadir
+        - not mysql_target_system_database.stat.exists
+        - not mysql_datadir_migration_in_progress.stat.exists
+
+    - name: 要求自定义 datadir 具备可迁移的初始化来源
+      ansible.builtin.assert:
+        that:
+          - mysql_default_system_database.stat.exists
+        fail_msg: >-
+          发行包默认 datadir {{ mysql_default_datadir }} 未完成初始化，
+          无法安全迁移到 {{ mysql_datadir }}。
+      when:
+        - mysql_datadir_migration_required | bool
+
+    - name: 写入 datadir 迁移中断恢复标记
+      ansible.builtin.copy:
+        dest: "{{ mysql_datadir }}/.ansible-datadir-migration-in-progress"
+        content: "managed by Ansible; safe to resume rsync\n"
+        owner: root
+        group: root
+        mode: '0600'
+      when: mysql_datadir_migration_required | bool
+
+    - name: 迁移前停止 MySQL
+      ansible.builtin.systemd_service:
+        name: "{{ mysql_service_name }}"
+        state: stopped
+      when:
+        - mysql_datadir_migration_required | bool
+
+    - name: 将发行包初始化数据迁移到目标 datadir
+      ansible.builtin.command:
+        argv:
+          - rsync
+          - -aHAX
+          - --numeric-ids
+          - "{{ mysql_default_datadir }}/"
+          - "{{ mysql_datadir }}/"
+      when:
+        - mysql_datadir_migration_required | bool
+
+    - name: 收敛目标 datadir 权限
+      ansible.builtin.file:
+        path: "{{ mysql_datadir }}"
+        state: directory
+        owner: "{{ mysql_user }}"
+        group: "{{ mysql_group }}"
+        recurse: true
+      when:
+        - mysql_datadir_migration_required | bool
+
+    - name: 验证迁移后的 MySQL system database
+      ansible.builtin.stat:
+        path: "{{ mysql_datadir }}/mysql"
+      register: mysql_migrated_system_database
+      when: mysql_datadir_migration_required | bool
+
+    - name: 要求 datadir 迁移结果完整
+      ansible.builtin.assert:
+        that:
+          - mysql_migrated_system_database.stat.exists
+          - mysql_migrated_system_database.stat.isdir
+        fail_msg: "datadir 迁移后未发现完整的 mysql system database。"
+      when: mysql_datadir_migration_required | bool
+
+    - name: 写入 datadir 迁移完成标记
+      ansible.builtin.copy:
+        dest: "{{ mysql_datadir }}/.ansible-datadir-migration-complete"
+        content: "migration completed by Ansible\n"
+        owner: root
+        group: root
+        mode: '0600'
+      when: mysql_datadir_migration_required | bool
+
+    - name: 清理 datadir 迁移中断标记
+      ansible.builtin.file:
+        path: "{{ mysql_datadir }}/.ansible-datadir-migration-in-progress"
+        state: absent
+      when: mysql_datadir_migration_required | bool
 
     - name: 确保 Debian MySQL 配置目录存在
       file:
@@ -240,6 +374,52 @@
         - ansible_os_family == 'Debian'
         - mysql_apparmor_profile.stat.exists | default(false)
 
+    - name: 持久配置 MySQL SELinux 文件上下文（RedHat）
+      ansible.builtin.shell: |
+        set -euo pipefail
+        if semanage fcontext -l -C |
+          awk -v target="$SEMANAGE_TARGET" -v setype="$SEMANAGE_TYPE" '
+            $1 == target && index($NF, ":" setype ":") { found = 1 }
+            END { exit(found ? 0 : 1) }
+          '
+        then
+          exit 0
+        fi
+        if semanage fcontext -a -t "$SEMANAGE_TYPE" "$SEMANAGE_TARGET"; then
+          exit 42
+        fi
+        semanage fcontext -m -t "$SEMANAGE_TYPE" "$SEMANAGE_TARGET"
+        exit 42
+      args:
+        executable: /bin/bash
+      environment:
+        SEMANAGE_TARGET: "{{ item.target }}"
+        SEMANAGE_TYPE: "{{ item.setype }}"
+      register: mysql_semanage_fcontext
+      changed_when: mysql_semanage_fcontext.rc == 42
+      failed_when: mysql_semanage_fcontext.rc not in [0, 42]
+      loop:
+        - target: "{{ mysql_datadir | regex_escape }}(/.*)?"
+          setype: mysqld_db_t
+        - target: "{{ mysql_logdir | regex_escape }}(/.*)?"
+          setype: mysqld_log_t
+      when:
+        - ansible_os_family == 'RedHat'
+        - ansible_selinux.status | default('disabled') == 'enabled'
+
+    - name: 应用 MySQL SELinux 文件上下文（RedHat）
+      ansible.builtin.command:
+        argv:
+          - restorecon
+          - -Rv
+          - "{{ mysql_datadir }}"
+          - "{{ mysql_logdir }}"
+      register: mysql_restorecon
+      changed_when: mysql_restorecon.stdout | length > 0
+      when:
+        - ansible_os_family == 'RedHat'
+        - ansible_selinux.status | default('disabled') == 'enabled'
+
     - name: 配置MySQL配置文件
       template:
         src: ../roles/mysql-server/templates/my.cnf.j2
@@ -249,6 +429,16 @@
         mode: '0644'
         backup: yes
       notify: restart mysql
+
+    - name: 在重启前校验 MySQL 配置
+      ansible.builtin.command:
+        argv:
+          - /usr/sbin/mysqld
+          - --validate-config
+      changed_when: false
+
+    - name: 立即执行配置相关 handlers
+      ansible.builtin.meta: flush_handlers
 
     - name: 启动并启用MySQL服务
       systemd:
@@ -263,21 +453,118 @@
         delay: 5
         timeout: 180
 
-    - name: 获取 MySQL 临时 root 密码（RedHat）
-      shell: grep 'temporary password' {{ mysql_error_log_path }} | awk '{print $NF}' | tail -1
+    - name: 探测目标 root 密码是否已生效（RedHat）
+      when: ansible_os_family == 'RedHat'
+      block:
+        - name: 创建目标 root 凭据探测文件
+          ansible.builtin.tempfile:
+            state: file
+            suffix: .cnf
+          register: mysql_desired_root_option_file
+          no_log: true
+
+        - name: 写入目标 root 凭据探测文件
+          ansible.builtin.copy:
+            dest: "{{ mysql_desired_root_option_file.path }}"
+            mode: '0600'
+            content: |
+              [client]
+              user=root
+              password={{ mysql_root_password | to_json(ensure_ascii=False) }}
+              socket={{ mysql_socket_path }}
+          no_log: true
+
+        - name: 使用目标 root 密码执行无副作用查询
+          ansible.builtin.command:
+            argv:
+              - mysql
+              - "--defaults-extra-file={{ mysql_desired_root_option_file.path }}"
+              - --batch
+              - --skip-column-names
+              - --execute=SELECT 1
+          register: mysql_desired_root_probe
+          changed_when: false
+          failed_when: false
+          no_log: true
+      always:
+        - name: 删除目标 root 凭据探测文件
+          ansible.builtin.file:
+            path: "{{ mysql_desired_root_option_file.path | default('') }}"
+            state: absent
+          when: mysql_desired_root_option_file.path is defined
+          no_log: true
+
+    - name: 获取 MySQL 临时 root 密码（RedHat 首次初始化）
+      ansible.builtin.shell: |
+        set -o pipefail
+        grep -h 'temporary password' \
+          /var/log/mysqld.log \
+          "{{ mysql_logdir }}/mysqld.log" 2>/dev/null |
+          awk '{print $NF}' |
+          tail -1
+      args:
+        executable: /bin/bash
       register: mysql_temp_password
       changed_when: false
       failed_when: false
-      when: ansible_os_family == 'RedHat'
-
-    - name: 设置 MySQL root 密码（RedHat 临时密码流程）
-      shell: |
-        mysql -u root -p'{{ mysql_temp_password.stdout }}' --connect-expired-password -e "
-        ALTER USER 'root'@'localhost' IDENTIFIED BY '{{ mysql_root_password }}';
-        FLUSH PRIVILEGES;"
       when:
         - ansible_os_family == 'RedHat'
+        - mysql_desired_root_probe.rc | default(1) != 0
+      no_log: true
+
+    - name: 要求 RedHat root 凭据具备可恢复路径
+      ansible.builtin.assert:
+        that:
+          - >-
+            mysql_desired_root_probe.rc | default(1) == 0
+            or mysql_temp_password.stdout | default('') | length > 0
+        fail_msg: >-
+          目标 root 密码不可用，且未找到可用的首次初始化临时密码。
+          为避免破坏现有实例，部署已中止。
+      when: ansible_os_family == 'RedHat'
+      no_log: true
+
+    - name: 设置 MySQL root 密码（RedHat 临时密码流程）
+      when:
+        - ansible_os_family == 'RedHat'
+        - mysql_desired_root_probe.rc | default(1) != 0
         - mysql_temp_password.stdout | length > 0
+      block:
+        - name: 创建临时 MySQL client option 文件
+          ansible.builtin.tempfile:
+            state: file
+            suffix: .cnf
+          register: mysql_root_option_file
+          no_log: true
+
+        - name: 写入临时 root 凭据
+          ansible.builtin.copy:
+            dest: "{{ mysql_root_option_file.path }}"
+            mode: '0600'
+            content: |
+              [client]
+              user=root
+              password={{ mysql_temp_password.stdout | to_json(ensure_ascii=False) }}
+              socket={{ mysql_socket_path }}
+          no_log: true
+
+        - name: 通过 stdin 更新 root 密码
+          ansible.builtin.command:
+            argv:
+              - mysql
+              - "--defaults-extra-file={{ mysql_root_option_file.path }}"
+              - --connect-expired-password
+            stdin: |
+              ALTER USER 'root'@'localhost' IDENTIFIED BY '{{ mysql_root_password | replace('\\', '\\\\') | replace("'", "''") }}';
+              FLUSH PRIVILEGES;
+          no_log: true
+      always:
+        - name: 删除临时 MySQL client option 文件
+          ansible.builtin.file:
+            path: "{{ mysql_root_option_file.path | default('') }}"
+            state: absent
+          when: mysql_root_option_file.path is defined
+          no_log: true
 
     - name: 设置 MySQL root 密码（Debian/Ubuntu socket 流程）
       ansible.mysql.mysql_user:
@@ -288,16 +575,23 @@
         password: "{{ mysql_root_password }}"
         state: present
       when: ansible_os_family == 'Debian'
+      no_log: true
 
-    - name: 配置防火墙规则（firewalld 可用时）
+    - name: 收集系统服务状态（RedHat）
+      ansible.builtin.service_facts:
+      when: ansible_os_family == 'RedHat'
+
+    - name: 配置防火墙规则（firewalld 运行时）
       ansible.posix.firewalld:
         port: "{{ item }}"
         permanent: yes
         state: enabled
         immediate: yes
       loop: "{{ firewall_ports }}"
-      when: ansible_service_mgr == 'systemd' and ansible_os_family == 'RedHat'
-      ignore_errors: yes
+      when:
+        - ansible_os_family == 'RedHat'
+        - "'firewalld.service' in ansible_facts.services"
+        - ansible_facts.services['firewalld.service'].state == 'running'
 
     - name: 创建集群管理用户
       ansible.mysql.mysql_user:
@@ -310,6 +604,7 @@
         host: "%"
         priv: "*.*:ALL,GRANT"
         state: present
+      no_log: true
 
     - name: 创建复制用户
       ansible.mysql.mysql_user:
@@ -322,14 +617,69 @@
         host: "%"
         priv: "*.*:REPLICATION SLAVE"
         state: present
+      no_log: true
+
+    - name: 读取 MySQL 最终 datadir
+      ansible.mysql.mysql_query:
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+        login_unix_socket: "{{ mysql_socket_path }}"
+        config_file: ""
+        query: "SELECT @@datadir AS datadir"
+      register: mysql_runtime_datadir
+      changed_when: false
+      no_log: true
+
+    - name: 要求运行时 datadir 与主配置一致
+      ansible.builtin.assert:
+        that:
+          - >-
+            mysql_runtime_datadir.query_result[0][0].datadir
+            | regex_replace('/+$', '')
+            == mysql_datadir | regex_replace('/+$', '')
+        fail_msg: "MySQL 运行时 datadir 与 mysql_datadir 不一致。"
+        success_msg: "MySQL 运行时 datadir 已收敛到 {{ mysql_datadir }}"
+
+    - name: 等待现有集群成员恢复 ONLINE
+      ansible.mysql.mysql_query:
+        login_user: "{{ mysql_cluster_user }}"
+        login_password: "{{ mysql_cluster_password }}"
+        login_unix_socket: "{{ mysql_socket_path }}"
+        config_file: ""
+        query: |
+          SELECT
+            (
+              SELECT COUNT(*)
+              FROM information_schema.schemata
+              WHERE schema_name = 'mysql_innodb_cluster_metadata'
+            ) AS metadata_exists,
+            (
+              SELECT COUNT(*)
+              FROM performance_schema.replication_group_members
+              WHERE MEMBER_ID = @@server_uuid
+                AND MEMBER_STATE = 'ONLINE'
+            ) AS member_online
+      register: mysql_member_rejoin
+      changed_when: false
+      retries: 30
+      delay: 10
+      until: >-
+        mysql_member_rejoin.query_result[0][0].metadata_exists | int == 0
+        or mysql_member_rejoin.query_result[0][0].member_online | int == 1
+      no_log: true
+
+    - name: 滚动批次间暂停
+      ansible.builtin.pause:
+        seconds: "{{ scale_policy.rolling_apply_pause_seconds | int }}"
+      when: scale_policy.rolling_apply_pause_seconds | int > 0
 
   handlers:
-    - name: restart mysql
-      systemd:
-        name: "{{ mysql_service_name }}"
-        state: restarted
-
     - name: reload apparmor
       systemd:
         name: apparmor
         state: reloaded
+
+    - name: restart mysql
+      systemd:
+        name: "{{ mysql_service_name }}"
+        state: restarted

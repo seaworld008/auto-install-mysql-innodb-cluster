@@ -21,17 +21,25 @@
         dest: /etc/keepalived/keepalived.conf
         owner: root
         group: root
-        mode: '0644'
+        mode: '0600'
+        validate: "/usr/sbin/keepalived -t -f %s"
       notify: restart keepalived
+      no_log: true
 
-    - name: 开放 VRRP 协议（协议112）
+    - name: 收集系统服务状态（RedHat）
+      ansible.builtin.service_facts:
+      when: ansible_os_family == 'RedHat'
+
+    - name: 开放 VRRP 协议（firewalld 运行时）
       ansible.posix.firewalld:
         rich_rule: 'rule protocol value="vrrp" accept'
         permanent: yes
         state: enabled
         immediate: yes
-      when: ansible_service_mgr == 'systemd' and ansible_os_family == 'RedHat'
-      ignore_errors: yes
+      when:
+        - ansible_os_family == 'RedHat'
+        - "'firewalld.service' in ansible_facts.services"
+        - ansible_facts.services['firewalld.service'].state == 'running'
 
     - name: 启动并启用 keepalived
       systemd:

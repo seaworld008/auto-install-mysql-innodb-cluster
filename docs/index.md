@@ -56,7 +56,7 @@ title: MySQL InnoDB Cluster Automation Docs
 - [AI Maintainer Guide](maintainers/AI_MAINTAINER_GUIDE.md)
 - [Release Checklist](maintainers/RELEASE_CHECKLIST_ZH.md)
 - [Release Notes Draft](maintainers/RELEASE_NOTES_DRAFT.md)
-- [ADR-001: Documentation site and advisory lint](decisions/ADR-001-documentation-site-and-advisory-lint.md)
+- [ADR-001: Documentation site and blocking lint](decisions/ADR-001-documentation-site-and-advisory-lint.md)
 
 ## 说明
 

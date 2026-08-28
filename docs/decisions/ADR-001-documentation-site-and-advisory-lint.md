@@ -1,55 +1,84 @@
-# ADR-001: Documentation Site and Advisory Lint
+# ADR-001: Documentation Site and Blocking Lint
 
 ## Status
 
-Accepted
+Accepted, amended for blocking lint
 
 ## Date
 
-2026-07-03
+2026-07-03; amended 2026-08-28
 
 ## Context
 
-The repository is Chinese-first and already has a converged operational mainline for MySQL InnoDB Cluster automation. The next documentation improvements need to help global discovery, staging validation, failure drills, restore drills, and contributor quality without creating a second deployment flow or a second runtime configuration source.
+The repository is Chinese-first and has a converged operational mainline for
+MySQL InnoDB Cluster automation. Documentation must support global discovery,
+staging validation, failure drills, restore drills, and contributor quality
+without creating a second deployment flow or runtime configuration source.
 
-The repository also benefits from Markdown and YAML linting, but existing documents were not authored under a strict lint policy. Turning lint on as a hard gate immediately would create avoidable friction.
+The initial decision introduced Markdown and YAML lint as advisory because the
+existing documentation had not yet been cleaned under a strict policy. That
+migration has now been completed, so leaving lint advisory would allow future
+documentation and YAML drift to merge without a quality gate.
 
 ## Decision
 
-Add a lightweight GitHub Pages documentation site sourced from `docs/`, plus a standalone `README_EN.md` for English discovery.
+Keep the lightweight GitHub Pages site sourced from `docs/` and the standalone
+`README_EN.md` entrypoint.
 
-Add reusable templates under `docs/templates/` for:
+Keep reusable evidence templates under `docs/templates/` for:
 
-- staging validation records
-- failover drill records
-- isolated restore drill records
+- staging validation
+- failover drills
+- isolated restore drills
 
-Add advisory Markdown and YAML lint workflow configuration. The lint workflow is intentionally optional at this stage and can be promoted to a required gate after the current documentation set is cleaned up under the selected rules.
+Run Markdown and YAML lint as a blocking GitHub Actions job:
+
+- pin `markdownlint-cli2` to the repository-selected version
+- constrain `yamllint` to an explicit supported range
+- fail the job when either linter fails
+- pin workflow Actions to full commit SHAs
+
+Lint is a required repository-quality signal, but it is not deployment,
+failover, backup, restore, or production-readiness evidence.
 
 ## Alternatives Considered
 
 ### Build a full documentation framework
 
-- Pros: Better navigation, versioning, search, and theming.
-- Cons: Adds dependency and maintenance weight that is not justified for the current repository size.
-- Rejected: A simple GitHub Pages Jekyll site is enough for the current docs.
+- Pros: richer navigation, versioning, search, and themes
+- Cons: additional dependencies and maintenance weight
+- Rejected: the current GitHub Pages Jekyll site is sufficient for this
+  repository
 
-### Make lint blocking immediately
+### Keep lint advisory
 
-- Pros: Stronger consistency from day one.
-- Cons: Existing docs may fail on style rules unrelated to deploy correctness.
-- Rejected: Advisory lint gives maintainers signal without blocking urgent operational fixes.
+- Pros: no merge friction from documentation style failures
+- Cons: allows known formatting and YAML quality regressions to merge
+- Rejected: the migration period is complete and current files pass the chosen
+  rules
+
+### Combine lint with the Ansible runtime job
+
+- Pros: fewer visible workflow jobs
+- Cons: obscures whether a failure is documentation quality or Ansible
+  correctness
+- Rejected: separate blocking jobs give clearer diagnosis and ownership
 
 ### Keep only the root README
 
-- Pros: Lowest maintenance.
-- Cons: Poor discoverability for global users and difficult indexing of runbooks, templates, and evidence records.
-- Rejected: The project now needs a documentation map and reusable operational templates.
+- Pros: lowest maintenance
+- Cons: poor discoverability for runbooks, templates, evidence records, and
+  global users
+- Rejected: the project needs a navigable documentation map
 
 ## Consequences
 
 - `README.md` remains the primary Chinese entrypoint.
-- `README_EN.md` improves search and evaluation for global users.
-- `docs/index.md` becomes the GitHub Pages landing page.
-- Documentation lint starts as advisory and should not be used to claim deploy correctness.
-- Runtime configuration remains `inventory/group_vars/all.yml`; no new runtime config copies are introduced.
+- `README_EN.md` supports global discovery.
+- `docs/index.md` remains the GitHub Pages landing page.
+- Markdown or YAML lint failures block the quality workflow.
+- Lint configuration and tool versions must be reviewed as dependencies.
+- Passing lint cannot be used to claim Ansible correctness or real environment
+  validation.
+- Runtime configuration remains `inventory/group_vars/all.yml`; no new runtime
+  config copies are introduced.

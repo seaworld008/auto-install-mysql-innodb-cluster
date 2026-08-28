@@ -1,71 +1,30 @@
 #!/bin/bash
+
+# Fail-closed HA health check. Credentials stay inside Ansible variables and are
+# never interpolated into the local process command line.
+
 set -euo pipefail
+
 INV="${1:-inventory/hosts-ha-reference.yml}"
+if [[ $# -gt 0 ]]; then
+    shift
+fi
+ANSIBLE_ARGS=("$@")
 
-detect_python() {
-    if [[ -n "${PYTHON_BIN:-}" ]]; then
-        if command -v "$PYTHON_BIN" >/dev/null 2>&1; then
-            command -v "$PYTHON_BIN"
-            return 0
-        fi
-        echo "缺少依赖: PYTHON_BIN 指向的命令不可用: $PYTHON_BIN" >&2
-        exit 1
-    fi
-    if command -v python3 >/dev/null 2>&1; then
-        command -v python3
-        return 0
-    fi
-    if command -v python >/dev/null 2>&1; then
-        command -v python
-        return 0
-    fi
-    echo "缺少依赖: python3 或 python" >&2
+if [[ ! -f "$INV" ]]; then
+    echo "inventory 文件不存在: $INV" >&2
     exit 1
-}
+fi
 
-read_var_from_inventory() {
-    local var_name="$1"
-    local python_bin
-    python_bin="$(detect_python)"
-    if command -v ansible-inventory >/dev/null 2>&1; then
-        ansible-inventory -i "$INV" --list 2>/dev/null | "$python_bin" -c '
-import sys, json
-var_name = sys.argv[1]
-data = json.load(sys.stdin)
-value = data.get("all", {}).get("vars", {}).get(var_name, "")
-print(value if value is not None else "")
-' "$var_name"
-    else
-        "$python_bin" -c '
-import sys, yaml, pathlib
-var_name = sys.argv[1]
-data = yaml.safe_load(pathlib.Path("inventory/group_vars/all.yml").read_text(encoding="utf-8"))
-value = data.get(var_name, "")
-print(value if value is not None else "")
-' "$var_name"
-    fi
-}
+if ! command -v ansible-playbook >/dev/null 2>&1; then
+    echo "缺少依赖: ansible-playbook" >&2
+    exit 1
+fi
 
-MYSQL_CLUSTER_USER="${MYSQL_CLUSTER_USER:-$(read_var_from_inventory mysql_cluster_user)}"
-MYSQL_CLUSTER_PASSWORD="${MYSQL_CLUSTER_PASSWORD:-$(read_var_from_inventory mysql_cluster_password)}"
-MYSQL_CLUSTER_NAME="${MYSQL_CLUSTER_NAME:-$(read_var_from_inventory mysql_cluster_name)}"
-MYSQL_PORT="${MYSQL_PORT:-$(read_var_from_inventory mysql_port)}"
-MYSQL_ROUTER_PORT="${MYSQL_ROUTER_PORT:-$(read_var_from_inventory mysql_router_port)}"
-MYSQL_ROUTER_RO_PORT="${MYSQL_ROUTER_RO_PORT:-$(read_var_from_inventory mysql_router_ro_port)}"
-HAPROXY_RW_PORT="${HAPROXY_RW_PORT:-$(read_var_from_inventory haproxy_mysql_rw_port)}"
-HAPROXY_RO_PORT="${HAPROXY_RO_PORT:-$(read_var_from_inventory haproxy_mysql_ro_port)}"
-HAPROXY_RWSPLIT_PORT="${HAPROXY_RWSPLIT_PORT:-$(read_var_from_inventory haproxy_mysql_rwsplit_port)}"
-MYSQL_ROUTER_RWSPLIT_PORT="${MYSQL_ROUTER_RWSPLIT_PORT:-$(read_var_from_inventory mysql_router_rwsplit_port)}"
-KEEPALIVED_VIP="${KEEPALIVED_VIP:-$(read_var_from_inventory keepalived_vip)}"
-
-echo "[1/4] 预检查"
-ANSIBLE_STDOUT_CALLBACK=default ansible-playbook -i "$INV" playbooks/preflight-ha.yml
-
-echo "[2/4] MySQL Cluster 状态"
-ansible mysql_primary -i "$INV" -m shell -a "mysqlsh --uri ${MYSQL_CLUSTER_USER}:${MYSQL_CLUSTER_PASSWORD}@127.0.0.1:${MYSQL_PORT} -e \"var c=dba.getCluster('${MYSQL_CLUSTER_NAME}'); print(c.status()['defaultReplicaSet']['status'])\"" || true
-
-echo "[3/4] Router 端口检查"
-ansible mysql_router -i "$INV" -m shell -a "ss -lntp | egrep ':${MYSQL_ROUTER_PORT}|:${MYSQL_ROUTER_RO_PORT}|:${MYSQL_ROUTER_RWSPLIT_PORT}'" || true
-
-echo "[4/4] HAProxy/Keepalived 检查"
-ansible haproxy_lb -i "$INV" -m shell -a "systemctl is-active haproxy keepalived && ss -lntp | egrep ':${HAPROXY_RW_PORT}|:${HAPROXY_RO_PORT}|:${HAPROXY_RWSPLIT_PORT}' && ip a | grep '${KEEPALIVED_VIP}' || true"
+echo "[1/1] 执行 HA 预检查与运行时健康检查"
+health_command=(ansible-playbook -i "$INV")
+if (( ${#ANSIBLE_ARGS[@]} > 0 )); then
+    health_command+=("${ANSIBLE_ARGS[@]}")
+fi
+health_command+=(playbooks/validate-ha.yml)
+ANSIBLE_STDOUT_CALLBACK=default exec "${health_command[@]}"

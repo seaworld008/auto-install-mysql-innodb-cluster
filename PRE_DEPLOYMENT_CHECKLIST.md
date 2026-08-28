@@ -2,13 +2,17 @@
 
 ## 控制节点
 
-- [ ] Python 可用
+- [ ] 控制节点使用 Python 3.12+
 - [ ] Ansible / ansible-playbook / ansible-inventory 可用
 - [ ] 已安装项目依赖：`pip install -r requirements.txt`
 
 ## 目标节点
 
-- [ ] 已在 inventory 中配置真实 IP、SSH 用户、SSH 密码或密钥
+- [ ] 真实拓扑只写入 Git 忽略的 `inventory/hosts.local.yml`，文件权限为 `0600`
+- [ ] 优先使用仓库外的 SSH 私钥；如使用密码，仅保存在本地 inventory 或外部 Secret
+- [ ] 已通过可信渠道逐台核验 SSH fingerprint，再写入 `~/.ssh/known_hosts`
+- [ ] SSH host key 严格校验保持启用，未使用跳过校验参数
+- [ ] 所有目标节点已预装 Python 3.9+；RHEL 8 已预装 `python39`，并可由 `auto_silent` 发现
 - [ ] MySQL 节点数量不少于 3
 - [ ] Router 节点数量不少于 2
 - [ ] HAProxy 节点数量不少于 2
@@ -19,13 +23,17 @@
 ## 配置检查
 
 - [ ] 已按 `inventory/README.md` 选择正确 inventory
-- [ ] `inventory/group_vars/all.yml` 已确认
+- [ ] `inventory/group_vars/all.yml` 的非敏感配置已确认，未写入真实密码
+- [ ] `inventory/vault.local.yml` 是有效 Vault 密文且未被 Git 跟踪，或已配置等价外部 Secret
 - [ ] `mysql_hardware_profile` 已确认
 - [ ] 已按 `docs/reference/VARIABLE_REFERENCE.md` 复核关键变量
-- [ ] 业务密码与 SSH 密码不是示例值
+- [ ] Vault / 外部 Secret 已覆盖三个 `CHANGE_ME_*` 业务密码占位符
+- [ ] `keepalived_auth_pass` 已通过 Vault / 外部 Secret 覆盖，非占位值且不超过 8 个字符
 - [ ] `server_id` 唯一
+- [ ] `mysql_group_replication_group_name_override` 是当前独立集群专用的唯一 UUID，且解析后的 Group Replication group name 与其一致
 - [ ] Keepalived 网卡名与真实系统一致
 - [ ] 若启用备份，`backup_config` 已完整配置
+- [ ] 若使用 rsync 备份，已通过可信渠道核验目标 SSH fingerprint，并预置 `backup_config.ssh_known_hosts_file`
 
 ## 验证记录
 
@@ -38,11 +46,18 @@
 
 ```bash
 git diff --check
-ansible-inventory -i inventory/hosts-with-dedicated-routers.yml --list >/tmp/inventory-dedicated.json
-ansible-playbook -i inventory/hosts-with-dedicated-routers.yml playbooks/site.yml --syntax-check
-./scripts/deploy_dedicated_routers.sh --check-prereq -i inventory/hosts-with-dedicated-routers.yml
-./scripts/deploy_dedicated_routers.sh --production-ready -i inventory/hosts-with-dedicated-routers.yml
-./scripts/health-check-ha.sh inventory/hosts-with-dedicated-routers.yml
+ansible-inventory -i inventory/hosts.local.yml --list >/tmp/inventory-local.json
+ansible-playbook -i inventory/hosts.local.yml playbooks/site.yml --syntax-check \
+  --ask-vault-pass -e @inventory/vault.local.yml
+./scripts/deploy_dedicated_routers.sh --check-prereq \
+  -i inventory/hosts.local.yml \
+  --ask-vault-pass -e @inventory/vault.local.yml
+./scripts/deploy_dedicated_routers.sh --production-ready \
+  -i inventory/hosts.local.yml \
+  --ask-vault-pass -e @inventory/vault.local.yml
+./scripts/deploy_dedicated_routers.sh --status \
+  -i inventory/hosts.local.yml \
+  --ask-vault-pass -e @inventory/vault.local.yml
 ```
 
 ## 参考

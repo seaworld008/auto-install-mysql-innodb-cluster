@@ -76,8 +76,7 @@ all:
 
   vars:
     # 全局SSH配置
-    ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
-    ansible_python_interpreter: /usr/bin/python3
+    ansible_python_interpreter: auto_silent
     
     # MySQL Router 部署策略
     mysql_router_deployment_strategy: "dedicated_cluster"
@@ -109,7 +108,7 @@ all:
     # 负载均衡器配置 (HAProxy/Keepalived)
     router_load_balancer:
       enabled: true
-      vip: "192.168.1.100"                         # 虚拟IP地址 (需要规划一个内网未使用的IP)
+      vip: "192.0.2.100"                           # 文档占位，必须改成内网未使用的 VIP
       algorithm: "round_robin"                      # 负载均衡算法
       health_check_interval: 5                     # 健康检查间隔(秒)
       health_check_timeout: 3                      # 健康检查超时(秒)
@@ -189,4 +188,3 @@ all:
       backup_path: "/backup/mysql-router"
       backup_retention_days: 30
       backup_schedule: "0 2 * * *"                 # 每天凌晨2点备份
-

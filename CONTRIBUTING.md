@@ -24,26 +24,23 @@ git checkout -b docs/improve-readme
 # 修改文件
 git diff --check
 bash -n deploy.sh validate_deployment.sh scripts/*.sh
+python -m unittest discover tests
+./validate_deployment.sh
 ansible-playbook -i inventory/hosts.yml playbooks/site.yml --syntax-check
 ansible-playbook -i inventory/hosts-ha-reference.yml playbooks/site.yml --syntax-check
 ansible-playbook -i inventory/hosts-with-dedicated-routers.yml playbooks/site.yml --syntax-check
 ```
 
-如果只修改文档，请至少运行：
+如果只修改文档，请至少运行阻断式文档质量门：
 
 ```bash
 git diff --check
-```
-
-可选文档质量检查：
-
-```bash
-npx --yes markdownlint-cli2
-python -m pip install yamllint
+npx --yes markdownlint-cli2@0.23.2
 yamllint .
 ```
 
-当前 Markdown / YAML lint 在 CI 中是 advisory，不作为部署正确性的证明。等现有文档完全按规则收敛后，可以再考虑提升为必过门禁。
+Markdown / YAML lint 在 CI 中是阻断门，但通过 lint 仍不等于部署、故障切换或恢复
+验证完成。
 
 ## 分支命名建议
 
@@ -75,9 +72,10 @@ yamllint .
 
 变更类型不同，检查强度也不同：
 
-- 文档变更：`git diff --check`。
-- 文档质量变更：可选运行 `npx --yes markdownlint-cli2` 和 `yamllint .`。
+- 文档变更：`git diff --check`、`npx --yes markdownlint-cli2@0.23.2` 和
+  `yamllint .`。
 - Shell 变更：`bash -n deploy.sh validate_deployment.sh scripts/*.sh`。
+- 主入口或安全契约变更：`python -m unittest discover tests`。
 - Ansible 变更：至少运行主要 inventory 的 `--syntax-check`。
 - 配置或 playbook 行为变更：同步 README、部署指南、相关 runbook。
 - 备份、缩容、回滚类变更：请说明是否做过隔离环境验证。

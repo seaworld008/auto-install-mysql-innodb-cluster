@@ -102,8 +102,7 @@ all:
 
   vars:
     # 全局SSH配置
-    ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
-    ansible_python_interpreter: /usr/bin/python3
+    ansible_python_interpreter: auto_silent
     
     # MySQL Router 配置
     mysql_router_deployment_strategy: "dedicated_cluster"  # 独立集群部署
@@ -111,7 +110,7 @@ all:
     # 负载均衡器配置 (可选)
     router_load_balancer:
       enabled: true
-      vip: "192.168.1.100"                         # 虚拟IP，客户端连接这个IP
+      vip: "192.0.2.100"                           # 文档占位，必须改成真实 VIP
       algorithm: "round_robin"                      # 负载均衡算法
       health_check_interval: 5                     # 健康检查间隔(秒)
       
@@ -201,10 +200,10 @@ recommended_connection_strings:
     direct: "mysql://user:password@192.168.1.20:6446/database"
     
     # 通过负载均衡器VIP (推荐)
-    load_balanced: "mysql://user:password@192.168.1.100:3307/database"
+    load_balanced: "mysql://user:password@192.0.2.100:3307/database"
     
     # 只读连接
-    readonly: "mysql://user:password@192.168.1.100:3308/database"
+    readonly: "mysql://user:password@192.0.2.100:3308/database"
     
   # 如果使用应用侧Router
   application_side:

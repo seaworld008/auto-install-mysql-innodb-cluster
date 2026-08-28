@@ -154,7 +154,9 @@ Test-FileExists "playbooks/shrink-mysql.yml" "MySQL缩容playbook"
 Test-FileExists "playbooks/shrink-router.yml" "Router缩容playbook"
 Test-FileExists "playbooks/shrink-haproxy.yml" "HAProxy缩容playbook"
 Test-FileExists "playbooks/apply-config.yml" "配置滚动应用playbook"
-Test-FileExists "playbooks/backup.yml" "逻辑备份playbook"
+Test-FileExists "playbooks/backup.yml" "可选备份playbook"
+Test-FileExists "playbooks/health-check-ha.yml" "运行时健康检查playbook"
+Test-FileExists "playbooks/validate-ha.yml" "组合预检与健康检查playbook"
 
 # 4. 检查inventory文件
 Write-Info "4. 检查Inventory配置文件"
@@ -231,7 +233,7 @@ foreach ($var in $keyVars) {
 
 # 10. 检查Python依赖
 Write-Info "10. 检查Python依赖"
-$requiredPackages = @("ansible", "PyMySQL", "mysql-connector-python")
+$requiredPackages = @("ansible-core")
 
 foreach ($package in $requiredPackages) {
     Test-PackageInRequirements $package
@@ -243,13 +245,14 @@ Write-Info "11. 检查系统兼容性要求"
 $script:TotalChecks++
 try {
     $pythonVersion = & python --version 2>&1
-    if ($pythonVersion -match "Python") {
-        Write-Success "Python 可用 ($pythonVersion)"
+    & python -c "import sys; raise SystemExit(sys.version_info < (3, 12))"
+    if ($LASTEXITCODE -eq 0) {
+        Write-Success "控制节点 Python 版本受支持 ($pythonVersion)"
     } else {
-        Write-Warning "Python 未安装或不在PATH中（部署时需要）"
+        Write-Error "控制节点需要 Python 3.12+（ansible-core 2.20/2.21）"
     }
 } catch {
-    Write-Warning "Python 未安装或不在PATH中（部署时需要）"
+    Write-Error "Python 未安装或不在PATH中（控制节点需要 Python 3.12+）"
 }
 
 $script:TotalChecks++
@@ -264,8 +267,8 @@ try {
     Write-Warning "Ansible 未安装（部署时需要）"
 }
 
-# 12. 检查网络配置示例
-Write-Info "12. 检查网络配置示例"
+# 12. 检查 tracked inventory 保持脱敏
+Write-Info "12. 检查 tracked inventory 脱敏状态"
 $inventoryFiles = @("inventory/hosts.yml", "inventory/hosts-recommended-router.yml")
 
 foreach ($invFile in $inventoryFiles) {
@@ -273,23 +276,28 @@ foreach ($invFile in $inventoryFiles) {
         $script:TotalChecks++
         $content = Get-Content $invFile -Raw
         if ($content -match "192\.168\.1") {
-            Write-Warning "网络配置: $invFile 使用示例IP地址，部署前需要修改"
+            Write-Success "网络配置: $invFile 保持示例 IP"
         } else {
-            Write-Success "网络配置: $invFile 已自定义IP地址"
+            Write-Error "网络配置: $invFile 不再包含约定的脱敏示例 IP"
         }
         
         $script:TotalChecks++
         if ($content -match "your_password") {
-            Write-Warning "密码配置: $invFile 使用示例密码，部署前需要修改"
+            Write-Success "密码配置: $invFile 保持明确占位值"
         } else {
-            Write-Success "密码配置: $invFile 已自定义密码"
+            Write-Error "密码配置: $invFile 缺少约定的明确占位值"
         }
     }
 }
 
 # 13. 检查文档完整性
 Write-Info "13. 检查文档完整性"
-$docFiles = @("README.md", "DEPLOYMENT_COMPLETE_GUIDE.md", "TROUBLESHOOTING.md", "QUICK_START.md")
+$docFiles = @(
+    "README.md",
+    "DEPLOYMENT_COMPLETE_GUIDE.md",
+    "QUICK_START.md",
+    "docs/runbooks/TROUBLESHOOTING.md"
+)
 
 foreach ($doc in $docFiles) {
     Test-FileExists $doc "文档文件"
@@ -345,21 +353,14 @@ foreach ($template in $templateFiles) {
 Write-Info "16. 安全配置检查"
 $script:TotalChecks++
 
-$passwordFiles = Get-ChildItem -Path "inventory/group_vars/" -Include "*.yml" -Recurse
-$hasStrongPassword = $false
+$credentialPattern = "MyS3cur3P|Clust3rP|R3pl1c|ProductionRootPassword|ProductionClusterPassword|ProductionReplicationPassword|BackupEncryptionKey|MonitoringAPIKey"
+$credentialMatches = Get-ChildItem -Path "inventory", "examples", "scripts", "docs" -File -Recurse |
+    Select-String -Pattern $credentialPattern
 
-foreach ($file in $passwordFiles) {
-    $content = Get-Content $file.FullName -Raw
-    if ($content -match "password.*P@ss" -and $content -notmatch "your_password") {
-        $hasStrongPassword = $true
-        break
-    }
-}
-
-if ($hasStrongPassword) {
-    Write-Success "密码强度: 使用了强密码模式"
+if ($credentialMatches) {
+    Write-Error "默认凭据检查: tracked 范围中发现疑似真实默认密码或示例密钥"
 } else {
-    Write-Warning "密码强度: 建议使用更强的密码模式"
+    Write-Success "默认凭据检查: 未发现已知默认样式密码或示例密钥"
 }
 
 # 总结报告
@@ -380,11 +381,12 @@ Write-Host "成功率: $successRate%" -ForegroundColor Blue
 # 总体评估
 if ($script:FailedChecks -eq 0) {
     if ($script:WarningChecks -eq 0) {
-        Write-Host "`n✅ 项目完全通过验证，可以安全部署！" -ForegroundColor Green
+        Write-Host "`n✅ 仓库静态完整性检查通过。" -ForegroundColor Green
+        Write-Host "真实部署、故障切换和恢复能力仍需在隔离或 staging 环境验证"
         exit 0
     } else {
         Write-Host "`n⚠️  项目基本通过验证，但有 $script:WarningChecks 个警告项需要注意" -ForegroundColor Yellow
-        Write-Host "请检查警告项目，建议解决后再部署"
+        Write-Host "请检查警告项目；真实环境验证仍是部署前必需步骤"
         exit 1
     }
 } else {

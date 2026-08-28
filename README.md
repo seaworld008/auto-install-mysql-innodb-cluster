@@ -109,7 +109,7 @@ Application
 | `6450` | MySQL Router | 自动读写分离 | 绕过 HAProxy 直连 Router 时使用 |
 | `6446` | MySQL Router | 强制读写 | 运维直连或应急接入 |
 | `6447` | MySQL Router | 强制只读 | 只读分析或排查 |
-| `8404` | HAProxy | 监控 | HAProxy stats 页面 |
+| `8404` | HAProxy | 监控 | HAProxy stats 页面，默认仅监听 `127.0.0.1` |
 
 ## Quick Start
 
@@ -122,38 +122,56 @@ cd auto-install-mysql-innodb-cluster
 
 ### 2. 安装本地依赖
 
+控制节点必须使用 Python 3.12+。目标节点必须在首次连接前预装
+Python 3.9+；RHEL 8 需先安装 `python39`，本地 inventory 的
+`auto_silent` 会优先发现受支持解释器。
+
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install --upgrade pip
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 ansible-galaxy collection install -r collections/requirements.yml
 ```
 
-### 3. 修改 inventory 和主配置
+### 3. 生成本地 inventory 并准备 Secret
 
 ```bash
-vim inventory/hosts-with-dedicated-routers.yml
+# 默认生成 inventory/hosts.local.yml
+./scripts/setup-servers.sh
+
+# 检查非敏感运行参数；不要在此写入真实密码
 vim inventory/group_vars/all.yml
+
+# 在加密编辑器中写入真实 MySQL 密码和 VRRP 口令
+ansible-vault create inventory/vault.local.yml
 ```
 
-不确定这些配置文件怎么选时，先看 [inventory 使用说明](inventory/README.md)。
-
-也可以使用 HA inventory 向导生成推荐拓扑：
-
-```bash
-./scripts/setup-servers.sh inventory/hosts-with-dedicated-routers.yml
-```
+`inventory/hosts.local.yml`、`inventory/vault.local.yml` 及向导生成的备份均已被 Git 忽略。仓库中已跟踪的 `hosts-*.yml` 只作为脱敏模板和 CI 输入；不要向其中写入真实 IP、SSH 密码或私钥路径。向导拒绝覆盖 Git 已跟踪的 inventory，并将本地文件以 `0600` 权限写入。不确定配置边界时，先看 [inventory 使用说明](inventory/README.md)。
 
 至少需要确认：
 
-- `ansible_host`、`ansible_user`、`ansible_ssh_pass` 或 SSH key 配置。
-- `mysql_root_password`、`mysql_cluster_password`、`mysql_replication_password` 已替换为真实值。
+- 本地 inventory 中的 `ansible_host`、`ansible_user` 和 SSH key 配置；只有不提供私钥时，向导才逐节点收集 SSH 密码。
+- 加密的 `inventory/vault.local.yml` 或外部 Secret 已覆盖三个 MySQL 密码和不超过 8 个字符的 `keepalived_auth_pass`。
+- 本地 `mysql_group_replication_group_name_override` 是当前独立集群专用的唯一 UUID；向导会自动生成，不能复用默认值或其他集群的 UUID。
 - `keepalived_vip` 是当前内网可用且未被占用的 VIP。
 - `mysql_release_line` 符合目标版本线，当前支持 `8.0` 和 `8.4`。
 - 目标主机数量满足 `mysql_ha_min_nodes`、`router_ha_min_nodes`、`haproxy_ha_min_nodes`。
 
-更安全的生产方式是使用 Ansible Vault 或外部 Secret 管理真实密码。示例见 `examples/production-inventory.yml` 和 `examples/vault-secrets.yml`。
+Vault 文件中直接使用运行时变量名：
+
+```yaml
+mysql_root_password: "CHANGE_ME_ROOT_PASSWORD"  # 在 Vault 编辑器中替换
+mysql_cluster_password: "CHANGE_ME_CLUSTER_PASSWORD"  # 在 Vault 编辑器中替换
+mysql_replication_password: "CHANGE_ME_REPLICATION_PASSWORD"  # 在 Vault 编辑器中替换
+keepalived_auth_pass: "CHANGE_ME"  # 替换为不超过 8 个字符的 VRRP 口令
+```
+
+SSH host key 校验默认启用。首次连接每台节点前，先用 `ssh-keyscan` 暂存公钥并用 `ssh-keygen -lf` 查看 fingerprint，再通过云控制台、机房控制台或管理员提供的可信渠道比对；只有确认一致后才能追加到 `~/.ssh/known_hosts`。完整流程见 [服务器配置指南](docs/runbooks/SERVER_CONFIGURATION.md)。
+
+多阶段操作会启动多个 Ansible 进程，因此 `--ask-vault-pass` 可能重复询问。
+自动化或长流程推荐使用仓库外、权限 `0600` 的
+`--vault-password-file "$HOME/.config/ansible/mysql-cluster-vault-pass"`；
+不要把 Vault 口令文件放进仓库。
 
 ### 4. 执行前置检查
 
@@ -162,26 +180,33 @@ vim inventory/group_vars/all.yml
 ```bash
 git diff --check
 bash -n deploy.sh validate_deployment.sh scripts/*.sh
-ansible-inventory -i inventory/hosts-with-dedicated-routers.yml --list >/tmp/inventory-dedicated.json
-ansible-playbook -i inventory/hosts-with-dedicated-routers.yml playbooks/site.yml --syntax-check
+ansible-inventory -i inventory/hosts.local.yml --list >/tmp/inventory-local.json
+ansible-playbook -i inventory/hosts.local.yml playbooks/site.yml --syntax-check \
+  --ask-vault-pass -e @inventory/vault.local.yml
 ```
 
 再执行会连接目标机器、但不安装服务的前置检查：
 
 ```bash
-./scripts/deploy_dedicated_routers.sh --check-prereq -i inventory/hosts-with-dedicated-routers.yml
+./scripts/deploy_dedicated_routers.sh --check-prereq \
+  -i inventory/hosts.local.yml \
+  --ask-vault-pass -e @inventory/vault.local.yml
 ```
 
 ### 5. 执行完整部署
 
 ```bash
-./scripts/deploy_dedicated_routers.sh --production-ready -i inventory/hosts-with-dedicated-routers.yml
+./scripts/deploy_dedicated_routers.sh --production-ready \
+  -i inventory/hosts.local.yml \
+  --ask-vault-pass -e @inventory/vault.local.yml
 ```
 
 ### 6. 查看状态
 
 ```bash
-./scripts/deploy_dedicated_routers.sh --status -i inventory/hosts-with-dedicated-routers.yml
+./scripts/deploy_dedicated_routers.sh --status \
+  -i inventory/hosts.local.yml \
+  --ask-vault-pass -e @inventory/vault.local.yml
 ```
 
 首次部署、dry-run、重复执行和已部署后改配置的完整说明见 [操作员上手与变更指南](docs/runbooks/OPERATOR_GUIDE.md)。
@@ -190,32 +215,32 @@ ansible-playbook -i inventory/hosts-with-dedicated-routers.yml playbooks/site.ym
 
 ```bash
 # 仅部署 MySQL Cluster
-./scripts/deploy_dedicated_routers.sh --mysql-only -i inventory/hosts-with-dedicated-routers.yml
+./scripts/deploy_dedicated_routers.sh --mysql-only -i inventory/hosts.local.yml --ask-vault-pass -e @inventory/vault.local.yml
 
 # 仅部署或重配 MySQL Router
-./scripts/deploy_dedicated_routers.sh --install-routers -i inventory/hosts-with-dedicated-routers.yml
+./scripts/deploy_dedicated_routers.sh --install-routers -i inventory/hosts.local.yml --ask-vault-pass -e @inventory/vault.local.yml
 
 # 仅部署或重配 HAProxy + Keepalived
-./scripts/deploy_dedicated_routers.sh --configure-lb -i inventory/hosts-with-dedicated-routers.yml
+./scripts/deploy_dedicated_routers.sh --configure-lb -i inventory/hosts.local.yml --ask-vault-pass -e @inventory/vault.local.yml
 
 # 修改主配置后滚动应用
-./scripts/deploy_dedicated_routers.sh --apply-config -i inventory/hosts-with-dedicated-routers.yml
+./scripts/deploy_dedicated_routers.sh --apply-config -i inventory/hosts.local.yml --ask-vault-pass -e @inventory/vault.local.yml
 
 # 仅执行内核优化
-./scripts/deploy_dedicated_routers.sh --kernel-optimize-only -i inventory/hosts-with-dedicated-routers.yml
+./scripts/deploy_dedicated_routers.sh --kernel-optimize-only -i inventory/hosts.local.yml --ask-vault-pass -e @inventory/vault.local.yml
 
 # MySQL 扩容，目标主机需先加入 inventory
-./scripts/deploy_dedicated_routers.sh --scale-mysql-add --limit mysql-node4 -i inventory/hosts-with-dedicated-routers.yml
+./scripts/deploy_dedicated_routers.sh --scale-mysql-add --limit mysql-node4 -i inventory/hosts.local.yml --ask-vault-pass -e @inventory/vault.local.yml
 
 # MySQL 缩容，缩容当前主节点时建议指定新主节点
-./scripts/deploy_dedicated_routers.sh --scale-mysql-remove --target mysql-node3 --new-primary mysql-node2 -i inventory/hosts-with-dedicated-routers.yml
+./scripts/deploy_dedicated_routers.sh --scale-mysql-remove --target mysql-node3 --new-primary mysql-node2 -i inventory/hosts.local.yml --ask-vault-pass -e @inventory/vault.local.yml
 
 # Router / HAProxy 缩容
-./scripts/deploy_dedicated_routers.sh --shrink-router --limit mysql-router-2 -i inventory/hosts-with-dedicated-routers.yml
-./scripts/deploy_dedicated_routers.sh --shrink-lb --limit haproxy-2 -i inventory/hosts-with-dedicated-routers.yml
+./scripts/deploy_dedicated_routers.sh --shrink-router --limit mysql-router-2 -i inventory/hosts.local.yml --ask-vault-pass -e @inventory/vault.local.yml
+./scripts/deploy_dedicated_routers.sh --shrink-lb --limit haproxy-2 -i inventory/hosts.local.yml --ask-vault-pass -e @inventory/vault.local.yml
 
 # 可选备份，需先启用 backup_config.enabled
-./scripts/deploy_dedicated_routers.sh --backup -i inventory/hosts-with-dedicated-routers.yml
+./scripts/deploy_dedicated_routers.sh --backup -i inventory/hosts.local.yml --ask-vault-pass -e @inventory/vault.local.yml
 ```
 
 ## 重复执行与幂等性
@@ -223,6 +248,7 @@ ansible-playbook -i inventory/hosts-with-dedicated-routers.yml playbooks/site.ym
 仓库的目标是让部署流程尽量幂等和可重复收敛，但生产环境里“可重复执行”不等于“零影响”。
 
 - `--check-prereq`、`--status`、`--test-connection` 适合反复执行。
+- `--status` 与 `--test-connection` 为 fail-closed：Cluster 必须是 `OK`，Router、HAProxy、Keepalived、监听端口和 VIP 任一异常都会返回非零状态。
 - `--production-ready` 是完整部署 / 收敛入口，重复执行可能重新渲染配置、reload 或 restart 服务、再次执行内核优化，建议只在首次部署或维护窗口中使用。
 - 修改 `inventory/group_vars/all.yml` 后，优先用 `--apply-config` 滚动应用，而不是直接重复全量部署。
 - Router 默认 `mysql_router_rebootstrap: false`，不应在没有明确原因时重新 bootstrap。
@@ -237,6 +263,8 @@ ansible-playbook -i inventory/hosts-with-dedicated-routers.yml playbooks/site.ym
 | 文件 | 用途 |
 | --- | --- |
 | `inventory/README.md` | inventory 文件选择说明，解释不同拓扑示例和 group_vars 的区别 |
+| `inventory/hosts.local.yml` | 被 Git 忽略的真实环境 inventory，由向导生成 |
+| `inventory/vault.local.yml` | 被 Git 忽略的 Ansible Vault 加密变量文件 |
 | `inventory/group_vars/all.yml` | 当前运行时主配置，仓库的单一真相源 |
 | `inventory/hosts-with-dedicated-routers.yml` | 推荐的独立 Router + HAProxy inventory 示例 |
 | `inventory/hosts-ha-reference.yml` | 高可用拓扑参考 inventory |
@@ -248,11 +276,12 @@ ansible-playbook -i inventory/hosts-with-dedicated-routers.yml playbooks/site.ym
 | 变量 | 默认值 | 是否必改 | 说明 |
 | --- | --- | --- | --- |
 | `mysql_release_line` | `8.4` | 视情况 | 支持 `8.0` / `8.4` |
-| `mysql_root_password` | `CHANGE_ME_ROOT_PASSWORD` | 是 | root 初始密码 |
-| `mysql_cluster_password` | `CHANGE_ME_CLUSTER_PASSWORD` | 是 | cluster admin 密码 |
-| `mysql_replication_password` | `CHANGE_ME_REPLICATION_PASSWORD` | 是 | 复制用户密码 |
+| `mysql_root_password` | `CHANGE_ME_ROOT_PASSWORD` | 是 | 由 Vault / 外部 Secret 覆盖的 root 初始密码 |
+| `mysql_cluster_password` | `CHANGE_ME_CLUSTER_PASSWORD` | 是 | 由 Vault / 外部 Secret 覆盖的 cluster admin 密码 |
+| `mysql_replication_password` | `CHANGE_ME_REPLICATION_PASSWORD` | 是 | 由 Vault / 外部 Secret 覆盖的复制用户密码 |
+| `mysql_group_replication_group_name_override` | 本地向导生成 | 是 | 覆盖历史示例值，每个独立集群必须唯一 |
 | `mysql_hardware_profile` | `optimized_8c32g` | 视情况 | 选择内置容量配置 |
-| `keepalived_vip` | `192.168.1.100` | 是 | HAProxy 入口 VIP |
+| `keepalived_vip` | `192.0.2.100` | 是 | RFC 5737 占位值；必须改为 HAProxy 入口 VIP |
 | `backup_config.enabled` | `false` | 视情况 | 备份默认关闭 |
 | `backup_config.method` | `logical` | 视情况 | 支持 `logical` / `xtrabackup` |
 
@@ -278,6 +307,8 @@ ansible-playbook -i inventory/hosts-with-dedicated-routers.yml playbooks/site.ym
 ├── examples/
 ├── inventory/
 │   ├── group_vars/all.yml
+│   ├── hosts.local.yml
+│   ├── vault.local.yml
 │   └── hosts-*.yml
 ├── playbooks/
 ├── roles/
@@ -298,7 +329,7 @@ ansible-playbook -i inventory/hosts-with-dedicated-routers.yml playbooks/site.ym
 - 入口层：HAProxy、Keepalived。
 - 备份：MySQL Shell Dump、Percona XtraBackup。
 - 脚本：Bash、PowerShell 验证脚本。
-- CI：GitHub Actions，覆盖 Ansible syntax check、inventory 校验和静态守卫。
+- CI：GitHub Actions，覆盖 Python 3.12/3.13、单元测试、全部 playbook syntax check、三套主 inventory、文档质量与 Actions CodeQL。
 
 ## 本地检查
 
@@ -307,21 +338,21 @@ ansible-playbook -i inventory/hosts-with-dedicated-routers.yml playbooks/site.ym
 bash -n deploy.sh validate_deployment.sh scripts/*.sh
 
 # Ansible 语法检查
-ansible-playbook -i inventory/hosts.yml playbooks/site.yml --syntax-check
-ansible-playbook -i inventory/hosts-ha-reference.yml playbooks/site.yml --syntax-check
-ansible-playbook -i inventory/hosts-with-dedicated-routers.yml playbooks/site.yml --syntax-check
+ansible-playbook -i inventory/hosts.local.yml playbooks/site.yml --syntax-check \
+  --ask-vault-pass -e @inventory/vault.local.yml
 
 # Inventory 校验
-ansible-inventory -i inventory/hosts.yml --list >/tmp/inventory-hosts.json
-ansible-inventory -i inventory/hosts-ha-reference.yml --list >/tmp/inventory-ha.json
-ansible-inventory -i inventory/hosts-with-dedicated-routers.yml --list >/tmp/inventory-dedicated.json
+ansible-inventory -i inventory/hosts.local.yml --list >/tmp/inventory-local.json
 
 # Diff 空白检查
 git diff --check
 
-# 可选文档质量检查（advisory）
-npx --yes markdownlint-cli2
-python -m pip install yamllint
+# 回归测试
+python -m unittest discover -s tests -v
+
+# 与 CI 一致的阻断式文档质量检查
+npx --yes markdownlint-cli2@0.23.2
+python -m pip install 'yamllint>=1.37.0,<2.0.0'
 yamllint .
 ```
 
@@ -362,9 +393,10 @@ Runbook：
 
 ## 安全说明
 
-- 不要把真实 SSH 密码、MySQL 密码、Vault 密钥、云厂商密钥提交到仓库。
-- `inventory/group_vars/all.yml` 中的 `CHANGE_ME_*` 必须在部署前替换。
-- 建议生产环境使用 Ansible Vault、SSH key、CI/CD Secret 或专用 Secret Manager。
+- 不要把真实 IP、SSH 密码、MySQL 密码、私钥、Vault 口令或云厂商密钥写入任何 tracked 文件。
+- 真实拓扑仅写入权限为 `0600` 的 `inventory/hosts.local.yml`；优先使用 SSH key。
+- `inventory/group_vars/all.yml` 中的 `CHANGE_ME_*` 必须在部署时由加密 Vault 或外部 Secret 覆盖，禁止直接替换为明文真实密码。
+- SSH host key 校验默认启用；先从可信渠道核验 fingerprint，再写入 `~/.ssh/known_hosts`。
 - 公开披露安全问题前，请优先通过 GitHub Security Advisories 或维护者私下渠道报告。
 
 ## Roadmap
@@ -375,7 +407,7 @@ Runbook：
 - 架构图、端口视图、CLI 证据与截图留存规范。
 - 英文 README，便于全球开发者检索和初步评估。
 - 更细的变量参考表和配置示例。
-- 可选 Markdown lint / YAML lint advisory workflow。
+- 阻断式 Markdown lint / YAML lint workflow。
 - GitHub Pages 文档站点入口与发布工作流。
 
 仍需要真实环境补充的内容：
@@ -397,7 +429,7 @@ Runbook：
 
 ### 默认密码可以直接用吗？
 
-不可以。默认值是 `CHANGE_ME_*` 占位符，预检查会阻止继续部署。请使用真实强密码，生产环境建议使用 Ansible Vault 或外部 Secret 管理。
+不可以。默认值是 `CHANGE_ME_*` 占位符，预检查会阻止继续部署。请通过加密的 `inventory/vault.local.yml` 或外部 Secret 覆盖，禁止把真实密码明文写入 tracked 文件。
 
 ### 如何选择 MySQL 8.0 还是 8.4？
 

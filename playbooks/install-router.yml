@@ -8,6 +8,11 @@
     mysql_router_service_name: "mysqlrouter"
     mysql_router_package_name_redhat: "mysql-router-community"
     mysql_router_package_name_debian: "mysql-router"
+    mysql_router_bootstrap_host: >-
+      {{
+        hostvars[groups['mysql_primary'][0]].ansible_host
+        | default(groups['mysql_primary'][0])
+      }}
     mysql_release_apt_components: "{{ 'mysql-8.0 mysql-tools' if mysql_release_line == '8.0' else 'mysql-8.4-lts mysql-tools' }}"
     mysql_release_yum_server_repo_name: "{{ 'mysql80-community' if mysql_release_line == '8.0' else 'mysql-84-lts-community' }}"
     mysql_release_yum_server_baseurl: "{{ 'https://repo.mysql.com/yum/mysql-8.0-community/el/' ~ ansible_distribution_major_version ~ '/$basearch/' if mysql_release_line == '8.0' else 'https://repo.mysql.com/yum/mysql-8.4-community/el/' ~ ansible_distribution_major_version ~ '/$basearch/' }}"
@@ -16,14 +21,12 @@
     mysql_router_packages_redhat:
       - wget
       - curl
-      - python3
-      - python3-pip
+      - "{{ 'python39' if ansible_distribution_major_version == '8' else 'python3' }}"
     mysql_router_packages_debian:
       - wget
       - curl
       - gnupg
       - python3
-      - python3-pip
   tasks:
     - name: 验证目标操作系统受支持
       assert:
@@ -40,9 +43,27 @@
 
     - name: 安装 Router 依赖和软件包（RedHat）
       package:
-        name: "{{ mysql_router_packages_redhat[:-1] }}"
+        name: "{{ mysql_router_packages_redhat }}"
         state: present
       when: ansible_os_family == 'RedHat'
+
+    - name: 创建 MySQL 仓库密钥目录
+      ansible.builtin.file:
+        path: /etc/mysql-repo-keys
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: 下载并校验 MySQL 仓库密钥
+      ansible.builtin.get_url:
+        url: "{{ item.url }}"
+        dest: "{{ item.path }}"
+        checksum: "sha256:{{ item.sha256 }}"
+        owner: root
+        group: root
+        mode: '0644'
+      loop: "{{ mysql_repo_gpg_keys }}"
 
     - name: 配置 MySQL YUM 仓库（RedHat）
       yum_repository:
@@ -52,7 +73,7 @@
         enabled: yes
         gpgcheck: yes
         repo_gpgcheck: no
-        gpgkey: "{{ mysql_repo_gpg_keys | join('\n') }}"
+        gpgkey: "{{ mysql_repo_gpg_keys | map(attribute='file_url') | list }}"
       loop:
         - name: "{{ mysql_release_yum_server_repo_name }}"
           description: MySQL {{ mysql_repo_series }} Router
@@ -69,27 +90,12 @@
       changed_when: "'Nothing to do.' not in (dnf_module_disable.stdout | default(''))"
       failed_when: false
 
-    - name: 下载 MySQL APT 仓库密钥
-      get_url:
-        url: "{{ mysql_repo_gpg_keys[-1] }}"
-        dest: /tmp/mysql.gpg
-        mode: '0644'
-      when: ansible_os_family == 'Debian'
-
-    - name: 安装 MySQL APT keyring
-      shell: |
-        set -euo pipefail
-        gpg --dearmor --yes --output /usr/share/keyrings/mysql.gpg /tmp/mysql.gpg
-      args:
-        creates: /usr/share/keyrings/mysql.gpg
-      when: ansible_os_family == 'Debian'
-
     - name: 配置 MySQL APT 仓库
       copy:
         dest: /etc/apt/sources.list.d/mysql.list
         mode: '0644'
         content: |
-          deb [signed-by=/usr/share/keyrings/mysql.gpg] http://repo.mysql.com/apt/{{ ansible_distribution | lower }} {{ ansible_distribution_release }} {{ mysql_release_apt_components }}
+          deb [signed-by={{ mysql_repo_gpg_keys[-1].path }}] https://repo.mysql.com/apt/{{ ansible_distribution | lower }} {{ ansible_distribution_release }} {{ mysql_release_apt_components }}
       when: ansible_os_family == 'Debian'
 
     - name: 更新 APT 缓存
@@ -141,35 +147,47 @@
         path: /var/lib/mysqlrouter/mysqlrouter.conf
       register: mysqlrouter_bootstrap_conf
 
-    - name: 配置MySQL Router
-      shell: |
-        mysqlrouter --bootstrap {{ mysql_cluster_user }}:{{ mysql_cluster_password }}@{{ hostvars[groups['mysql_primary'][0]]['ansible_default_ipv4']['address'] }}:{{ mysql_port }} \
-        --directory /var/lib/mysqlrouter \
-        --conf-base-port={{ mysql_router_port }} \
-        --conf-use-sockets \
-        --account mysqlrouter \
-        --account-create always \
-        --conf-set-option=DEFAULT.max_total_connections={{ mysql_router_max_total_connections }} \
-        --conf-set-option=DEFAULT.read_timeout={{ mysql_router_metadata_read_timeout }} \
-        --conf-set-option=DEFAULT.connect_timeout={{ mysql_router_metadata_connect_timeout }} \
-        --conf-set-option=routing.max_connections={{ mysql_router_route_max_connections }} \
-        --conf-set-option=routing.max_connect_errors={{ mysql_router_max_connect_errors }} \
-        --conf-set-option=routing.client_connect_timeout={{ mysql_router_client_connect_timeout }} \
-        --conf-set-option=routing.connect_timeout={{ mysql_router_routing_connect_timeout }} \
-        --conf-set-option=routing:read_write_split.bind_port={{ mysql_router_rwsplit_port }} \
-        --conf-set-option=routing:read_write_split.destinations=metadata-cache://{{ mysql_cluster_name }}/default?role=PRIMARY_AND_SECONDARY \
-        --conf-set-option=routing:read_write_split.routing_strategy={{ mysql_router_4c8g_optimized.routing_strategy_rwsplit }} \
-        --conf-set-option=routing:read_write_split.access_mode=auto \
-        --conf-set-option=routing:read_write_split.connection_sharing=1 \
-        --conf-set-option=routing:read_write_split.protocol=classic \
-        --force
+    - name: Bootstrap MySQL Router
+      ansible.builtin.command:
+        argv:
+          - mysqlrouter
+          - "--bootstrap={{ mysql_cluster_user }}@{{ mysql_router_bootstrap_host }}:{{ mysql_port }}"
+          - --directory
+          - /var/lib/mysqlrouter
+          - "--name={{ inventory_hostname }}"
+          - "--conf-base-port={{ mysql_router_port }}"
+          - --conf-use-sockets
+          - "--conf-set-option=DEFAULT.max_total_connections={{ mysql_router_max_total_connections }}"
+          - "--conf-set-option=DEFAULT.read_timeout={{ mysql_router_metadata_read_timeout }}"
+          - "--conf-set-option=DEFAULT.connect_timeout={{ mysql_router_metadata_connect_timeout }}"
+          - "--conf-set-option=routing.max_connections={{ mysql_router_route_max_connections }}"
+          - "--conf-set-option=routing.max_connect_errors={{ mysql_router_max_connect_errors }}"
+          - "--conf-set-option=routing.client_connect_timeout={{ mysql_router_client_connect_timeout }}"
+          - "--conf-set-option=routing.connect_timeout={{ mysql_router_routing_connect_timeout }}"
+          - "--conf-set-option=routing:read_write_split.bind_port={{ mysql_router_rwsplit_port }}"
+          - >-
+            --conf-set-option=routing:read_write_split.destinations=metadata-cache://
+            {{- mysql_cluster_name -}}/default?role=PRIMARY_AND_SECONDARY
+          - >-
+            --conf-set-option=routing:read_write_split.routing_strategy=
+            {{- mysql_router_4c8g_optimized.routing_strategy_rwsplit }}
+          - "--conf-set-option=routing:read_write_split.access_mode=auto"
+          - "--conf-set-option=routing:read_write_split.connection_sharing=1"
+          - "--conf-set-option=routing:read_write_split.protocol=classic"
+          - --strict
+          - --force
+        stdin: "{{ mysql_cluster_password }}\n"
+        stdin_add_newline: false
       register: router_bootstrap
       become_user: mysqlrouter
       when: mysql_router_rebootstrap | bool or not mysqlrouter_bootstrap_conf.stat.exists
+      no_log: true
 
-    - name: 显示Router配置结果
-      debug:
-        var: router_bootstrap.stdout
+    - name: 显示 Router bootstrap 结果
+      ansible.builtin.debug:
+        msg: >-
+          MySQL Router bootstrap
+          {{ '已执行' if router_bootstrap is changed else '未执行（已有配置）' }}。
 
     - name: 创建MySQL Router systemd服务文件
       template:
@@ -180,7 +198,11 @@
         mode: '0644'
       notify: reload systemd
 
-    - name: 配置防火墙规则（firewalld 可用时）
+    - name: 收集系统服务状态（RedHat）
+      ansible.builtin.service_facts:
+      when: ansible_os_family == 'RedHat'
+
+    - name: 配置防火墙规则（firewalld 运行时）
       ansible.posix.firewalld:
         port: "{{ item }}"
         permanent: yes
@@ -191,8 +213,10 @@
         - "{{ mysql_router_ro_port }}/tcp"
         - "{{ mysql_router_rwsplit_port }}/tcp"
         - "{{ mysql_router_admin_port }}/tcp"
-      when: ansible_service_mgr == 'systemd' and ansible_os_family == 'RedHat'
-      ignore_errors: yes
+      when:
+        - ansible_os_family == 'RedHat'
+        - "'firewalld.service' in ansible_facts.services"
+        - ansible_facts.services['firewalld.service'].state == 'running'
 
     - name: 启动并启用MySQL Router服务
       systemd:
@@ -208,33 +232,60 @@
         delay: 5
         timeout: 60
 
-    - name: 测试MySQL Router读写端口
-      shell: |
-        mysql -h {{ ansible_default_ipv4.address }} -P {{ mysql_router_port }} -u {{ mysql_cluster_user }} -p{{ mysql_cluster_password }} -e "SELECT @@hostname, @@port"
+    - name: 测试 MySQL Router 读写端口
+      ansible.builtin.command:
+        argv:
+          - mysqlsh
+          - --no-wizard
+          - --passwords-from-stdin
+          - --uri
+          - "{{ mysql_cluster_user }}@127.0.0.1:{{ mysql_router_port }}"
+          - --sql
+          - -e
+          - "SELECT @@hostname, @@port"
+        stdin: "{{ mysql_cluster_password }}\n"
+        stdin_add_newline: false
       register: router_rw_test
-      ignore_errors: yes
+      changed_when: false
+      no_log: true
 
-    - name: 测试MySQL Router只读端口
-      shell: |
-        mysql -h {{ ansible_default_ipv4.address }} -P {{ mysql_router_ro_port }} -u {{ mysql_cluster_user }} -p{{ mysql_cluster_password }} -e "SELECT @@hostname, @@port, @@read_only"
+    - name: 测试 MySQL Router 只读端口
+      ansible.builtin.command:
+        argv:
+          - mysqlsh
+          - --no-wizard
+          - --passwords-from-stdin
+          - --uri
+          - "{{ mysql_cluster_user }}@127.0.0.1:{{ mysql_router_ro_port }}"
+          - --sql
+          - -e
+          - "SELECT @@hostname, @@port, @@read_only"
+        stdin: "{{ mysql_cluster_password }}\n"
+        stdin_add_newline: false
       register: router_ro_test
-      ignore_errors: yes
+      changed_when: false
+      no_log: true
 
     - name: 测试 MySQL Router 自动读写分离端口
-      shell: |
-        mysql -h {{ ansible_default_ipv4.address }} -P {{ mysql_router_rwsplit_port }} -u {{ mysql_cluster_user }} -p{{ mysql_cluster_password }} -e "SELECT @@hostname, @@port"
+      ansible.builtin.command:
+        argv:
+          - mysqlsh
+          - --no-wizard
+          - --passwords-from-stdin
+          - --uri
+          - "{{ mysql_cluster_user }}@127.0.0.1:{{ mysql_router_rwsplit_port }}"
+          - --sql
+          - -e
+          - "SELECT @@hostname, @@port"
+        stdin: "{{ mysql_cluster_password }}\n"
+        stdin_add_newline: false
       register: router_rwsplit_test
-      ignore_errors: yes
+      changed_when: false
+      no_log: true
 
     - name: 显示 Router 连接测试结果
-      debug:
-        msg: |
-          RW:
-          {{ router_rw_test.stdout | default('') }}
-
-          RO:
-          {{ router_ro_test.stdout | default('') }}
-      when: router_rw_test.rc == 0 or router_ro_test.rc == 0
+      ansible.builtin.debug:
+        msg: "Router RW、RO 与 R/W Split 三个端口连接测试均通过。"
 
     - name: MySQL Router安装完成提示
       debug:

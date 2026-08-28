@@ -1,0 +1,3 @@
+---
+- import_playbook: preflight-ha.yml
+- import_playbook: health-check-ha.yml

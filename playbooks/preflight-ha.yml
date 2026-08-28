@@ -6,19 +6,23 @@
     mysql_nodes_count: "{{ groups['mysql_cluster'] | default([]) | length }}"
     router_nodes_count: "{{ groups['mysql_router'] | default([]) | length }}"
     haproxy_nodes_count: "{{ groups['haproxy_lb'] | default([]) | length }}"
-    mysql_password_placeholders:
-      - ""
-      - "CHANGE_ME_ROOT_PASSWORD"
-      - "CHANGE_ME_CLUSTER_PASSWORD"
-      - "CHANGE_ME_REPLICATION_PASSWORD"
-      - "your_password"
-      - "your_password_1"
-      - "your_password_2"
-      - "your_password_3"
-      - "router_password_1"
-      - "router_password_2"
-      - "haproxy_password_1"
-      - "haproxy_password_2"
+    preflight_require_router: true
+    preflight_require_haproxy: true
+    preflight_target_hosts: >-
+      {{
+        (groups['mysql_cluster'] | default([]))
+        + (
+          groups['mysql_router'] | default([])
+          if preflight_require_router | bool
+          else []
+        )
+        + (
+          groups['haproxy_lb'] | default([])
+          if preflight_require_haproxy | bool
+          else []
+        )
+      }}
+    credential_placeholder_pattern: "(?i)^(?:$|change[ _-]?me.*|replace.*|encrypt(?:ed)?.*|your[ _-]?password.*|.*_password_[0-9]+)$"
   tasks:
     - name: 检查 MySQL 业务密码是否已配置
       assert:
@@ -26,19 +30,28 @@
           - mysql_root_password is defined
           - mysql_cluster_password is defined
           - mysql_replication_password is defined
-          - (mysql_root_password | string | trim) not in mysql_password_placeholders
-          - (mysql_cluster_password | string | trim) not in mysql_password_placeholders
-          - (mysql_replication_password | string | trim) not in mysql_password_placeholders
+          - not ((mysql_root_password | string | trim) is match(credential_placeholder_pattern))
+          - not ((mysql_cluster_password | string | trim) is match(credential_placeholder_pattern))
+          - not ((mysql_replication_password | string | trim) is match(credential_placeholder_pattern))
         fail_msg: "MySQL 密码未正确配置。允许明文，但不能留空，也不能使用 CHANGE_ME/your_password 这类占位值。"
         success_msg: "MySQL 密码已配置（支持明文）"
 
     - name: 检查 Inventory 中 SSH 密码是否仍为示例值
       assert:
         that:
-          - (hostvars[item].ansible_ssh_pass | default(hostvars[item].ansible_password | default('')) | string | trim) not in mysql_password_placeholders
+          - >-
+            not (
+              (
+                hostvars[item].ansible_ssh_pass
+                | default(hostvars[item].ansible_password | default(''))
+                | string
+                | trim
+              )
+              is match(credential_placeholder_pattern)
+            )
         fail_msg: "主机 {{ item }} 的 SSH 密码仍是示例值或空值，请先在 inventory 中改成真实密码。"
         success_msg: "主机 {{ item }} 的 SSH 密码已配置"
-      loop: "{{ groups['all'] | default([]) }}"
+      loop: "{{ preflight_target_hosts }}"
       when:
         - hostvars[item].ansible_ssh_pass is defined or hostvars[item].ansible_password is defined
 
@@ -76,6 +89,38 @@
         fail_msg: "MySQL 发行线配置不一致，请检查 mysql_release_line / mysql_major_version / mysql_repo_series。"
         success_msg: "MySQL 发行线配置一致"
 
+    - name: 检查 MySQL 集群关键变量
+      assert:
+        that:
+          - mysql_datadir is match('^/')
+          - mysql_group_replication_group_name is match('^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')
+          - mysql_group_replication_group_name != 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+        fail_msg: >-
+          MySQL 关键变量不安全。mysql_datadir 必须是绝对路径；
+          Group Replication group name 必须是当前集群专用的非默认 UUID。
+        success_msg: "MySQL 集群关键变量检查通过"
+
+    - name: 检查入口层关键变量
+      assert:
+        that:
+          - haproxy_backend_target == 'router'
+          - (keepalived_auth_pass | string) is match('^[A-Za-z0-9_.-]{1,8}$')
+          - not ((keepalived_auth_pass | string | trim) is match(credential_placeholder_pattern))
+          - >-
+            keepalived_vip is match(
+              '^(?:(?:25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})\\.){3}'
+              ~ '(?:25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})$'
+            )
+          - keepalived_vip is not match('^(?:0|127)\\.')
+          - keepalived_vip is not match('^(?:22[4-9]|2[3-5][0-9])\\.')
+          - keepalived_vip is not match('^(192\\.0\\.2|198\\.51\\.100|203\\.0\\.113)\\.')
+        fail_msg: >-
+          入口层变量不安全或不受支持。HAProxy 必须接入 Router；
+          keepalived_auth_pass 必须替换占位值且不超过 8 个字符；
+          Keepalived VIP 必须是已按环境确认的非示例 IPv4 地址。
+        success_msg: "入口层关键变量检查通过"
+      when: preflight_require_haproxy | bool
+
     - name: 检查备份配置（启用时）
       assert:
         that:
@@ -83,6 +128,7 @@
           - backup_config.method in ['logical', 'xtrabackup']
           - backup_config.type in ['local', 'nfs', 'rsync']
           - (backup_config.type != 'rsync') or (backup_config.remote_host | length > 0 and backup_config.remote_dir | length > 0)
+          - (backup_config.type != 'rsync') or (backup_config.ssh_known_hosts_file is match('^/'))
         fail_msg: "备份配置不完整。启用备份时请检查 backup_config.type/base_dir/remote_host/remote_dir。"
         success_msg: "备份配置检查通过"
       when: backup_config.enabled | bool
@@ -104,7 +150,9 @@
           - router_nodes_count | int >= router_ha_min_nodes
         fail_msg: "MySQL Router 节点数不足：当前 {{ router_nodes_count }}，最小高可用要求 {{ router_ha_min_nodes }}"
         success_msg: "MySQL Router 节点数满足高可用要求：{{ router_nodes_count }}"
-      when: router_ha_required | bool
+      when:
+        - preflight_require_router | bool
+        - router_ha_required | bool
 
     - name: 检查 HAProxy 最小 HA 节点数（启用时）
       assert:
@@ -112,7 +160,9 @@
           - haproxy_nodes_count | int >= haproxy_ha_min_nodes
         fail_msg: "HAProxy 节点数不足：当前 {{ haproxy_nodes_count }}，最小高可用要求 {{ haproxy_ha_min_nodes }}"
         success_msg: "HAProxy 节点数满足高可用要求：{{ haproxy_nodes_count }}"
-      when: haproxy_ha_required | bool
+      when:
+        - preflight_require_haproxy | bool
+        - haproxy_ha_required | bool
 
     - name: 输出 HA 预检查总结
       debug:
@@ -123,10 +173,52 @@
           - HAProxy 节点: {{ haproxy_nodes_count }}
           - Router后端目标: {{ haproxy_backend_target }}
 
+- name: 目标节点 Python 兼容性校验
+  hosts: >-
+    {{
+      'mysql_cluster:mysql_router:haproxy_lb'
+      if preflight_require_haproxy | default(true) | bool
+      else (
+        'mysql_cluster:mysql_router'
+        if preflight_require_router | default(true) | bool
+        else 'mysql_cluster'
+      )
+    }}
+  gather_facts: false
+  tasks:
+    - name: 要求目标节点预装 Python 3.9+
+      ansible.builtin.raw: |
+        configured={{ ansible_python_interpreter | default('auto_silent') | quote }}
+        case "$configured" in
+          auto*)
+            candidates="python3.14 python3.13 python3.12 python3.11 python3.10 python3.9 /usr/bin/python3 python3"
+            ;;
+          *)
+            candidates="$configured"
+            ;;
+        esac
+        for candidate in $candidates; do
+          path="$(command -v "$candidate" 2>/dev/null || true)"
+          if [ -n "$path" ] &&
+            "$path" -c 'import sys; raise SystemExit(sys.version_info < (3, 9))'
+          then
+            printf '%s\n' "$path"
+            exit 0
+          fi
+        done
+        echo "目标节点需要预装 Python 3.9+" >&2
+        exit 1
+      changed_when: false
+
 - name: Keepalived 运行环境校验
-  hosts: haproxy_lb
-  gather_facts: true
-  become: yes
+  hosts: >-
+    {{
+      'haproxy_lb'
+      if preflight_require_haproxy | default(true) | bool
+      else 'localhost'
+    }}
+  gather_facts: "{{ preflight_require_haproxy | default(true) | bool }}"
+  become: "{{ preflight_require_haproxy | default(true) | bool }}"
   tasks:
     - name: 检查 Keepalived 网卡名是否存在
       assert:
@@ -134,3 +226,4 @@
           - keepalived_interface in ansible_interfaces
         fail_msg: "主机 {{ inventory_hostname }} 上未找到 Keepalived 网卡 {{ keepalived_interface }}，请改成真实网卡名。"
         success_msg: "主机 {{ inventory_hostname }} 的 Keepalived 网卡存在"
+      when: preflight_require_haproxy | default(true) | bool

@@ -12,6 +12,9 @@ ansible.log
 vault-password.txt
 vault_pass.txt
 *.vault-password
+/inventory/hosts.local.yml
+/inventory/*.local.yml
+/inventory/*.backup.*
 
 # Secrets and local overrides
 .env

@@ -16,6 +16,12 @@
           - backup_config.method in ['logical', 'xtrabackup']
           - backup_config.type in ['local', 'nfs', 'rsync']
           - backup_config.base_dir | length > 0
+          - backup_config.base_dir is match('^/')
+          - backup_config.retention_days | int > 0
+          - backup_config.threads | int > 0
+          - backup_config.compression in ['none', 'gzip', 'zstd']
+          - backup_config.run_on_host_group in groups
+          - mysql_cluster_name is match('^[A-Za-z0-9][A-Za-z0-9._-]*$')
         fail_msg: "backup_config.method 仅支持 logical/xtrabackup，backup_config.type 仅支持 local/nfs/rsync。"
         success_msg: "备份方法与目标配置通过"
 
@@ -24,6 +30,11 @@
         that:
           - backup_config.remote_host | length > 0
           - backup_config.remote_dir | length > 0
+          - backup_config.remote_user is match('^[A-Za-z_][A-Za-z0-9._-]*$')
+          - backup_config.remote_host is match('^[A-Za-z0-9.-]+$')
+          - backup_config.remote_dir is match('^/[A-Za-z0-9._/-]+$')
+          - backup_config.ssh_known_hosts_file is match('^/[A-Za-z0-9._/-]+$')
+          - (backup_config.ssh_key_path | length == 0) or (backup_config.ssh_key_path is match('^/[A-Za-z0-9._/-]+$'))
         fail_msg: "启用 rsync 备份时，必须配置 remote_host 和 remote_dir。"
         success_msg: "rsync 远端参数配置通过"
       when: backup_config.type == 'rsync'
@@ -39,7 +50,7 @@
 
 - name: 在备份执行节点上运行备份
   hosts: all
-  gather_facts: true
+  gather_facts: false
   become: yes
   vars:
     backup_timestamp: "{{ ansible_date_time.date }}-{{ ansible_date_time.time | replace(':', '') }}"
@@ -47,13 +58,23 @@
     backup_manifest_path: "{{ backup_run_root }}/manifest.txt"
     xtrabackup_target_dir: "{{ backup_run_root }}/{{ backup_config.xtrabackup.target_subdir }}"
     xtrabackup_package_name: "{{ 'percona-xtrabackup-80' if mysql_release_line == '8.0' else 'percona-xtrabackup-84' }}"
-    percona_release_deb_url: "https://repo.percona.com/apt/percona-release_latest.generic_all.deb"
-    percona_release_rpm_url: "https://repo.percona.com/yum/percona-release-latest.noarch.rpm"
+    percona_release_deb_url: "{{ backup_config.percona_release.deb_url }}"
+    percona_release_rpm_url: "{{ backup_config.percona_release.rpm_url }}"
     percona_xbk_repo: "{{ 'pxb-80' if mysql_release_line == '8.0' else 'pxb-84-lts' }}"
   tasks:
     - name: 跳过非备份执行节点
-      meta: end_host
+      ansible.builtin.meta: end_host
       when: inventory_hostname not in groups[backup_config.run_on_host_group]
+
+    - name: 检查备份节点名可安全用于目录与远端命令
+      ansible.builtin.assert:
+        that:
+          - inventory_hostname is match('^[A-Za-z0-9][A-Za-z0-9._-]*$')
+        fail_msg: >-
+          备份节点 inventory_hostname 只能包含字母、数字、点、下划线和连字符。
+
+    - name: 收集备份执行节点 facts
+      ansible.builtin.setup:
 
     - name: 安装备份依赖
       package:
@@ -67,6 +88,17 @@
         path: "{{ backup_run_root }}"
         state: directory
         mode: '0750'
+
+    - name: 验证 NFS 目标已真实挂载
+      ansible.builtin.command:
+        argv:
+          - findmnt
+          - --target
+          - "{{ backup_config.base_dir }}"
+          - --types
+          - nfs,nfs4
+      changed_when: false
+      when: backup_config.type == 'nfs'
 
     - name: 安装 XtraBackup 前置工具（Debian/Ubuntu）
       apt:
@@ -84,6 +116,7 @@
       get_url:
         url: "{{ percona_release_deb_url }}"
         dest: /tmp/percona-release_latest.generic_all.deb
+        checksum: "sha256:{{ backup_config.percona_release.deb_sha256 }}"
         mode: '0644'
       when:
         - backup_config.method == 'xtrabackup'
@@ -99,7 +132,7 @@
 
     - name: 启用 Percona tools 仓库（Debian/Ubuntu）
       shell: |
-        percona-release enable-only {{ percona_xbk_repo }} release || percona-release enable-only {{ percona_xbk_repo }}
+        percona-release enable-only {{ percona_xbk_repo }} release --scheme https
         apt-get update
       args:
         executable: /bin/bash
@@ -111,6 +144,7 @@
       get_url:
         url: "{{ percona_release_rpm_url }}"
         dest: /tmp/percona-release-latest.noarch.rpm
+        checksum: "sha256:{{ backup_config.percona_release.rpm_sha256 }}"
         mode: '0644'
       when:
         - backup_config.method == 'xtrabackup'
@@ -126,7 +160,7 @@
 
     - name: 启用 Percona tools 仓库（RedHat）
       shell: |
-        percona-release enable-only {{ percona_xbk_repo }} release || percona-release enable-only {{ percona_xbk_repo }}
+        percona-release enable-only {{ percona_xbk_repo }} release --scheme https
       args:
         executable: /bin/bash
       when:
@@ -140,18 +174,27 @@
       when: backup_config.method == 'xtrabackup'
 
     - name: 执行逻辑备份（mysqlsh util.dumpInstance）
-      shell: |
-        mysqlsh --uri {{ mysql_cluster_user }}:{{ mysql_cluster_password }}@127.0.0.1:{{ mysql_port }} --js <<'EOF'
-        util.dumpInstance("{{ backup_run_root | replace('\\', '\\\\') }}", {
-          threads: {{ backup_config.threads }},
-          consistent: {{ 'true' if backup_config.consistent else 'false' }},
-          showProgress: false
-        })
-        EOF
-      args:
-        executable: /bin/bash
+      ansible.builtin.command:
+        argv:
+          - mysqlsh
+          - --no-wizard
+          - --passwords-from-stdin
+          - --uri
+          - "{{ mysql_cluster_user }}@127.0.0.1:{{ mysql_port }}"
+          - --js
+          - -e
+          - >-
+            util.dumpInstance({{ backup_run_root | to_json }}, {
+              threads: {{ backup_config.threads }},
+              consistent: {{ 'true' if backup_config.consistent else 'false' }},
+              compression: {{ backup_config.compression | to_json }},
+              showProgress: false
+            });
+        stdin: "{{ mysql_cluster_password }}\n"
+        stdin_add_newline: false
       register: backup_dump_result
       when: backup_config.method == 'logical'
+      no_log: true
 
     - name: 创建 XtraBackup 目标目录
       file:
@@ -161,28 +204,79 @@
       when: backup_config.method == 'xtrabackup'
 
     - name: 执行 XtraBackup 物理备份
-      shell: |
-        xtrabackup \
-          --backup \
-          --target-dir="{{ xtrabackup_target_dir }}" \
-          --datadir="{{ mysql_datadir }}" \
-          --socket="{{ mysql_datadir }}/mysql.sock" \
-          --user=root \
-          --password="{{ mysql_root_password }}" \
-          --parallel={{ backup_config.xtrabackup.parallel }} \
-          --use-memory={{ backup_config.xtrabackup.use_memory }} \
-          {% if backup_config.xtrabackup.compress %}--compress={{ backup_config.xtrabackup.compress_algorithm }} --compress-threads={{ backup_config.xtrabackup.compress_threads }}{% endif %} \
-          {{ backup_config.xtrabackup.extra_args }}
-      args:
-        executable: /bin/bash
-      register: backup_xbk_result
       when: backup_config.method == 'xtrabackup'
+      block:
+        - name: 创建 XtraBackup 临时凭据文件
+          ansible.builtin.tempfile:
+            state: file
+            suffix: .cnf
+          register: xtrabackup_option_file
+          no_log: true
+
+        - name: 写入 XtraBackup 临时凭据
+          ansible.builtin.copy:
+            dest: "{{ xtrabackup_option_file.path }}"
+            mode: '0600'
+            content: |
+              [client]
+              user=root
+              password={{ mysql_root_password | to_json(ensure_ascii=False) }}
+          no_log: true
+
+        - name: 运行 XtraBackup
+          ansible.builtin.command:
+            argv: >-
+              {{
+                [
+                  'xtrabackup',
+                  '--defaults-file=' ~ xtrabackup_option_file.path,
+                  '--backup',
+                  '--target-dir=' ~ xtrabackup_target_dir,
+                  '--datadir=' ~ mysql_datadir,
+                  '--socket=' ~ mysql_datadir ~ '/mysql.sock',
+                  '--parallel=' ~ (backup_config.xtrabackup.parallel | string),
+                  '--use-memory=' ~ backup_config.xtrabackup.use_memory
+                ]
+                +
+                (
+                  [
+                    '--compress=' ~ backup_config.xtrabackup.compress_algorithm,
+                    '--compress-threads='
+                    ~ (backup_config.xtrabackup.compress_threads | string)
+                  ]
+                  if backup_config.xtrabackup.compress | bool
+                  else []
+                )
+              }}
+          register: backup_xbk_result
+          no_log: true
+      always:
+        - name: 删除 XtraBackup 临时凭据文件
+          ansible.builtin.file:
+            path: "{{ xtrabackup_option_file.path | default('') }}"
+            state: absent
+          when: xtrabackup_option_file.path is defined
+          no_log: true
+
+    - name: prepare 前解压 XtraBackup 文件
+      ansible.builtin.command:
+        argv:
+          - xtrabackup
+          - --decompress
+          - "--target-dir={{ xtrabackup_target_dir }}"
+          - "--parallel={{ backup_config.xtrabackup.parallel }}"
+      when:
+        - backup_config.method == 'xtrabackup'
+        - backup_config.xtrabackup.compress | bool
+        - backup_config.xtrabackup.prepare | bool
 
     - name: 可选执行 XtraBackup prepare
-      shell: |
-        xtrabackup --prepare --target-dir="{{ xtrabackup_target_dir }}" --use-memory={{ backup_config.xtrabackup.use_memory }}
-      args:
-        executable: /bin/bash
+      ansible.builtin.command:
+        argv:
+          - xtrabackup
+          - --prepare
+          - "--target-dir={{ xtrabackup_target_dir }}"
+          - "--use-memory={{ backup_config.xtrabackup.use_memory }}"
       when:
         - backup_config.method == 'xtrabackup'
         - backup_config.xtrabackup.prepare | bool
@@ -202,22 +296,84 @@
           tool={{ backup_config.logical_tool if backup_config.method == 'logical' else xtrabackup_package_name }}
       when: backup_config.create_manifest | bool
 
+    - name: 检查 rsync SSH known_hosts
+      ansible.builtin.stat:
+        path: "{{ backup_config.ssh_known_hosts_file }}"
+      register: backup_ssh_known_hosts
+      when: backup_config.type == 'rsync'
+
+    - name: 要求 rsync 目标主机密钥已预置
+      ansible.builtin.assert:
+        that:
+          - backup_ssh_known_hosts.stat.exists
+          - backup_ssh_known_hosts.stat.isreg
+          - backup_ssh_known_hosts.stat.pw_name == 'root'
+          - backup_ssh_known_hosts.stat.mode is match('^0[0-7][0145][0145]$')
+        fail_msg: >-
+          rsync 备份要求预先核验远端主机指纹，并写入
+          {{ backup_config.ssh_known_hosts_file }}。
+      when: backup_config.type == 'rsync'
+
+    - name: 检查 rsync SSH 私钥
+      ansible.builtin.stat:
+        path: "{{ backup_config.ssh_key_path }}"
+      register: backup_ssh_private_key
+      when:
+        - backup_config.type == 'rsync'
+        - backup_config.ssh_key_path | length > 0
+
+    - name: 要求 rsync SSH 私钥权限安全
+      ansible.builtin.assert:
+        that:
+          - backup_ssh_private_key.stat.exists
+          - backup_ssh_private_key.stat.isreg
+          - backup_ssh_private_key.stat.pw_name == 'root'
+          - backup_ssh_private_key.stat.mode in ['0400', '0600']
+        fail_msg: >-
+          rsync SSH 私钥必须是 root 所有的普通文件，权限只能为
+          0400 或 0600。
+      when:
+        - backup_config.type == 'rsync'
+        - backup_config.ssh_key_path | length > 0
+
     - name: 同步备份到远端目录（rsync）
-      shell: |
-        export RSYNC_RSH="ssh{% if backup_config.ssh_key_path | length > 0 %} -i {{ backup_config.ssh_key_path }}{% endif %} -o StrictHostKeyChecking=no"
-        ssh {% if backup_config.ssh_key_path | length > 0 %}-i {{ backup_config.ssh_key_path }} {% endif %}-o StrictHostKeyChecking=no {{ backup_config.remote_user }}@{{ backup_config.remote_host }} "mkdir -p {{ backup_config.remote_dir }}/{{ mysql_cluster_name }}/{{ backup_timestamp }}/{{ inventory_hostname }}/"
-        rsync {{ backup_config.rsync_opts }} "{{ backup_run_root }}/" "{{ backup_config.remote_user }}@{{ backup_config.remote_host }}:{{ backup_config.remote_dir }}/{{ mysql_cluster_name }}/{{ backup_timestamp }}/{{ inventory_hostname }}/"
+      ansible.builtin.shell: |
+        set -euo pipefail
+        ssh \
+          -o BatchMode=yes \
+          -o StrictHostKeyChecking=yes \
+          -o UserKnownHostsFile={{ backup_config.ssh_known_hosts_file }} \
+        {% if backup_config.ssh_key_path | length > 0 %}
+          -i {{ backup_config.ssh_key_path }} \
+        {% endif %}
+          {{ backup_config.remote_user }}@{{ backup_config.remote_host }} \
+          "mkdir -p -- '{{ backup_config.remote_dir }}/{{ mysql_cluster_name }}/{{ backup_timestamp }}/{{ inventory_hostname }}'"
+        rsync \
+          --archive \
+          --compress \
+          --delete-delay \
+          -e "ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile={{ backup_config.ssh_known_hosts_file }}{% if backup_config.ssh_key_path | length > 0 %} -i {{ backup_config.ssh_key_path }}{% endif %}" \
+          "{{ backup_run_root }}/" \
+          "{{ backup_config.remote_user }}@{{ backup_config.remote_host }}:{{ backup_config.remote_dir }}/{{ mysql_cluster_name }}/{{ backup_timestamp }}/{{ inventory_hostname }}/"
       args:
         executable: /bin/bash
       when: backup_config.type == 'rsync'
 
-    - name: 删除过期备份（local/nfs）
-      shell: |
-        find "{{ backup_config.base_dir }}/{{ mysql_cluster_name }}" -mindepth 1 -maxdepth 1 -type d -mtime +{{ backup_config.retention_days }} -exec rm -rf {} +
-      args:
-        executable: /bin/bash
+    - name: 查找过期备份批次（local/nfs）
+      ansible.builtin.find:
+        paths: "{{ backup_config.base_dir }}/{{ mysql_cluster_name }}"
+        file_type: directory
+        age: "{{ backup_config.retention_days }}d"
+        recurse: false
+      register: expired_backup_batches
       when: backup_config.type in ['local', 'nfs']
-      failed_when: false
+
+    - name: 删除过期备份批次（local/nfs）
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ expired_backup_batches.files | default([]) }}"
+      when: backup_config.type in ['local', 'nfs']
 
     - name: 显示备份结果
       debug:

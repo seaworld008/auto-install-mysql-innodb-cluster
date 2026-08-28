@@ -1,7 +1,10 @@
 vrrp_script chk_haproxy {
-    script "pidof haproxy"
-    interval 2
-    weight 2
+    script "/usr/bin/systemctl is-active --quiet haproxy"
+    interval {{ keepalived_check_interval }}
+    timeout {{ keepalived_check_timeout }}
+    fall {{ keepalived_check_fall }}
+    rise {{ keepalived_check_rise }}
+    weight 0
 }
 
 vrrp_instance VI_1 {
