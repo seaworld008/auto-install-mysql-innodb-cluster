@@ -68,6 +68,18 @@ class RepositoryContractTests(unittest.TestCase):
                 with self.subTest(path=workflow_path.name, action=action):
                     self.assertRegex(revision, r"^[0-9a-f]{40}$")
 
+    def test_dependabot_preserves_supported_dependency_ranges(self) -> None:
+        content = read(".github/dependabot.yml")
+
+        self.assertRegex(
+            content,
+            re.compile(
+                r"package-ecosystem: pip.*?"
+                r"versioning-strategy: increase-if-necessary",
+                re.DOTALL,
+            ),
+        )
+
     def test_keepalived_check_enters_fault_without_priority_arithmetic(self) -> None:
         content = read("roles/keepalived/templates/keepalived.conf.j2")
         playbook = read("playbooks/install-keepalived.yml")
