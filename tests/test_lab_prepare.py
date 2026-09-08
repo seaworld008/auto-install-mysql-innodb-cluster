@@ -46,3 +46,34 @@ class LabPrepareTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 prepare.initialize(Path(directory) / 'lab', 'HEAD')
             self.assertFalse((Path(directory) / 'lab').exists())
+
+    def test_snapshot_copy_failure_preserves_last_complete_metadata(self):
+        import sys
+        from unittest.mock import patch
+        sys.path.insert(0, str(ROOT / 'tests/lab'))
+        try:
+            from lab import Lab
+        finally:
+            sys.path.pop(0)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            (root / 'runtime').mkdir()
+            disk = root / 'runtime/disk'
+            disk.touch()
+            metadata = root / 'live'
+            (metadata / 'mysql-ha').mkdir(parents=True)
+            (metadata / '.lab-owner').write_text(str(root))
+            (metadata / 'mysql-ha/lima.yaml').write_text('cpus: 6\n')
+            (metadata / 'mysql-ha/disk').symlink_to(disk)
+            lab = Lab.__new__(Lab)
+            lab.root, lab.env = root, {'LIMA_HOME': str(metadata)}
+            lab.save_metadata()
+            expected = (root / 'runtime/metadata/mysql-ha/lima.yaml').read_bytes()
+            with patch('lab.shutil.copytree', side_effect=OSError('simulated disk full')):
+                with self.assertRaises(OSError):
+                    lab.save_metadata()
+            self.assertEqual((root / 'runtime/metadata/mysql-ha/lima.yaml').read_bytes(), expected)
+            (metadata / 'mysql-ha/lima.yaml').write_text('cpus: 4\n')
+            lab.save_metadata()
+            self.assertEqual((root / 'runtime/metadata-previous/mysql-ha/lima.yaml').read_bytes(), expected)
+            self.assertEqual((root / 'runtime/metadata/mysql-ha/disk').resolve(), disk)

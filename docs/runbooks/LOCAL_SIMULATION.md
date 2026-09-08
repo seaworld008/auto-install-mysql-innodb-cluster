@@ -59,7 +59,9 @@ LIMACTL="$(command -v limactl)"
 此元数据布局固定为 2.2.0，升级 Lima 必须重新验证。
 失败时保留证据，检查 manifest 和磁盘，不能覆盖后继续假装成功。
 `hosts` 构建空白节点，等待 systemd/sshd，从专用 Docker API 读取并固定主机公钥，
-然后使用严格 SSH 检查执行 Ansible ping。任一步失败，应停止后续场景。
+然后使用严格 SSH 检查执行 Ansible ping。
+中途失败可重跑 `hosts`；它仅使用 `up --no-recreate` 补齐已有项目，拒绝未知同前缀容器
+或已固定公钥变化。任一步失败，应停止后续场景。
 
 命令失败会返回非零退出码。建议用 `set -o pipefail` 加 `tee` 保存输出至本地 reports。
 不要打印 `secrets/runtime.yml`，也不要上传生成目录、镜像、日志、备份或 SSH 密钥。

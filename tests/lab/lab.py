@@ -35,8 +35,11 @@ class Lab:
                         DOCKER_CONFIG=str(self.root / 'config/docker'), LIMA_WORKDIR='/lab')
         if 'metadata' in self.manifest:
             metadata = Path(self.manifest['metadata'])
-            if not metadata.exists() and (self.root / 'runtime/metadata').exists():
-                shutil.copytree(self.root / 'runtime/metadata', metadata, symlinks=True)
+            if not metadata.exists():
+                snapshot = self.root / 'runtime/metadata'
+                if not snapshot.exists():
+                    snapshot = self.root / 'runtime/metadata-previous'
+                shutil.copytree(snapshot, metadata, symlinks=True)
             if metadata.is_symlink() or metadata.stat().st_uid != os.getuid():
                 raise ValueError('Invalid metadata ownership')
             if (metadata / '.lab-owner').read_text().strip() != str(self.root):
@@ -91,21 +94,41 @@ class Lab:
         (self.root / 'manifest.json').write_text(json.dumps(self.manifest, indent=2) + '\n')
 
     def save_metadata(self):
-        destination = self.root / 'runtime/metadata'
+        runtime = self.root / 'runtime'
+        staged = Path(tempfile.mkdtemp(prefix='metadata-staging-', dir=runtime))
+        shutil.copytree(self.env['LIMA_HOME'], staged, symlinks=True,
+                        dirs_exist_ok=True, ignore=shutil.ignore_patterns('*.sock', '*.pid'))
+        if (staged / '.lab-owner').read_text().strip() != str(self.root):
+            raise ValueError('Snapshot ownership mismatch')
+        if not (staged / 'mysql-ha/lima.yaml').is_file():
+            raise ValueError('Snapshot has no instance configuration')
+        disk = staged / 'mysql-ha/disk'
+        if not disk.is_symlink() or disk.resolve() != self.root / 'runtime/disk':
+            raise ValueError('Snapshot disk does not point to this lab')
+        destination, previous = runtime / 'metadata', runtime / 'metadata-previous'
+        # The last complete snapshot survives every failure before promotion.
         if destination.exists():
-            shutil.rmtree(destination)
-        shutil.copytree(self.env['LIMA_HOME'], destination, symlinks=True,
-                        ignore=shutil.ignore_patterns('*.sock', '*.pid'))
+            if previous.exists():
+                shutil.rmtree(previous)
+            destination.rename(previous)
+        staged.rename(destination)
 
     def hosts(self):
         compose = yaml.safe_load((self.root / 'config/compose.yml').read_text())
         # Installed RPMs and /etc live in writable container layers. Never recreate.
         existing = self.docker('ps', '-a', '--format', '{{.Names}}').splitlines()
-        if any(n.startswith('mysql-ha-lab-') for n in existing):
-            raise ValueError('Containers exist: use docker start, not hosts')
+        expected = {spec['container_name'] for spec in compose['services'].values()}
+        for name in (n for n in existing if n.startswith('mysql-ha-lab-')):
+            if name not in expected:
+                raise ValueError('Unknown lab container; reconcile inventory first: ' + name)
+            labels = json.loads(self.docker('inspect', '--format', '{{json .Config.Labels}}', name))
+            if labels.get('com.docker.compose.project') != compose['name']:
+                raise ValueError('Container is not owned by this compose project: ' + name)
         for role, tag in (('node', 'rocky9'), ('controller', 'py313')):
-            print(self.docker('build', '-t', f'mysql-ha-lab/{role}:{tag}', f'/lab/config/{role}-image'))
-        print(self.docker('compose', '-f', '/lab/config/compose.yml', 'up', '-d'))
+            if not expected.intersection(existing):
+                print(self.docker('build', '-t', f'mysql-ha-lab/{role}:{tag}', f'/lab/config/{role}-image'))
+        print(self.docker('compose', '-f', '/lab/config/compose.yml', 'up', '-d', '--no-recreate'))
+        known = dict(line.split(' ', 1) for line in (self.root / 'secrets/known_hosts').read_text().splitlines())
         lines = []
         for service, spec in compose['services'].items():
             if service == 'controller':
@@ -119,7 +142,11 @@ class Lab:
                     if attempt == 59:
                         raise
                     time.sleep(1)
-            lines.append(spec['networks']['labnet']['ipv4_address'] + ' ' + ' '.join(key.split()[:2]))
+            address = spec['networks']['labnet']['ipv4_address']
+            public_key = ' '.join(key.split()[:2])
+            if address in known and known[address] != public_key:
+                raise ValueError('Pinned SSH key changed: ' + address)
+            lines.append(address + ' ' + public_key)
         (self.root / 'secrets/known_hosts').write_text('\n'.join(lines) + '\n')
         print(self.docker('exec', 'mysql-ha-lab-controller', 'ansible', 'all',
                           '-i', '/lab/config/hosts.local.yml', '-m', 'ping'))
