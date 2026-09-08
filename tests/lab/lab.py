@@ -126,7 +126,8 @@ class Lab:
                 raise ValueError('Container is not owned by this compose project: ' + name)
         for role, tag in (('node', 'rocky9'), ('controller', 'py313')):
             if not expected.intersection(existing):
-                print(self.docker('build', '-t', f'mysql-ha-lab/{role}:{tag}', f'/lab/config/{role}-image'))
+                print(self.docker('build', '--platform', 'linux/amd64' if role == 'node' else 'linux/arm64',
+                                  '-t', f'mysql-ha-lab/{role}:{tag}', f'/lab/config/{role}-image'))
         print(self.docker('compose', '-f', '/lab/config/compose.yml', 'up', '-d', '--no-recreate'))
         known = dict(line.split(' ', 1) for line in (self.root / 'secrets/known_hosts').read_text().splitlines())
         lines = []

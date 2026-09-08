@@ -24,8 +24,10 @@ Linux 主机模拟配置。生产操作仍统一通过 `scripts/deploy_dedicated
 不匹配。逻辑恢复是数据与结构语义一致，原始 DDL 打印形式存在已记录差异。
 
 这些完整场景来自 2026-09-08 原始实验脚本，不是 v0.4.0 所有代码路径重新验收。
-发布分支另执行 Python 回归、Shell、Markdown/YAML lint、全部 playbook syntax、
-三个 inventory 检查，并要求 PR / main CI 和发布制品下载校验。
+发布分支另执行 43 项 Python 回归、Shell、Markdown/YAML lint、全部 playbook syntax、
+三个 inventory 检查，并要求 PR / main CI 和发布制品下载校验。新工具另通过 VM 启动、
+7 台空白节点严格 SSH 与 systemd/cgroup/VIP 门禁、重复 hosts 保留全部容器 ID；
+它使用旧源码快照，只证明环境准备流程。
 
 **仍未通过：** 混合 RW/RO/自动分离端口事务流程偶发只读拒写、默认自动证书的严格 TLS
 校验、配置 UUID 与 AdminAPI 实际组 UUID 一致性。失去多数派能阻止写入，但重启节点未

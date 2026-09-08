@@ -137,3 +137,11 @@ LIMACTL="$(command -v limactl)"
 
 技术参考：[Lima Rosetta](https://lima-vm.io/docs/config/multi-arch/)、
 [Docker 29 版本说明](https://docs.docker.com/engine/release-notes/29/)。
+
+### v0.4.0 工具整理验证记录
+
+2026-09-09 本机重新验证了最小 Lima 元数据启动、Docker 29.8.0 安装、7 台空白节点的
+x86_64 / systemd / cgroup / 严格 SSH 连通，以及 VIP 地址操作；再次执行 `hosts`
+后所有容器 ID 保持不变。发现并修正了 Lima create 提前写磁盘与构建平台遗漏，原始
+失败日志单独保留。本轮源码快照仍为 v0.3.1，因此这些只证明环境门禁，不是新运行修复
+的完整集群重测。完整功能证据来自前述 2026-09-08 修补副本报告。
