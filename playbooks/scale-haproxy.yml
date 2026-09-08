@@ -1,5 +1,6 @@
 ---
 - name: 扩容/重配 HAProxy + Keepalived 节点
+  any_errors_fatal: true
   hosts: localhost
   gather_facts: false
   tasks:

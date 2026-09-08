@@ -3,6 +3,7 @@
 # 基于Oracle MySQL、Percona、MariaDB官方推荐和生产环境验证
 
 - name: MySQL 内核优化部署 - 行业最佳实践
+  any_errors_fatal: true
   hosts: all
   become: yes
   gather_facts: yes

@@ -1,5 +1,6 @@
 ---
 - name: MySQL InnoDB Cluster 完整安装
+  any_errors_fatal: true
   hosts: localhost
   gather_facts: false
   tasks:
@@ -16,6 +17,7 @@
 - import_playbook: install-keepalived.yml
 
 - name: MySQL InnoDB Cluster 安装完成
+  any_errors_fatal: true
   hosts: localhost
   gather_facts: false
   tasks:

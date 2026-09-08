@@ -1,5 +1,6 @@
 ---
 - name: 校验 MySQL 实例满足 InnoDB Cluster 要求
+  any_errors_fatal: true
   hosts: mysql_cluster
   become: true
   gather_facts: true
@@ -75,6 +76,7 @@
       when: "'ANSIBLE_MEMBER=1' in mysql_cluster_membership.stdout"
 
 - name: 创建 InnoDB Cluster
+  any_errors_fatal: true
   hosts: mysql_primary
   become: true
   gather_facts: false
@@ -130,6 +132,7 @@
           {{ '已创建' if create_cluster_result is changed else '已存在' }}。
 
 - name: 将 secondary 实例加入集群
+  any_errors_fatal: true
   hosts: mysql_secondary
   become: true
   gather_facts: true
@@ -137,7 +140,7 @@
   vars:
     mysql_primary_host: "{{ groups['mysql_primary'][0] }}"
     mysql_instance_address: >-
-      {{ ansible_host | default(ansible_default_ipv4.address) }}:{{ mysql_port }}
+      {{ hostvars[inventory_hostname].ansible_host | default(inventory_hostname) }}:{{ hostvars[inventory_hostname].mysql_port | default(mysql_port) }}
   tasks:
     - name: 将实例加入集群
       ansible.builtin.command:
@@ -168,6 +171,7 @@
           {{ '已加入集群' if add_instance_result is changed else '已在集群中' }}。
 
 - name: 等待集群恢复完整健康状态
+  any_errors_fatal: true
   hosts: mysql_primary
   become: true
   gather_facts: false

@@ -1,5 +1,6 @@
 ---
 - name: HAProxy/Keepalived 节点缩容说明
+  any_errors_fatal: true
   hosts: localhost
   gather_facts: false
   tasks:
@@ -11,6 +12,7 @@
           3. 完成后请从 inventory 的 haproxy_lb 组移除该主机
 
 - name: HAProxy/Keepalived 节点缩容执行
+  any_errors_fatal: true
   hosts: haproxy_lb
   gather_facts: true
   become: yes

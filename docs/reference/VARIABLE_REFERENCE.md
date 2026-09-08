@@ -171,7 +171,7 @@ MySQL 模板消费。不要创建新的 `group_vars/all-xxx.yml` 运行配置副
 | `mysql_remove_cleanup_data` | `false` | 默认保留数据 |
 | `mysql_remove_stop_service` | `true` | 成功移除后停止服务 |
 | `require_primary_switchover_before_removal` | `true` | 移除 primary 前切主 |
-| `rolling_apply_batch_size` | `1` | 滚动配置批大小 |
+| `rolling_apply_batch_size` | `1` | 生产安全门要求每批一台 |
 | `rolling_apply_pause_seconds` | `10` | 批次间暂停秒数 |
 
 缩容 playbook 还会按运行时身份唯一识别目标 UUID 和当前 ONLINE primary，并在操作
@@ -296,12 +296,6 @@ rsync 强制 BatchMode、`StrictHostKeyChecking=yes` 和指定的
 - `routing_connect_timeout`
 - `client_connect_timeout`
 - `max_connect_errors`
-- `router_threads`
-- `io_threads`
-- `connection_pool_size`
-- `memory_limit`
-- `metadata_cache_ttl`
-- `metadata_cache_refresh`
 - `routing_strategy_rw`
 - `routing_strategy_ro`
 - `routing_strategy_rwsplit`
@@ -313,6 +307,10 @@ rsync 强制 BatchMode、`StrictHostKeyChecking=yes` 和指定的
 `mysql_router_route_max_connections`。
 
 已有 bootstrap 配置且 `mysql_router_rebootstrap: false` 时不会重复 bootstrap。
+受管端口、连接数、超时和策略会直接原子更新现有配置，保留 Router 身份和 keyring；
+有实际变化才滚动重启。自动读写分离统一使用 `routing:bootstrap_rw_split`，
+自动移除历史重复的 `routing:read_write_split`。没有消费者的线程、内存、连接池和
+metadata 缓存字段已移除，不能把这些旧字段当成实际生效的调优。
 只有明确恢复或重建时才临时设为 `true`，完成后恢复默认。
 
 ## 10. 最小覆盖示例

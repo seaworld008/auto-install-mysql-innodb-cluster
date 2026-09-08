@@ -1,5 +1,6 @@
 ---
 - name: 备份配置预检查
+  any_errors_fatal: true
   hosts: localhost
   gather_facts: false
   tasks:
@@ -17,6 +18,9 @@
           - backup_config.type in ['local', 'nfs', 'rsync']
           - backup_config.base_dir | length > 0
           - backup_config.base_dir is match('^/')
+          - backup_config.base_dir != '/'
+          - "'..' not in backup_config.base_dir.split('/')"
+          - backup_config.xtrabackup.target_subdir is match('^[A-Za-z0-9][A-Za-z0-9_-]*$')
           - backup_config.retention_days | int > 0
           - backup_config.threads | int > 0
           - backup_config.compression in ['none', 'gzip', 'zstd']
@@ -49,6 +53,7 @@
       when: backup_config.method == 'xtrabackup'
 
 - name: 在备份执行节点上运行备份
+  any_errors_fatal: true
   hosts: all
   gather_facts: false
   become: yes
@@ -353,7 +358,7 @@
           --compress \
           --delete-delay \
           -e "ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile={{ backup_config.ssh_known_hosts_file }}{% if backup_config.ssh_key_path | length > 0 %} -i {{ backup_config.ssh_key_path }}{% endif %}" \
-          "{{ backup_run_root }}/" \
+          {{ (backup_run_root ~ '/') | quote }} \
           "{{ backup_config.remote_user }}@{{ backup_config.remote_host }}:{{ backup_config.remote_dir }}/{{ mysql_cluster_name }}/{{ backup_timestamp }}/{{ inventory_hostname }}/"
       args:
         executable: /bin/bash

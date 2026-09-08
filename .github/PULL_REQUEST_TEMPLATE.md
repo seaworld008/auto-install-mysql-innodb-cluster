@@ -14,7 +14,7 @@
 ## Testing
 
 - [ ] `git diff --check`
-- [ ] `bash -n deploy.sh validate_deployment.sh scripts/*.sh`
+- [ ] `for script in deploy.sh validate_deployment.sh scripts/*.sh; do bash -n "$script" || exit 1; done`
 - [ ] `ansible-playbook -i inventory/hosts.yml playbooks/site.yml --syntax-check`
 - [ ] `ansible-playbook -i inventory/hosts-ha-reference.yml playbooks/site.yml --syntax-check`
 - [ ] `ansible-playbook -i inventory/hosts-with-dedicated-routers.yml playbooks/site.yml --syntax-check`

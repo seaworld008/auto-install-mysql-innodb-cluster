@@ -1,5 +1,6 @@
 ---
 - name: 安装MySQL服务器
+  any_errors_fatal: true
   hosts: mysql_cluster
   become: yes
   gather_facts: yes
@@ -33,12 +34,21 @@
     mysql_common_packages_debian:
       - wget
       - curl
-      - libaio1
+      - "{{ mysql_libaio_package }}"
       - numactl
       - gnupg
       - python3
       - python3-pymysql
       - rsync
+    mysql_libaio_package: >-
+      {{
+        'libaio1'
+        if (
+          (ansible_distribution == 'Ubuntu' and ansible_distribution_release == 'jammy')
+          or (ansible_distribution == 'Debian' and ansible_distribution_release == 'bookworm')
+        )
+        else 'libaio1t64'
+      }}
     mysql_server_packages_redhat:
       - mysql-community-server
       - mysql-community-client
@@ -57,8 +67,8 @@
             (ansible_distribution == 'Ubuntu' and ansible_distribution_release in mysql_supported_ubuntu_releases)
             or
             (ansible_distribution == 'Debian' and ansible_distribution_release in mysql_supported_debian_releases)
-        fail_msg: "当前系统或 MySQL 发行线不在已验证矩阵中。当前仓库仅支持 MySQL 8.0 / 8.4，且已验证 Ubuntu 22.04/24.04/25.10 与 RedHat 家族 8/9/10。"
-        success_msg: "目标操作系统在已验证矩阵内"
+        fail_msg: "目标系统或 MySQL 发行线不在支持配置列表中，请核对 mysql_supported_*；真实环境兼容性须另行验收。"
+        success_msg: "目标操作系统在支持配置列表内"
 
     - name: 显示系统信息
       debug:

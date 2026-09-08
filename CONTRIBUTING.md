@@ -23,7 +23,9 @@
 git checkout -b docs/improve-readme
 # 修改文件
 git diff --check
-bash -n deploy.sh validate_deployment.sh scripts/*.sh
+for script in deploy.sh validate_deployment.sh scripts/*.sh; do
+  bash -n "$script" || exit 1
+done
 python -m unittest discover tests
 ./validate_deployment.sh
 ansible-playbook -i inventory/hosts.yml playbooks/site.yml --syntax-check
@@ -74,7 +76,7 @@ Markdown / YAML lint 在 CI 中是阻断门，但通过 lint 仍不等于部署�
 
 - 文档变更：`git diff --check`、`npx --yes markdownlint-cli2@0.23.2` 和
   `yamllint .`。
-- Shell 变更：`bash -n deploy.sh validate_deployment.sh scripts/*.sh`。
+- Shell 变更：`for script in deploy.sh validate_deployment.sh scripts/*.sh; do bash -n "$script" || exit 1; done`。
 - 主入口或安全契约变更：`python -m unittest discover tests`。
 - Ansible 变更：至少运行主要 inventory 的 `--syntax-check`。
 - 配置或 playbook 行为变更：同步 README、部署指南、相关 runbook。

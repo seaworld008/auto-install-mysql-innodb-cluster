@@ -1,5 +1,6 @@
 ---
 - name: 安装和配置 HAProxy（MySQL 入口负载均衡）
+  any_errors_fatal: true
   hosts: haproxy_lb
   become: yes
   gather_facts: yes

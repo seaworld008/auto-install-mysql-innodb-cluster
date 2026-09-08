@@ -1,5 +1,6 @@
 ---
 - name: MySQL 节点缩容预检查与集群摘除
+  any_errors_fatal: true
   hosts: localhost
   gather_facts: false
   vars:
@@ -111,7 +112,9 @@
           {{
             mysql_shrink_new_primary
             if mysql_shrink_target_is_primary
-            else mysql_inventory_primary_host
+            else (
+              groups['mysql_cluster'] | difference([mysql_shrink_target]) | first
+            )
           }}
 
     - name: 将节点从集群中移除
@@ -140,6 +143,7 @@
         msg: "{{ mysql_shrink_target }} 已从 InnoDB Cluster 拆除。"
 
 - name: MySQL 节点缩容后的服务处理
+  any_errors_fatal: true
   hosts: "{{ mysql_shrink_target }}"
   gather_facts: true
   become: true
@@ -163,6 +167,7 @@
       when: scale_policy.mysql_remove_cleanup_data | bool
 
 - name: 缩容后集群状态复核
+  any_errors_fatal: true
   hosts: localhost
   gather_facts: false
   vars:

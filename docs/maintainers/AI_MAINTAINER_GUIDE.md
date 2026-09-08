@@ -185,7 +185,9 @@ profile 验证都不能绕过 preflight。运行时部分要求：
 
 ```bash
 git diff --check
-bash -n deploy.sh validate_deployment.sh scripts/*.sh
+for script in deploy.sh validate_deployment.sh scripts/*.sh; do
+  bash -n "$script" || exit 1
+done
 ./.venv/bin/python -m unittest discover tests
 npx --yes markdownlint-cli2@0.23.2
 ./.venv/bin/yamllint .

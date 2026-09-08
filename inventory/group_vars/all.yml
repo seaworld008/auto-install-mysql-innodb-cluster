@@ -251,20 +251,12 @@ mysql_router_4c8g_optimized:
   client_connect_timeout: 9
   max_connect_errors: 100
   
-  # CPU和内存优化 - 适配4核8G硬件
-  router_threads: 6                     # 调整到6个线程（4核的1.5倍）
-  io_threads: 4                         # I/O线程数
-  connection_pool_size: 500             # 连接池大小
-  memory_limit: "6GB"                   # 内存限制（为系统预留2GB）
   
-  # 缓存配置
-  metadata_cache_ttl: 300
-  metadata_cache_refresh: 60
   
   # 路由策略
   routing_strategy_rw: "first-available"
   routing_strategy_ro: "round-robin"
-  routing_strategy_rwsplit: "round-robin-with-fallback"
+  routing_strategy_rwsplit: "round-robin"
 
 mysql_router_metadata_connect_timeout: "{{ mysql_router_4c8g_optimized.metadata_connect_timeout }}"
 mysql_router_metadata_read_timeout: "{{ mysql_router_4c8g_optimized.metadata_read_timeout }}"
