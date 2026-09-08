@@ -401,3 +401,9 @@ PR 描述应包含：
 
 静态及本地回归测试不替代真实环境验收。首次部署、重复执行、故障切换、扩缩容、
 备份恢复和容量测试仍需在隔离 staging 执行并留存记录。
+
+## 本地模拟验证
+
+`tests/lab/` 仅生成隔离 Linux 主机和本地配置，部署仍调用原主入口。
+参见 `docs/runbooks/LOCAL_SIMULATION.md` 与 `docs/reports/LOCAL_SIMULATION_2026-09-08.md`。
+所有生成资源在 `tmp/`，运行修复已集成但已知未通过项不等于生产验收完成。

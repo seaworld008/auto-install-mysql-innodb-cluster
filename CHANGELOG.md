@@ -6,6 +6,22 @@
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-09
+
+### 新增
+
+- `tests/lab/` 提供专用 Lima/Rocky systemd 主机模拟的配置生成与生命周期工具；
+  保存中文测试方案、脱敏报告、源码 SHA 和资源边界，所有生成数据留在忽略目录。
+- 唯一运行配置新增 `simulation_minimal` 档位，低资源连接数不再产生负数上限。
+
+### 修复
+
+- 修复 curl-minimal 包冲突、MySQL 8.4 caching_sha2 账号创建和只读 secondary 重复授权。
+- 统一 mysqlsh defaults/密码 stdin/向导调用顺序，并修复 YAML 内 SQL 字符串换行。
+- Router bootstrap 不再生成空 routing 段，补装验证依赖 MySQL Shell。
+- 启用 Keepalived 脚本安全；验证 Percona 公钥摘要与完整指纹后安装签名 RPM。
+- 新增对应回归，保存模拟验证仍未通过的混合事务路由、严格 TLS、组 UUID 等边界。
+
 ## [0.3.1] - 2026-09-08
 
 ### 修复

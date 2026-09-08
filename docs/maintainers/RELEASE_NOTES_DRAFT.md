@@ -1,51 +1,48 @@
-# v0.3.1
+# v0.4.0
 
-本版本修复生产自动化部署中的首次安装阻塞、Router 配置不生效和失败传播问题。
-运行时主配置仍为 `inventory/group_vars/all.yml`，操作统一通过
-`scripts/deploy_dedicated_routers.sh`。
+集成本机 Rocky Linux 9 / MySQL 8.4 模拟验证发现的部署修复，并提供可重建的低资源
+Linux 主机模拟配置。生产操作仍统一通过 `scripts/deploy_dedicated_routers.sh`。
 
-## 修复内容
+## 变更
 
-- Ubuntu 24.04/25.04/25.10 与 Debian 13 选择 `libaio1t64`，避免安装不存在的旧包。
-- Group Replication 地址从 inventory 解析，不再依赖其他批次尚未采集的 facts。
-- 委派执行 `addInstance` 时明确使用目标 secondary 的地址，避免取到管理节点地址。
-- MySQL 缩容后的管理连接使用剩余成员，避免查询已经停服的原管理节点。
-- 已有 Router 的端口、连接数、超时和路由策略原子收敛，保留身份及 keyring；
-  实际变化才重启，逐台执行三类连接验证。
-- 自动读写分离统一到 `routing:bootstrap_rw_split`，移除历史重复路由，
-  使用与 PRIMARY_AND_SECONDARY 兼容的 round-robin 策略并阻断非法策略。
-- 任一节点失败时停止后续操作；检查 MySQL 分组完整性、单节点滚动批次、
-  server_id 范围及唯一性、Router 端口冲突和危险目录。
-- CLI 拒绝不支持的 `--limit` / `--target` 参数组合及主机参数注入。
-- rsync 备份源路径正确引用；备份根目录与物理备份子目录增加约束。
-- CI 逐个检查 Shell 脚本；新增实际 Ansible 失败传播、配置原子更新幂等性、
-  模板与发行版包选择回归测试。
-- 移除未生效的 Router 调优字段；更新 deploy-pages 到 5.0.1（PR #14）。
+- 保留 RHEL 上已有的 curl-minimal，避免与 curl 冲突。
+- MySQL 管理/复制账号使用 caching_sha2_password；已有集群仅在当前在线 primary
+  修改账号，避免重复部署在只读 secondary 执行 GRANT。
+- mysqlsh 显式跳过 client defaults，通过 stdin 完成密码认证后关闭 AdminAPI 向导；
+  修复 YAML 中 SQL 字符串换行，并同步状态和故障辅助脚本。
+- Router bootstrap 不再生成缺少 destinations 的 routing 段；安装 SQL 验证所需 Shell。
+- Keepalived 显式启用脚本安全与 root 执行身份，保持配置 0600 和 no_log。
+- Percona Release RPM 公钥经固定 SHA-256 和完整指纹校验后导入，继续验证 RPM 签名。
+- 新增 simulation_minimal 配置及低连接数边界保护，生产默认硬件规格保持原值。
+- 保存 `tests/lab/` 配置生成与生命周期工具、中文完整测试方案、脱敏实测报告；
+  每轮重新生成凭据，记录源码 SHA，将磁盘、数据和下载放在当前仓库 tmp/ 下。
+
+## 验证与已知限制
+
+原 v0.3.1 首次模拟部署失败；修补副本通过 3 MySQL + 2 Router + 2 LB 收敛、重复部署、
+滚动配置、故障注入、扩缩容和两种隔离备份恢复。最终 8,227 笔已确认写入无缺失或内容
+不匹配。逻辑恢复是数据与结构语义一致，原始 DDL 打印形式存在已记录差异。
+
+这些完整场景来自 2026-09-08 原始实验脚本，不是 v0.4.0 所有代码路径重新验收。
+发布分支另执行 Python 回归、Shell、Markdown/YAML lint、全部 playbook syntax、
+三个 inventory 检查，并要求 PR / main CI 和发布制品下载校验。
+
+**仍未通过：** 混合 RW/RO/自动分离端口事务流程偶发只读拒写、默认自动证书的严格 TLS
+校验、配置 UUID 与 AdminAPI 实际组 UUID 一致性。失去多数派能阻止写入，但重启节点未
+自动恢复，需要受控恢复。新小规格参数边界有自动回归，DEB 分支没有本轮运行时证据。
+
+容器共享 Ubuntu ARM64 内核，不能代替真实 RHEL 内核、SELinux enforcing、生产 PKI、
+跨机器故障、物理断电或性能容量验收；NFS/rsync 目标也未实测。本版不是生产验收声明。
 
 ## 升级与回退
 
-1. 保存现有受保护配置、inventory 和 Vault，在维护窗口升级。
-2. `--check-prereq` → `--apply-config` → `--status`。
-3. Group Replication 使用的 inventory 地址必须在集群节点间直接可达，不能使用
-   仅用于 SSH 的 NAT 地址。MySQL 每批仅允许一台。
-4. 自定义 Router 路由名称需先人工迁移；不要删除 keyring 或默认强制 rebootstrap。
-5. 移除 `mysql_primary` 管理节点时，更新 inventory 将一个剩余成员归入该组，
-   其余归入 `mysql_secondary`，再执行 `--status`。
-6. 出现问题立即停止后续批次，恢复保存的配置并逐台验证；切回旧 tag 不会自动还原
-   已应用的运行时配置，也不代表数据库版本降级或数据恢复已完成。
+先保存 inventory、Vault、配置和可恢复备份。在 staging 使用原主入口执行部署及重复
+收敛，再按维护窗口应用；单独 `--apply-config` 不负责安装新增包或迁移账号。
+已有自定义 backup_config 应补齐 percona_release 公钥 URL、摘要与指纹字段。
+不要删除 Router keyring、默认强制 rebootstrap，或通过关闭 super_read_only 绕过错误。
+回退 Git tag 不会回退数据库账号、RPM 或数据；发现失败应停止后续批次并按备份恢复方案处理。
 
-## 验证与边界
-
-本地执行 Python 回归、全部 Shell 语法、YAML/Markdown lint、全部 playbook
-syntax-check、三个主 inventory 解析与 site syntax-check。
-PR 和合并后的 main 还必须通过 Python 3.12/3.13、PowerShell parser、文档检查和
-CodeQL；发布后下载源码归档复验 SHA-256 与解包内容。
-
-真实 Linux/MySQL 环境未在本轮执行，首次部署、重复收敛、故障切换、VIP 漂移、
-扩缩容、备份恢复、容量及性能仍待隔离 staging 验收。这是部署自动化修复版，
-不能把静态/CI 通过解释为生产环境已经验收通过。
-
-Release 附源码归档及 `SHA256SUMS`，下载到同一目录后执行：
+源码归档附 `SHA256SUMS`，下载到同一目录后执行：
 
 ```bash
 shasum -a 256 --check SHA256SUMS

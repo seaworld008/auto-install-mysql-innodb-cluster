@@ -21,7 +21,7 @@
     mysql_release_yum_tools_baseurl: "{{ 'https://repo.mysql.com/yum/mysql-tools-community/el/' ~ ansible_distribution_major_version ~ '/$basearch/' if mysql_release_line == '8.0' else 'https://repo.mysql.com/yum/mysql-tools-8.4-community/el/' ~ ansible_distribution_major_version ~ '/$basearch/' }}"
     mysql_router_packages_redhat:
       - wget
-      - curl
+      - "{{ 'curl-minimal' if 'curl-minimal' in ansible_facts.packages else 'curl' }}"
       - "{{ 'python39' if ansible_distribution_major_version == '8' else 'python3' }}"
     mysql_router_packages_debian:
       - wget
@@ -58,6 +58,11 @@
             (ansible_distribution == 'Debian' and ansible_distribution_release in mysql_supported_debian_releases)
         fail_msg: "目标系统或 MySQL 发行线不在支持配置列表中，请核对 mysql_supported_*；真实环境兼容性须另行验收。"
         success_msg: "目标操作系统在支持配置列表内"
+
+    - name: 检查已有 RPM 包以保留 curl 提供者
+      ansible.builtin.package_facts:
+        manager: auto
+      when: ansible_os_family == 'RedHat'
 
     - name: 安装 Router 依赖和软件包（RedHat）
       package:
@@ -123,7 +128,7 @@
 
     - name: 安装 Router 依赖和软件包（Debian/Ubuntu）
       apt:
-        name: "{{ mysql_router_packages_debian + [mysql_router_package_name_debian] }}"
+        name: "{{ mysql_router_packages_debian + [mysql_router_package_name_debian, 'mysql-shell'] }}"
         state: present
         update_cache: no
       environment:
@@ -132,7 +137,7 @@
 
     - name: 安装 MySQL Router（RedHat）
       package:
-        name: "{{ mysql_router_package_name_redhat }}"
+        name: "{{ [mysql_router_package_name_redhat, 'mysql-shell'] }}"
         state: present
       when: ansible_os_family == 'RedHat'
 
@@ -178,10 +183,6 @@
           - "--conf-set-option=DEFAULT.max_total_connections={{ mysql_router_max_total_connections }}"
           - "--conf-set-option=DEFAULT.read_timeout={{ mysql_router_metadata_read_timeout }}"
           - "--conf-set-option=DEFAULT.connect_timeout={{ mysql_router_metadata_connect_timeout }}"
-          - "--conf-set-option=routing.max_connections={{ mysql_router_route_max_connections }}"
-          - "--conf-set-option=routing.max_connect_errors={{ mysql_router_max_connect_errors }}"
-          - "--conf-set-option=routing.client_connect_timeout={{ mysql_router_client_connect_timeout }}"
-          - "--conf-set-option=routing.connect_timeout={{ mysql_router_routing_connect_timeout }}"
           - "--conf-set-option=routing:bootstrap_rw_split.bind_port={{ mysql_router_rwsplit_port }}"
           - >-
             --conf-set-option=routing:bootstrap_rw_split.destinations=metadata-cache://
@@ -272,8 +273,9 @@
       ansible.builtin.command:
         argv:
           - mysqlsh
-          - --no-wizard
+          - --no-defaults
           - --passwords-from-stdin
+          - --password
           - --uri
           - "{{ mysql_cluster_user }}@127.0.0.1:{{ mysql_router_port }}"
           - --sql
@@ -289,8 +291,9 @@
       ansible.builtin.command:
         argv:
           - mysqlsh
-          - --no-wizard
+          - --no-defaults
           - --passwords-from-stdin
+          - --password
           - --uri
           - "{{ mysql_cluster_user }}@127.0.0.1:{{ mysql_router_ro_port }}"
           - --sql
@@ -306,8 +309,9 @@
       ansible.builtin.command:
         argv:
           - mysqlsh
-          - --no-wizard
+          - --no-defaults
           - --passwords-from-stdin
+          - --password
           - --uri
           - "{{ mysql_cluster_user }}@127.0.0.1:{{ mysql_router_rwsplit_port }}"
           - --sql

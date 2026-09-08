@@ -43,6 +43,36 @@ mysql_hardware_profile: "optimized_8c32g"
 
 # MySQL配置参数 - 专为8核32G内存优化
 mysql_config_profiles:
+  # 仅隔离功能模拟；不是生产最低规格。
+  simulation_minimal:
+    innodb_buffer_pool_size: 256M
+    innodb_redo_log_capacity: 128M
+    max_connections: 50
+    thread_cache_size: 8
+    table_open_cache: 256
+    sort_buffer_size: 256K
+    read_buffer_size: 128K
+    read_rnd_buffer_size: 256K
+    bulk_insert_buffer_size: 1M
+    tmp_table_size: 8M
+    max_heap_table_size: 8M
+    innodb_buffer_pool_instances: 1
+    innodb_io_capacity: 200
+    innodb_io_capacity_max: 400
+    innodb_read_io_threads: 2
+    innodb_write_io_threads: 2
+    innodb_thread_concurrency: 0
+    back_log: 128
+    thread_stack: 256K
+    table_open_cache_instances: 1
+    open_files_limit: 4096
+    join_buffer_size: 128K
+    max_allowed_packet: 32M
+    wait_timeout: 900
+    interactive_timeout: 1800
+    connect_timeout: 10
+    net_read_timeout: 300
+    net_write_timeout: 300
   optimized_8c32g:  # 8核32G优化配置
     # InnoDB缓冲池 - 生产默认保留更多OS与峰值余量
     innodb_buffer_pool_size: "18G"
@@ -195,6 +225,9 @@ backup_config:
     deb_sha256: "313ebd0fbab685bf448ff41d7d62f5ee3b2bcd8a45b0c52ed842606a2d5deeae"
     rpm_url: "https://repo.percona.com/yum/percona-release-1.0-33.noarch.rpm"
     rpm_sha256: "b644b932670501cf42445382b208cada2c01888026326f9cd2668d938d6f57aa"
+    rpm_key_url: "https://raw.githubusercontent.com/percona/percona-repositories/release-1.0-33/rpm/PERCONA-PACKAGING-KEY"
+    rpm_key_sha256: "55909a2d3869ed261f139fc5cae894673e0e8a1b300115f056ef4cf3976972a2"
+    rpm_key_fingerprint: "4D1BB29D63D98E422B2113B19334A25F8507EFA5"
   xtrabackup:
     parallel: 4
     compress: false

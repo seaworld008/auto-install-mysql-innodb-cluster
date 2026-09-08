@@ -47,12 +47,13 @@ run_mysqlsh() {
     local javascript="$2"
     printf '%s\n' "$CLUSTER_PASSWORD" |
         mysqlsh \
-            --no-wizard \
+            --no-defaults \
             --quiet-start=2 \
             --passwords-from-stdin \
+            --password \
             --uri "${CLUSTER_USER}@${host}:3306" \
             --js \
-            -e "$javascript"
+            -e "shell.options.useWizards = false; $javascript"
 }
 
 [[ -n "$PRIMARY_HOST" ]] ||

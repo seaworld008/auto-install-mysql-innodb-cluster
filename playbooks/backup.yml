@@ -155,6 +155,28 @@
         - backup_config.method == 'xtrabackup'
         - ansible_os_family == 'RedHat'
 
+    - name: 下载并校验 Percona RPM 签名公钥
+      ansible.builtin.get_url:
+        url: "{{ backup_config.percona_release.rpm_key_url }}"
+        dest: /etc/pki/rpm-gpg/PERCONA-PACKAGING-KEY
+        checksum: "sha256:{{ backup_config.percona_release.rpm_key_sha256 }}"
+        owner: root
+        group: root
+        mode: '0644'
+      when:
+        - backup_config.method == 'xtrabackup'
+        - ansible_os_family == 'RedHat'
+
+    - name: 按完整指纹导入 Percona RPM 签名公钥
+      ansible.builtin.rpm_key:
+        key: /etc/pki/rpm-gpg/PERCONA-PACKAGING-KEY
+        fingerprint:
+          - "{{ backup_config.percona_release.rpm_key_fingerprint }}"
+        state: present
+      when:
+        - backup_config.method == 'xtrabackup'
+        - ansible_os_family == 'RedHat'
+
     - name: 安装 Percona Release 包（RedHat）
       package:
         name: /tmp/percona-release-latest.noarch.rpm
@@ -182,13 +204,15 @@
       ansible.builtin.command:
         argv:
           - mysqlsh
-          - --no-wizard
+          - --no-defaults
           - --passwords-from-stdin
+          - --password
           - --uri
           - "{{ mysql_cluster_user }}@127.0.0.1:{{ mysql_port }}"
           - --js
           - -e
           - >-
+            shell.options.useWizards = false;
             util.dumpInstance({{ backup_run_root | to_json }}, {
               threads: {{ backup_config.threads }},
               consistent: {{ 'true' if backup_config.consistent else 'false' }},

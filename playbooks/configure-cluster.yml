@@ -17,16 +17,17 @@
       ansible.builtin.command:
         argv:
           - mysqlsh
-          - --no-wizard
+          - --no-defaults
           - --passwords-from-stdin
+          - --password
           - --uri
           - "{{ mysql_cluster_user }}@127.0.0.1:{{ mysql_port }}"
           - --js
           - -e
           - >-
+            shell.options.useWizards = false;
             var row = session.runSql(
-              "SELECT COUNT(*) FROM performance_schema.replication_group_members
-              WHERE MEMBER_ID = @@server_uuid"
+              "SELECT COUNT(*) FROM performance_schema.replication_group_members WHERE MEMBER_ID = @@server_uuid"
             ).fetchOne();
             print('ANSIBLE_MEMBER=' + row[0]);
         stdin: "{{ mysql_cluster_password }}\n"
@@ -39,13 +40,15 @@
       ansible.builtin.command:
         argv:
           - mysqlsh
-          - --no-wizard
+          - --no-defaults
           - --passwords-from-stdin
+          - --password
           - --uri
           - "{{ mysql_cluster_user }}@127.0.0.1:{{ mysql_port }}"
           - --js
           - -e
           - >-
+            shell.options.useWizards = false;
             var result = dba.checkInstanceConfiguration();
             print('ANSIBLE_STATUS=' + result.status);
         stdin: "{{ mysql_cluster_password }}\n"
@@ -85,13 +88,15 @@
       ansible.builtin.command:
         argv:
           - mysqlsh
-          - --no-wizard
+          - --no-defaults
           - --passwords-from-stdin
+          - --password
           - --uri
           - "{{ mysql_cluster_user }}@127.0.0.1:{{ mysql_port }}"
           - --js
           - -e
           - >-
+            shell.options.useWizards = false;
             try {
               dba.getCluster('{{ mysql_cluster_name }}');
               print('ANSIBLE_CLUSTER=EXISTS');
@@ -108,13 +113,15 @@
       ansible.builtin.command:
         argv:
           - mysqlsh
-          - --no-wizard
+          - --no-defaults
           - --passwords-from-stdin
+          - --password
           - --uri
           - "{{ mysql_cluster_user }}@127.0.0.1:{{ mysql_port }}"
           - --js
           - -e
           - >-
+            shell.options.useWizards = false;
             dba.createCluster(
               '{{ mysql_cluster_name }}',
               {gtidSetIsComplete: true}
@@ -146,13 +153,15 @@
       ansible.builtin.command:
         argv:
           - mysqlsh
-          - --no-wizard
+          - --no-defaults
           - --passwords-from-stdin
+          - --password
           - --uri
           - "{{ mysql_cluster_user }}@127.0.0.1:{{ mysql_port }}"
           - --js
           - -e
           - >-
+            shell.options.useWizards = false;
             dba.getCluster('{{ mysql_cluster_name }}').addInstance(
               '{{ mysql_cluster_user }}@{{ mysql_instance_address }}',
               {recoveryMethod: '{{ mysql_cluster_recovery_method }}'}
@@ -182,13 +191,15 @@
       ansible.builtin.command:
         argv:
           - mysqlsh
-          - --no-wizard
+          - --no-defaults
           - --passwords-from-stdin
+          - --password
           - --uri
           - "{{ mysql_cluster_user }}@127.0.0.1:{{ mysql_port }}"
           - --js
           - -e
           - >-
+            shell.options.useWizards = false;
             var status = dba.getCluster(
               '{{ mysql_cluster_name }}'
             ).status().defaultReplicaSet;

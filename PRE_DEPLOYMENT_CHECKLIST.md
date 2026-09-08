@@ -91,3 +91,17 @@ ansible-playbook -i inventory/hosts.local.yml playbooks/site.yml --syntax-check 
 
 静态及本地回归测试不替代真实环境验收。首次部署、重复执行、故障切换、扩缩容、
 备份恢复和容量测试仍需在隔离 staging 执行并留存记录。
+
+## v0.4.0 模拟验证与运行修复
+
+本版集成 Rocky/MySQL 8.4 实测的包冲突、caching_sha2 账号、secondary 重复授权、
+mysqlsh 认证、Router bootstrap、Keepalived 脚本安全和 Percona RPM 公钥修复。
+管理账号在独立实例或当前在线 primary 收敛，secondary 依赖复制；不关闭只读保护。
+升级时应在 staging 运行完整部署与重复执行；`--apply-config` 不承担包安装与账号迁移。
+
+外置盘本地模拟使用独立 Lima VM（6 CPU / 12 GiB），配置生成、重建、测试顺序与
+定向清理见 [本机模拟方案](docs/runbooks/LOCAL_SIMULATION.md)。低资源档位
+`simulation_minimal` 仅用于模拟；50 总连接对应 45 用户连接，生产默认规格保持原值。
+
+[实测报告](docs/reports/LOCAL_SIMULATION_2026-09-08.md)记录了通过及未通过项。
+混合端口事务路由、严格 TLS 和组 UUID 配置归属仍待解决，不能据此声明已完成生产验收。

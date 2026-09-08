@@ -89,13 +89,15 @@
       ansible.builtin.command:
         argv:
           - mysqlsh
-          - --no-wizard
+          - --no-defaults
           - --passwords-from-stdin
+          - --password
           - --uri
           - "{{ mysql_cluster_user }}@127.0.0.1:{{ mysql_port }}"
           - --js
           - -e
           - >-
+            shell.options.useWizards = false;
             dba.getCluster('{{ mysql_cluster_name }}').setPrimaryInstance(
               '{{ mysql_cluster_user }}@{{ mysql_shrink_new_primary_address }}:{{ mysql_port }}'
             );
@@ -121,13 +123,15 @@
       ansible.builtin.command:
         argv:
           - mysqlsh
-          - --no-wizard
+          - --no-defaults
           - --passwords-from-stdin
+          - --password
           - --uri
           - "{{ mysql_cluster_user }}@127.0.0.1:{{ mysql_port }}"
           - --js
           - -e
           - >-
+            shell.options.useWizards = false;
             dba.getCluster('{{ mysql_cluster_name }}').removeInstance(
               '{{ mysql_cluster_user }}@{{ mysql_shrink_target_address }}:{{ mysql_port }}'
             );
@@ -177,13 +181,15 @@
       ansible.builtin.command:
         argv:
           - mysqlsh
-          - --no-wizard
+          - --no-defaults
           - --passwords-from-stdin
+          - --password
           - --uri
           - "{{ mysql_cluster_user }}@127.0.0.1:{{ mysql_port }}"
           - --js
           - -e
           - >-
+            shell.options.useWizards = false;
             var replicaSet = dba.getCluster(
               '{{ mysql_cluster_name }}'
             ).status().defaultReplicaSet;
