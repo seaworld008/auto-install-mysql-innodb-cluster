@@ -1,5 +1,6 @@
 ---
 - name: Router 节点缩容说明
+  any_errors_fatal: true
   hosts: localhost
   gather_facts: false
   tasks:
@@ -11,6 +12,7 @@
           3. 完成后请从 inventory 的 mysql_router 组移除该主机
 
 - name: Router 节点缩容执行
+  any_errors_fatal: true
   hosts: mysql_router
   gather_facts: true
   become: yes

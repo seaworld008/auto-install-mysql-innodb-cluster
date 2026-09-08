@@ -92,14 +92,7 @@ all:
       max_connect_errors: 100                       # 最大连接错误数
       
       # 内存和CPU优化 - 适配4核8G硬件
-      router_threads: 6                             # Router工作线程数 (优化到6个)
-      io_threads: 4                                 # I/O线程数
-      connection_pool_size: 500                     # 连接池大小
-      memory_limit: "6GB"                           # 内存限制(为系统预留2GB)
       
-      # 缓存配置
-      metadata_cache_ttl: 300                       # 元数据缓存TTL(秒)
-      metadata_cache_refresh: 60                    # 元数据刷新间隔(秒)
       
       # 路由策略
       routing_strategy_rw: "first-available"        # 读写路由策略

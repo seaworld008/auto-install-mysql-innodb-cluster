@@ -87,7 +87,7 @@ MySQL InnoDB Cluster 生产部署入口
     --rollback              停止入口层服务（不删除数据库数据）
     -i, --inventory <file>  指定 inventory 文件
     --skip-kernel-optimization  跳过内核优化（默认不跳过）
-    --limit <group|host>    指定扩容/重配目标
+    --limit <group|host>    仅用于扩容、入口缩容或内核优化
     --target <host>         指定缩容目标主机
     --new-primary <host>    缩容当前主节点前先切换到新主节点
     -e, --extra-vars <vars>  透传 Ansible extra vars（敏感值请使用 @Vault文件）
@@ -573,6 +573,24 @@ main() {
         show_help
         exit 1
     fi
+
+    # 不得静默忽略作用域参数，否则操作者可能意外修改整组节点。
+    if [[ -n "$limit" ]]; then
+        case "$action" in
+            --scale-mysql-add|--shrink-router|--shrink-lb|--kernel-optimize-only) ;;
+            *) log_error "$action 不支持 --limit；操作已中止"; exit 1 ;;
+        esac
+    fi
+    if [[ -n "$target$new_primary" && "$action" != "--scale-mysql-remove" ]]; then
+        log_error "--target / --new-primary 仅用于 --scale-mysql-remove"
+        exit 1
+    fi
+    for host in "$target" "$new_primary"; do
+        if [[ -n "$host" && ! "$host" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]*$ ]]; then
+            log_error "缩容目标必须是单个 inventory 主机名，不能包含表达式或变量"
+            exit 1
+        fi
+    done
 
     require_dependencies
 

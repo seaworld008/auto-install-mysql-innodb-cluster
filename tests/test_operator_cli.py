@@ -180,6 +180,22 @@ class OperatorCliTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("inventory 文件不存在", result.stdout)
 
+    def test_unsupported_scope_never_executes_playbooks(self):
+        log = self.temp_path / "playbooks.log"
+        for arguments in (
+            ("--production-ready", "--limit", "mysql-node1"),
+            ("--apply-config", "--limit", "mysql-node1"),
+            ("--rollback", "--target", "mysql-node1"),
+            ("--scale-mysql-remove", "--target", "mysql-node3 injected=true"),
+        ):
+            with self.subTest(arguments=arguments):
+                result = self._run(
+                    DEPLOY_SCRIPT, *arguments, "-i", str(self.inventory_path),
+                    environment={"FAKE_PLAYBOOK_LOG": str(log)},
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertFalse(log.exists())
+
     def test_rollback_stops_all_tiers_in_safe_order_and_aggregates_errors(
         self,
     ) -> None:

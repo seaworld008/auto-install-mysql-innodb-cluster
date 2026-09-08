@@ -31,7 +31,9 @@ Secret Manager。
 
 ```bash
 git diff --check origin/main...HEAD
-bash -n deploy.sh validate_deployment.sh scripts/*.sh
+for script in deploy.sh validate_deployment.sh scripts/*.sh; do
+  bash -n "$script" || exit 1
+done
 ./.venv/bin/python -m pip check
 ./.venv/bin/python -m unittest discover tests -v
 npx --yes markdownlint-cli2@0.23.2

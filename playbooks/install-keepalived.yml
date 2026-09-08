@@ -1,5 +1,6 @@
 ---
 - name: 安装和配置 Keepalived（HAProxy VIP 漂移）
+  any_errors_fatal: true
   hosts: haproxy_lb
   become: yes
   gather_facts: yes

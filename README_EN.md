@@ -85,7 +85,9 @@ All supported operator workflows should route through `scripts/deploy_dedicated_
 
 ```bash
 git diff --check
-bash -n deploy.sh validate_deployment.sh scripts/*.sh
+for script in deploy.sh validate_deployment.sh scripts/*.sh; do
+  bash -n "$script" || exit 1
+done
 python -m unittest discover tests
 ./validate_deployment.sh
 ansible-playbook -i inventory/hosts.yml playbooks/site.yml --syntax-check
@@ -126,3 +128,16 @@ yamllint .
 ## Status Boundary
 
 Static validation can prove that syntax and inventory parsing pass. It cannot prove production readiness, failover behavior, performance capacity, or backup recovery correctness. Real environment validation, staging failover drills, and isolated restore exercises are still required before production adoption.
+
+## v0.3.1 deployment fixes
+
+This release fixes modern Ubuntu/Debian libaio package selection, missing peer
+facts during rolling installation, delegated member endpoint resolution, and
+Router configuration convergence. Existing Router identity/keyring are retained;
+managed options update atomically and restart only on changes. Split routing uses
+the canonical bootstrap section and a compatible round-robin strategy.
+
+Every play stops on a failed node. Unsupported CLI scope options fail before
+execution. Real deployment, failover, backup/restore and capacity validation remain
+pending in an isolated staging environment. See the Chinese operator guide for
+maintenance-window rollout and rollback instructions.

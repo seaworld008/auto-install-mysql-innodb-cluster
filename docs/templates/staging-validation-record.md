@@ -36,7 +36,7 @@
 | 检查项 | 命令 | 结果 | 证据 |
 | --- | --- | --- | --- |
 | Diff 空白检查 | `git diff --check` |  |  |
-| Shell 语法 | `bash -n deploy.sh validate_deployment.sh scripts/*.sh` |  |  |
+| Shell 语法 | 逐个 Shell 脚本执行 `bash -n` |  |  |
 | Ansible syntax: basic | `ansible-playbook -i inventory/hosts.yml playbooks/site.yml --syntax-check` |  |  |
 | Ansible syntax: HA reference | `ansible-playbook -i inventory/hosts-ha-reference.yml playbooks/site.yml --syntax-check` |  |  |
 | Ansible syntax: dedicated routers | `ansible-playbook -i inventory/hosts-with-dedicated-routers.yml playbooks/site.yml --syntax-check` |  |  |

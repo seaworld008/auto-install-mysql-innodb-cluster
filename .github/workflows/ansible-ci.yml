@@ -43,7 +43,11 @@ jobs:
           python -m pip check
 
       - name: Shell syntax check
-        run: bash -n deploy.sh validate_deployment.sh scripts/*.sh
+        shell: bash
+        run: |
+          for script in deploy.sh validate_deployment.sh scripts/*.sh; do
+            bash -n "$script"
+          done
 
       - name: PowerShell syntax check
         shell: pwsh

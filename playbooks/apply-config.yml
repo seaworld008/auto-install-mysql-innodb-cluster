@@ -1,5 +1,6 @@
 ---
 - name: 配置滚动应用说明
+  any_errors_fatal: true
   hosts: localhost
   gather_facts: false
   tasks:
