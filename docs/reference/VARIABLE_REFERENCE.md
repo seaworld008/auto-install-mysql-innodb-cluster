@@ -384,3 +384,13 @@ npx --yes markdownlint-cli2@0.23.2
 ```
 
 涉及 datadir、备份、入口流量、集群成员或缩容的变更，还必须在隔离 staging 演练。
+
+## v0.4.0 模拟与签名配置
+
+`mysql_config_profiles.simulation_minimal` 是唯一配置源中的低资源功能模拟档位，
+通过 `mysql_hardware_profile: simulation_minimal` 选择；不得用作生产容量承诺。
+`max_user_connections` 从总连接数预留 10%（最多 100），结果至少为 1。
+
+`backup_config.percona_release.rpm_key_url`、`rpm_key_sha256`、`rpm_key_fingerprint`
+分别限定 Percona Release 签名公钥来源、下载内容与导入指纹。自定义 backup_config
+覆盖字典需要保留这些字段；不允许通过禁用 GPG 校验解决安装失败。

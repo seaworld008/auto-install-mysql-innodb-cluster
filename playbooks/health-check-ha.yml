@@ -9,16 +9,17 @@
       ansible.builtin.command:
         argv:
           - mysqlsh
-          - --no-wizard
+          - --no-defaults
           - --passwords-from-stdin
+          - --password
           - --uri
           - "{{ mysql_cluster_user }}@127.0.0.1:{{ mysql_port }}"
           - --js
           - -e
           - >-
+            shell.options.useWizards = false;
             var row = session.runSql(
-              "SELECT COUNT(*) FROM performance_schema.replication_group_members
-              WHERE MEMBER_ID = @@server_uuid AND MEMBER_STATE = 'ONLINE'"
+              "SELECT COUNT(*) FROM performance_schema.replication_group_members WHERE MEMBER_ID = @@server_uuid AND MEMBER_STATE = 'ONLINE'"
             ).fetchOne();
             print('ANSIBLE_SELF_ONLINE=' + row[0]);
         stdin: "{{ mysql_cluster_password }}\n"
@@ -47,13 +48,15 @@
       ansible.builtin.command:
         argv:
           - mysqlsh
-          - --no-wizard
+          - --no-defaults
           - --passwords-from-stdin
+          - --password
           - --uri
           - "{{ mysql_cluster_user }}@127.0.0.1:{{ mysql_port }}"
           - --js
           - -e
           - >-
+            shell.options.useWizards = false;
             var replicaSet = dba.getCluster(
               '{{ mysql_cluster_name }}'
             ).status().defaultReplicaSet;

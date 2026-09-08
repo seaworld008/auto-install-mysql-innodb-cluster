@@ -20,7 +20,8 @@ collation_server = {{ mysql_collation_server }}
 
 # Connection Settings - Production Optimized for High Concurrency
 max_connections = {{ mysql_max_connections }}
-max_user_connections = {{ mysql_max_connections - 100 }}    # 为管理连接预留100个
+{% set reserved_connections = [100, (mysql_max_connections | int) // 10] | min %}
+max_user_connections = {{ [1, (mysql_max_connections | int) - reserved_connections] | max }}    # 预留10%，最多100个管理连接
 max_connect_errors = 100000
 back_log = {{ mysql_back_log }}
 thread_cache_size = {{ mysql_thread_cache_size }}

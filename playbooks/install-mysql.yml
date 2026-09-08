@@ -24,7 +24,7 @@
     mysql_release_yum_tools_baseurl: "{{ 'https://repo.mysql.com/yum/mysql-tools-community/el/' ~ ansible_distribution_major_version ~ '/$basearch/' if mysql_release_line == '8.0' else 'https://repo.mysql.com/yum/mysql-tools-8.4-community/el/' ~ ansible_distribution_major_version ~ '/$basearch/' }}"
     mysql_common_packages_redhat:
       - wget
-      - curl
+      - "{{ 'curl-minimal' if 'curl-minimal' in ansible_facts.packages else 'curl' }}"
       - libaio
       - numactl
       - "{{ 'python39' if ansible_distribution_major_version == '8' else 'python3' }}"
@@ -582,7 +582,9 @@
         login_unix_socket: "{{ mysql_socket_path }}"
         name: root
         host: localhost
-        password: "{{ mysql_root_password }}"
+        plugin: caching_sha2_password
+        plugin_auth_string: "{{ mysql_root_password }}"
+        salt: "{{ ((mysql_group_replication_group_name ~ ':' ~ 'root') | hash('sha256'))[:20] }}"
         state: present
       when: ansible_os_family == 'Debian'
       no_log: true
@@ -603,6 +605,23 @@
         - "'firewalld.service' in ansible_facts.services"
         - ansible_facts.services['firewalld.service'].state == 'running'
 
+    - name: 判断账号变更应由本机执行还是由集群复制
+      ansible.mysql.mysql_query:
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+        login_unix_socket: "{{ mysql_socket_path }}"
+        config_file: ""
+        query: |
+          SELECT
+            (SELECT COUNT(*) FROM information_schema.schemata
+             WHERE schema_name = 'mysql_innodb_cluster_metadata') AS metadata_exists,
+            (SELECT COUNT(*) FROM performance_schema.replication_group_members
+             WHERE MEMBER_ID = @@server_uuid AND MEMBER_STATE = 'ONLINE'
+               AND MEMBER_ROLE = 'PRIMARY') AS is_primary
+      register: mysql_account_writer
+      changed_when: false
+      no_log: true
+
     - name: 创建集群管理用户
       ansible.mysql.mysql_user:
         login_user: root
@@ -610,11 +629,17 @@
         login_unix_socket: "{{ mysql_socket_path if ansible_os_family == 'Debian' else omit }}"
         check_implicit_admin: "{{ true if ansible_os_family == 'Debian' else omit }}"
         name: "{{ mysql_cluster_user }}"
-        password: "{{ mysql_cluster_password }}"
+        plugin: caching_sha2_password
+        plugin_auth_string: "{{ mysql_cluster_password }}"
+        salt: "{{ ((mysql_group_replication_group_name ~ ':' ~ mysql_cluster_user) | hash('sha256'))[:20] }}"
         host: "%"
         priv: "*.*:ALL,GRANT"
         state: present
       no_log: true
+
+      when: >-
+        mysql_account_writer.query_result[0][0].metadata_exists | int == 0
+        or mysql_account_writer.query_result[0][0].is_primary | int == 1
 
     - name: 创建复制用户
       ansible.mysql.mysql_user:
@@ -623,11 +648,17 @@
         login_unix_socket: "{{ mysql_socket_path if ansible_os_family == 'Debian' else omit }}"
         check_implicit_admin: "{{ true if ansible_os_family == 'Debian' else omit }}"
         name: "{{ mysql_replication_user }}"
-        password: "{{ mysql_replication_password }}"
+        plugin: caching_sha2_password
+        plugin_auth_string: "{{ mysql_replication_password }}"
+        salt: "{{ ((mysql_group_replication_group_name ~ ':' ~ mysql_replication_user) | hash('sha256'))[:20] }}"
         host: "%"
         priv: "*.*:REPLICATION SLAVE"
         state: present
       no_log: true
+
+      when: >-
+        mysql_account_writer.query_result[0][0].metadata_exists | int == 0
+        or mysql_account_writer.query_result[0][0].is_primary | int == 1
 
     - name: 读取 MySQL 最终 datadir
       ansible.mysql.mysql_query:

@@ -1,0 +1,58 @@
+minimumLimaVersion: 2.2.0
+vmType: vz
+arch: aarch64
+cpus: 6
+memory: 12GiB
+disk: 60GiB
+images:
+  - location: https://cloud-images.ubuntu.com/minimal/releases/noble/release-20260716/ubuntu-24.04-minimal-cloudimg-arm64.img
+    arch: aarch64
+    digest: sha256:7e938df669e3b1923595eeda97aa28569350c5283e05a835cc912a2486a54934
+mountType: virtiofs
+mounts:
+  - location: REPLACED_BY_PREPARE
+    mountPoint: /lab
+    writable: true
+ssh:
+  loadDotSSHPubKeys: false
+containerd:
+  system: false
+  user: false
+vmOpts:
+  vz:
+    rosetta:
+      enabled: true
+      binfmt: true
+    diskImageFormat: raw
+portForwards:
+  - guestPortRange:
+      - 1
+      - 65535
+    proto: tcp
+    ignore: true
+  - guestPortRange:
+      - 1
+      - 65535
+    proto: udp
+    ignore: true
+provision:
+  - mode: system
+    script: |
+      #!/bin/bash
+      set -euo pipefail
+      export DEBIAN_FRONTEND=noninteractive
+      apt-get update
+      apt-get install -y ca-certificates curl
+      install -m 0755 -d /etc/apt/keyrings
+      curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+      chmod a+r /etc/apt/keyrings/docker.asc
+      echo 'deb [arch=arm64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu noble stable' > /etc/apt/sources.list.d/docker.list
+      apt-get update
+      selected_version=$(apt-cache madison docker-ce | awk '$3 ~ /^5:29.8.0-/ { print $3; exit }')
+      test -n "$selected_version"
+      apt-get install -y docker-ce="$selected_version" docker-ce-cli="$selected_version" containerd.io docker-buildx-plugin docker-compose-plugin
+      mkdir -p /etc/docker
+      printf '%s\n' '{"log-driver":"local","log-opts":{"max-size":"10m","max-file":"3"}}' > /etc/docker/daemon.json
+      systemctl enable --now docker
+      systemctl restart docker
+      docker --version | grep -F '29.8.0'
