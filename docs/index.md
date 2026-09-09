@@ -26,7 +26,7 @@ title: MySQL InnoDB Cluster 文档
 - [配置变更与扩缩容](runbooks/OPERATOR_GUIDE.md)
 - [备份与隔离恢复](runbooks/BACKUP_AND_RESTORE_GUIDE.md)
 - [故障排查](runbooks/TROUBLESHOOTING.md)
-- [本地模拟环境](runbooks/LOCAL_SIMULATION.md)
+- [本地模拟环境](runbooks/LOCAL_SIMULATION.md) · [部署与恢复验证记录](reports/LOCAL_SIMULATION_2026-09-10.md)
 
 ## 技术参考
 

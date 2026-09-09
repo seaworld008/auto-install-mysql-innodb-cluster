@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class ReportHostTests(unittest.TestCase):
     def setUp(self):
+        (ROOT / 'tmp').mkdir(exist_ok=True)
         self.tasks = yaml.safe_load((ROOT / 'playbooks/install-mysql.yml').read_text())[0]['tasks']
 
     def run_cases(self, cases):

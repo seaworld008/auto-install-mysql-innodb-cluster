@@ -8,7 +8,7 @@
 
 已执行的环境为 Apple Silicon Mac、Lima 2.2.0、ARM64 Ubuntu 24.04 VZ VM +
 Rosetta、Rocky Linux 9 `linux/amd64` 容器、Docker Engine 29.8.0。
-[原始实测报告](../reports/LOCAL_SIMULATION_2026-09-08.md)包含版本和未通过项。
+[最新实测报告](../reports/LOCAL_SIMULATION_2026-09-10.md)记录四种拓扑、组件、故障和恢复的实际结果。
 Docker 与 Lima 在此固定为实验版本，不表示以后始终为最新版本。
 
 - VM 上限 6 CPU / 12 GiB，60 GiB 稀疏磁盘。
@@ -33,14 +33,14 @@ Lima 2.2.0 和已安装的 Rosetta。`qemu-img` 仅用于在外置盘转换镜�
 Lima 官方压缩包为
 [2.2.0 Darwin arm64](https://github.com/lima-vm/lima/releases/download/v2.2.0/lima-2.2.0-Darwin-arm64.tar.gz)，
 SHA-256：`bbdef91774885a0d05f7b048c4eb89ae2bcf3a0c252ae7ca7934e63df76d93c3`。
-下载后先校验再解包，将其 `bin/` 放入本次命令的 PATH；不要覆盖系统安装。
+下载后先校验，再解包至 `tmp/lab-tools/lima-2.2.0/`；下面显式使用该路径，不覆盖系统安装。
 
 在仓库根目录执行：
 
 ```bash
 LAB_ROOT="$PWD/tmp/mysql-simulation"
 PYTHON="$PWD/.venv/bin/python"
-LIMACTL="$(command -v limactl)"
+LIMACTL="$PWD/tmp/lab-tools/lima-2.2.0/bin/limactl"
 "$PYTHON" tests/lab/lab.py --root "$LAB_ROOT" --ref HEAD --topology dedicated init
 "$PYTHON" tests/lab/lab.py --root "$LAB_ROOT" --limactl "$LIMACTL" vm-create
 "$PYTHON" tests/lab/lab.py --root "$LAB_ROOT" --limactl "$LIMACTL" start
@@ -176,7 +176,8 @@ LIMACTL="$(command -v limactl)"
 禁止对保留数据的环境执行全局 `compose up --force-recreate`：RPM 和 `/etc` 配置在
 容器可写层，仅保留 Docker volume 不足以保存已安装主机。
 
-彻底清理前：保存本方案、源码 SHA、配置生成器、版本清单、脱敏报告和必要备份。
+彻底清理前：保存本方案、源码 SHA、配置生成器、版本清单与脱敏报告。
+纯合成数据库、备份、镜像、凭据和原始日志随本次环境删除，不上传或保留为发布附件。
 确认 manifest 的 owner、root、metadata 指向本次目录，容器和 VM 均已停止。
 然后在**只对该命令生效**的 `LIMA_HOME=<manifest.metadata>` 下执行
 `limactl delete mysql-ha`，核对后删除本次 `runtime/disk`、cache、source、secrets。
@@ -186,15 +187,16 @@ LIMACTL="$(command -v limactl)"
 
 ## 验证边界
 
-2026-09-08 的完整场景证据来自原始实验脚本和当时修补副本；新整理的工具不能仅凭
-继承这些结果声称自身所有场景都重新执行过。每轮应记录实际执行范围和源码 SHA。
+每轮都要记录实际执行范围、源码 SHA 与配置摘要。当前完整记录见
+[2026-09-10 实测报告](../reports/LOCAL_SIMULATION_2026-09-10.md)；
+[2026-09-08 历史记录](../reports/LOCAL_SIMULATION_2026-09-08.md)只代表当时的源码与环境。
 容器功能验证不替代真实 RHEL 内核、SELinux enforcing、跨主机网络故障、物理断电、
 生产 PKI、防火墙、NFS/rsync 目标和性能容量验收。
 
 技术参考：[Lima Rosetta](https://lima-vm.io/docs/config/multi-arch/)、
 [Docker 29 版本说明](https://docs.docker.com/engine/release-notes/29/)。
 
-### v0.4.0 工具整理验证记录
+### 历史工具整理验证记录
 
 2026-09-09 本机重新验证了最小 Lima 元数据启动、Docker 29.8.0 安装、7 台空白节点的
 x86_64 / systemd / cgroup / 严格 SSH 连通，以及 VIP 地址操作；再次执行 `hosts`

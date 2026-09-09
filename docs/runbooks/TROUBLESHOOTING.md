@@ -235,4 +235,27 @@ mysqlsh --uri clusteradmin@primary -e "dba.getCluster().rejoinInstance('failed_n
 - 监控系统资源使用情况
 - 保持MySQL版本更新
 - 定期测试故障转移流程
-- 文档化所有配置更改 
+- 文档化所有配置更改
+
+### 多数派丢失后的停机等待
+
+在失去多数派且存在未完成事务时，`systemctl stop mysqld` 可能长时间停留在
+`deactivating/stop-sigterm`；发行包的 `TimeoutStopUSec` 也可能为 `infinity`。
+先检查指定节点的进程状态和错误日志：
+
+```bash
+# Debian/Ubuntu 的服务名通常为 mysql；按实际发行包调整。
+systemctl show mysqld -p ActiveState -p SubState -p MainPID -p TimeoutStopUSec
+journalctl -u mysqld --since '-10 minutes' --no-pager
+```
+
+只有在业务写入已停止、其他分区已隔离、明确走完整停机恢复路径，且普通停机无法完成时，
+才对已确认的单个故障服务执行强制终止：
+
+```bash
+systemctl kill --kill-whom=main --signal=SIGKILL mysqld
+```
+
+强制终止会触发后续崩溃恢复。保留原始日志、各成员 GTID 与已确认写入记录；
+进程结束后仍需按上面的完整停机流程检查所有节点、执行 dry-run，再恢复并验证数据。
+不要因为进程已退出就跳过 GTID 检查，也不要为消除等待而自动加入 `force`。

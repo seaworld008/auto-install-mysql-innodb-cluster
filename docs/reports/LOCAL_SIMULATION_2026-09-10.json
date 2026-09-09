@@ -1,0 +1,1257 @@
+{
+  "schema": 1,
+  "date": "2026-09-10",
+  "scope": "isolated functional deployment and recovery acceptance",
+  "original_source_sha": "c96c6caf0cc319e49485f6ab85c5c957004cfd86",
+  "final_runtime_sha": "80930d67c44c1b50b565fab0281300ca13608f04",
+  "stages": [
+    {
+      "label": "dedicated-release-full",
+      "source_sha": "c6aa6c4b3dbac4992cebaf3b06687ac3bedd54b6",
+      "source_digest": "fda33144fbe14b2e01a8dea55b25988f0f44afc266eb16c0fe3246a49a457a5a",
+      "started_at": "2026-09-09T19:45:00.068000+00:00",
+      "seconds": 536.95,
+      "returncode": 0,
+      "config_sha256": {
+        "hosts.local.yml": "34b7e7fe68d7d65b8a67b347a8ec59cd3f765686a7b07ca6b0353c3eb9b7a22d",
+        "overrides.yml": "9332c1faaabe04ddc470e7316a1bbd104ca8df4cca5d915be93d5de8917e7856"
+      },
+      "credential_profile": "runtime.yml",
+      "args": [
+        "--production-ready"
+      ]
+    },
+    {
+      "label": "colocated--mysql-only",
+      "source_sha": "c6aa6c4b3dbac4992cebaf3b06687ac3bedd54b6",
+      "source_digest": "fda33144fbe14b2e01a8dea55b25988f0f44afc266eb16c0fe3246a49a457a5a",
+      "started_at": "2026-09-09T19:54:31.314524+00:00",
+      "seconds": 438.51,
+      "returncode": 0,
+      "config_sha256": {
+        "hosts.local.yml": "90e3166cf2c1c40d2c6e3f0c69d57af5d8f306e9a9962cdd95ac668d7a61f349",
+        "overrides.yml": "a644a9cdd5000aab3c8bfb378d736c8fd4c5c05c8fd8e8af89e416916b21f0f7"
+      },
+      "credential_profile": "mysql-install.yml",
+      "args": [
+        "--mysql-only"
+      ]
+    },
+    {
+      "label": "colocated--install-routers",
+      "source_sha": "c6aa6c4b3dbac4992cebaf3b06687ac3bedd54b6",
+      "source_digest": "fda33144fbe14b2e01a8dea55b25988f0f44afc266eb16c0fe3246a49a457a5a",
+      "started_at": "2026-09-09T20:01:49.955613+00:00",
+      "seconds": 108.13,
+      "returncode": 0,
+      "config_sha256": {
+        "hosts.local.yml": "90e3166cf2c1c40d2c6e3f0c69d57af5d8f306e9a9962cdd95ac668d7a61f349",
+        "overrides.yml": "a644a9cdd5000aab3c8bfb378d736c8fd4c5c05c8fd8e8af89e416916b21f0f7"
+      },
+      "credential_profile": "cluster-only.yml",
+      "args": [
+        "--install-routers"
+      ]
+    },
+    {
+      "label": "colocated--install-haproxy",
+      "source_sha": "c6aa6c4b3dbac4992cebaf3b06687ac3bedd54b6",
+      "source_digest": "fda33144fbe14b2e01a8dea55b25988f0f44afc266eb16c0fe3246a49a457a5a",
+      "started_at": "2026-09-09T20:03:38.170838+00:00",
+      "seconds": 52.86,
+      "returncode": 0,
+      "config_sha256": {
+        "hosts.local.yml": "90e3166cf2c1c40d2c6e3f0c69d57af5d8f306e9a9962cdd95ac668d7a61f349",
+        "overrides.yml": "a644a9cdd5000aab3c8bfb378d736c8fd4c5c05c8fd8e8af89e416916b21f0f7"
+      },
+      "credential_profile": "cluster-only.yml",
+      "args": [
+        "--install-haproxy"
+      ]
+    },
+    {
+      "label": "colocated--install-keepalived",
+      "source_sha": "c6aa6c4b3dbac4992cebaf3b06687ac3bedd54b6",
+      "source_digest": "fda33144fbe14b2e01a8dea55b25988f0f44afc266eb16c0fe3246a49a457a5a",
+      "started_at": "2026-09-09T20:04:31.103069+00:00",
+      "seconds": 63.86,
+      "returncode": 0,
+      "config_sha256": {
+        "hosts.local.yml": "90e3166cf2c1c40d2c6e3f0c69d57af5d8f306e9a9962cdd95ac668d7a61f349",
+        "overrides.yml": "a644a9cdd5000aab3c8bfb378d736c8fd4c5c05c8fd8e8af89e416916b21f0f7"
+      },
+      "credential_profile": "keepalived-only.yml",
+      "args": [
+        "--install-keepalived"
+      ]
+    },
+    {
+      "label": "colocated-repeat-full",
+      "source_sha": "c6aa6c4b3dbac4992cebaf3b06687ac3bedd54b6",
+      "source_digest": "fda33144fbe14b2e01a8dea55b25988f0f44afc266eb16c0fe3246a49a457a5a",
+      "started_at": "2026-09-09T20:05:39.042217+00:00",
+      "seconds": 291.3,
+      "returncode": 0,
+      "config_sha256": {
+        "hosts.local.yml": "90e3166cf2c1c40d2c6e3f0c69d57af5d8f306e9a9962cdd95ac668d7a61f349",
+        "overrides.yml": "a644a9cdd5000aab3c8bfb378d736c8fd4c5c05c8fd8e8af89e416916b21f0f7"
+      },
+      "credential_profile": "runtime.yml",
+      "args": [
+        "--production-ready"
+      ]
+    },
+    {
+      "label": "mixed-initial-full",
+      "source_sha": "c6aa6c4b3dbac4992cebaf3b06687ac3bedd54b6",
+      "source_digest": "fda33144fbe14b2e01a8dea55b25988f0f44afc266eb16c0fe3246a49a457a5a",
+      "started_at": "2026-09-09T20:13:04.656563+00:00",
+      "seconds": 690.55,
+      "returncode": 0,
+      "config_sha256": {
+        "hosts.local.yml": "e97cfdcd960decd74c1b5142067532b298b9e980629cea5fb702fcb02e850870",
+        "overrides.yml": "7fd686388824936e2bfecf10861ce0aac35d4c610f439f52b0483188c8e2e46d"
+      },
+      "credential_profile": "runtime.yml",
+      "args": [
+        "--production-ready"
+      ]
+    },
+    {
+      "label": "mixed-repeat-full",
+      "source_sha": "c6aa6c4b3dbac4992cebaf3b06687ac3bedd54b6",
+      "source_digest": "fda33144fbe14b2e01a8dea55b25988f0f44afc266eb16c0fe3246a49a457a5a",
+      "started_at": "2026-09-09T20:24:39.081701+00:00",
+      "seconds": 286.95,
+      "returncode": 0,
+      "config_sha256": {
+        "hosts.local.yml": "e97cfdcd960decd74c1b5142067532b298b9e980629cea5fb702fcb02e850870",
+        "overrides.yml": "7fd686388824936e2bfecf10861ce0aac35d4c610f439f52b0483188c8e2e46d"
+      },
+      "credential_profile": "runtime.yml",
+      "args": [
+        "--production-ready"
+      ]
+    },
+    {
+      "label": "three-entry-initial-full",
+      "source_sha": "80930d67c44c1b50b565fab0281300ca13608f04",
+      "source_digest": "9cda9b3ba7de07c4f30e0018e743d3c454d3698b12ddade84080d021da64e3c7",
+      "started_at": "2026-09-09T20:46:17.927723+00:00",
+      "seconds": 1227.96,
+      "returncode": 0,
+      "config_sha256": {
+        "hosts.local.yml": "7a3707a5d369cbe2e66eb9aeea7068bba078a99ffefd1e22f559bcc18cd549e7",
+        "overrides.yml": "17e8a5c203cb25da559f02e61ab1afb59dcee1566305628922415fcb7476ed5c"
+      },
+      "credential_profile": "runtime.yml",
+      "args": [
+        "--production-ready"
+      ]
+    },
+    {
+      "label": "three-entry-repeat-full",
+      "source_sha": "80930d67c44c1b50b565fab0281300ca13608f04",
+      "source_digest": "9cda9b3ba7de07c4f30e0018e743d3c454d3698b12ddade84080d021da64e3c7",
+      "started_at": "2026-09-09T21:06:51.533855+00:00",
+      "seconds": 597.75,
+      "returncode": 0,
+      "config_sha256": {
+        "hosts.local.yml": "7a3707a5d369cbe2e66eb9aeea7068bba078a99ffefd1e22f559bcc18cd549e7",
+        "overrides.yml": "9c015eacd8552c9bd7b188eae8f3e48ca4cb23975f2cf0d37916fcc45db6661c"
+      },
+      "credential_profile": "runtime.yml",
+      "args": [
+        "--production-ready"
+      ]
+    },
+    {
+      "label": "report-host-legacy-upgrade",
+      "source_sha": "80930d67c44c1b50b565fab0281300ca13608f04",
+      "source_digest": "9cda9b3ba7de07c4f30e0018e743d3c454d3698b12ddade84080d021da64e3c7",
+      "started_at": "2026-09-09T20:36:24.693128+00:00",
+      "seconds": 292.03,
+      "returncode": 0,
+      "config_sha256": {
+        "hosts.local.yml": "e97cfdcd960decd74c1b5142067532b298b9e980629cea5fb702fcb02e850870",
+        "overrides.yml": "7fd686388824936e2bfecf10861ce0aac35d4c610f439f52b0483188c8e2e46d"
+      },
+      "credential_profile": "runtime.yml",
+      "args": [
+        "--mysql-only"
+      ]
+    },
+    {
+      "label": "report-host-legacy-full-health",
+      "source_sha": "80930d67c44c1b50b565fab0281300ca13608f04",
+      "source_digest": "9cda9b3ba7de07c4f30e0018e743d3c454d3698b12ddade84080d021da64e3c7",
+      "started_at": "2026-09-09T20:42:06.901699+00:00",
+      "seconds": 13.31,
+      "returncode": 0,
+      "config_sha256": {
+        "hosts.local.yml": "e97cfdcd960decd74c1b5142067532b298b9e980629cea5fb702fcb02e850870",
+        "overrides.yml": "7fd686388824936e2bfecf10861ce0aac35d4c610f439f52b0483188c8e2e46d"
+      },
+      "credential_profile": "cluster-only.yml",
+      "args": [
+        "--status"
+      ]
+    },
+    {
+      "label": "mysql-scale-add",
+      "source_sha": "f43750589ad8a39dbb8d31d99b1e06462e35f80a",
+      "source_digest": "6665a61b40aa44dc6622607ed8d6fdf7ca83e1000c8f0085b5cc6bd8ca79bf7a",
+      "started_at": "2026-09-09T18:49:06.206343+00:00",
+      "seconds": 164.66,
+      "returncode": 0,
+      "config_sha256": {
+        "hosts.local.yml": "5a568f81d723e71bd7d2bbc8a6afcb3f966e9c8268163d1b76fe814dbd1a8059",
+        "overrides.yml": "9332c1faaabe04ddc470e7316a1bbd104ca8df4cca5d915be93d5de8917e7856"
+      },
+      "credential_profile": "mysql-install.yml",
+      "args": [
+        "--scale-mysql-add",
+        "--limit",
+        "db4"
+      ]
+    },
+    {
+      "label": "mysql-scale-remove",
+      "source_sha": "f09bd65a5e9fd449fbfa380f068dacc98082559c",
+      "source_digest": "4c6e0f96bba090b3f2ae0473d06be941f3efa9997975ca7a754de4792ba066be",
+      "started_at": "2026-09-09T19:19:22.417514+00:00",
+      "seconds": 15.1,
+      "returncode": 0,
+      "config_sha256": {
+        "hosts.local.yml": "5a568f81d723e71bd7d2bbc8a6afcb3f966e9c8268163d1b76fe814dbd1a8059",
+        "overrides.yml": "9332c1faaabe04ddc470e7316a1bbd104ca8df4cca5d915be93d5de8917e7856"
+      },
+      "credential_profile": "cluster-only.yml",
+      "args": [
+        "--scale-mysql-remove",
+        "--target",
+        "db4",
+        "--new-primary",
+        "db2"
+      ]
+    },
+    {
+      "label": "router-expand-three",
+      "source_sha": "f09bd65a5e9fd449fbfa380f068dacc98082559c",
+      "source_digest": "4c6e0f96bba090b3f2ae0473d06be941f3efa9997975ca7a754de4792ba066be",
+      "started_at": "2026-09-09T19:27:23.865377+00:00",
+      "seconds": 353.65,
+      "returncode": 0,
+      "config_sha256": {
+        "hosts.local.yml": "235b206dd2905321e0838da4772e92b9fd81078ceb831ef4f916fa187f4be8c8",
+        "overrides.yml": "9332c1faaabe04ddc470e7316a1bbd104ca8df4cca5d915be93d5de8917e7856"
+      },
+      "credential_profile": "cluster-only.yml",
+      "args": [
+        "--install-routers"
+      ]
+    },
+    {
+      "label": "router-expand-haproxy",
+      "source_sha": "f09bd65a5e9fd449fbfa380f068dacc98082559c",
+      "source_digest": "4c6e0f96bba090b3f2ae0473d06be941f3efa9997975ca7a754de4792ba066be",
+      "started_at": "2026-09-09T19:33:17.605558+00:00",
+      "seconds": 93.71,
+      "returncode": 0,
+      "config_sha256": {
+        "hosts.local.yml": "235b206dd2905321e0838da4772e92b9fd81078ceb831ef4f916fa187f4be8c8",
+        "overrides.yml": "9332c1faaabe04ddc470e7316a1bbd104ca8df4cca5d915be93d5de8917e7856"
+      },
+      "credential_profile": "cluster-only.yml",
+      "args": [
+        "--install-haproxy"
+      ]
+    },
+    {
+      "label": "router-expand-status",
+      "source_sha": "f09bd65a5e9fd449fbfa380f068dacc98082559c",
+      "source_digest": "4c6e0f96bba090b3f2ae0473d06be941f3efa9997975ca7a754de4792ba066be",
+      "started_at": "2026-09-09T19:34:51.375328+00:00",
+      "seconds": 22.16,
+      "returncode": 0,
+      "config_sha256": {
+        "hosts.local.yml": "235b206dd2905321e0838da4772e92b9fd81078ceb831ef4f916fa187f4be8c8",
+        "overrides.yml": "9332c1faaabe04ddc470e7316a1bbd104ca8df4cca5d915be93d5de8917e7856"
+      },
+      "credential_profile": "cluster-only.yml",
+      "args": [
+        "--status"
+      ]
+    },
+    {
+      "label": "lb-expand-three",
+      "source_sha": "f09bd65a5e9fd449fbfa380f068dacc98082559c",
+      "source_digest": "4c6e0f96bba090b3f2ae0473d06be941f3efa9997975ca7a754de4792ba066be",
+      "started_at": "2026-09-09T19:35:25.467341+00:00",
+      "seconds": 264.11,
+      "returncode": 0,
+      "config_sha256": {
+        "hosts.local.yml": "7a3707a5d369cbe2e66eb9aeea7068bba078a99ffefd1e22f559bcc18cd549e7",
+        "overrides.yml": "9332c1faaabe04ddc470e7316a1bbd104ca8df4cca5d915be93d5de8917e7856"
+      },
+      "credential_profile": "keepalived-only.yml",
+      "args": [
+        "--configure-lb"
+      ]
+    },
+    {
+      "label": "three-entry-expanded-status",
+      "source_sha": "f09bd65a5e9fd449fbfa380f068dacc98082559c",
+      "source_digest": "4c6e0f96bba090b3f2ae0473d06be941f3efa9997975ca7a754de4792ba066be",
+      "started_at": "2026-09-09T19:39:49.647630+00:00",
+      "seconds": 24.02,
+      "returncode": 0,
+      "config_sha256": {
+        "hosts.local.yml": "7a3707a5d369cbe2e66eb9aeea7068bba078a99ffefd1e22f559bcc18cd549e7",
+        "overrides.yml": "9332c1faaabe04ddc470e7316a1bbd104ca8df4cca5d915be93d5de8917e7856"
+      },
+      "credential_profile": "cluster-only.yml",
+      "args": [
+        "--status"
+      ]
+    },
+    {
+      "label": "router-shrink-three-to-two",
+      "source_sha": "f09bd65a5e9fd449fbfa380f068dacc98082559c",
+      "source_digest": "4c6e0f96bba090b3f2ae0473d06be941f3efa9997975ca7a754de4792ba066be",
+      "started_at": "2026-09-09T19:40:17.471767+00:00",
+      "seconds": 8.85,
+      "returncode": 0,
+      "config_sha256": {
+        "hosts.local.yml": "7a3707a5d369cbe2e66eb9aeea7068bba078a99ffefd1e22f559bcc18cd549e7",
+        "overrides.yml": "9332c1faaabe04ddc470e7316a1bbd104ca8df4cca5d915be93d5de8917e7856"
+      },
+      "credential_profile": "cluster-only.yml",
+      "args": [
+        "--shrink-router",
+        "--limit",
+        "router3"
+      ]
+    },
+    {
+      "label": "router-shrink-update-haproxy",
+      "source_sha": "f09bd65a5e9fd449fbfa380f068dacc98082559c",
+      "source_digest": "4c6e0f96bba090b3f2ae0473d06be941f3efa9997975ca7a754de4792ba066be",
+      "started_at": "2026-09-09T19:40:26.388049+00:00",
+      "seconds": 124.14,
+      "returncode": 0,
+      "config_sha256": {
+        "hosts.local.yml": "a93b09b9c530e0bf615f475666d7a8c367d56ac8d8a9cd69855c9f7bdabe6700",
+        "overrides.yml": "9332c1faaabe04ddc470e7316a1bbd104ca8df4cca5d915be93d5de8917e7856"
+      },
+      "credential_profile": "cluster-only.yml",
+      "args": [
+        "--install-haproxy"
+      ]
+    },
+    {
+      "label": "router-shrink-status",
+      "source_sha": "f09bd65a5e9fd449fbfa380f068dacc98082559c",
+      "source_digest": "4c6e0f96bba090b3f2ae0473d06be941f3efa9997975ca7a754de4792ba066be",
+      "started_at": "2026-09-09T19:42:30.597406+00:00",
+      "seconds": 23.56,
+      "returncode": 0,
+      "config_sha256": {
+        "hosts.local.yml": "a93b09b9c530e0bf615f475666d7a8c367d56ac8d8a9cd69855c9f7bdabe6700",
+        "overrides.yml": "9332c1faaabe04ddc470e7316a1bbd104ca8df4cca5d915be93d5de8917e7856"
+      },
+      "credential_profile": "cluster-only.yml",
+      "args": [
+        "--status"
+      ]
+    },
+    {
+      "label": "lb-shrink-three-to-two-complete",
+      "source_sha": "f09bd65a5e9fd449fbfa380f068dacc98082559c",
+      "source_digest": "4c6e0f96bba090b3f2ae0473d06be941f3efa9997975ca7a754de4792ba066be",
+      "started_at": "2026-09-09T19:43:08.113523+00:00",
+      "seconds": 16.17,
+      "returncode": 0,
+      "config_sha256": {
+        "hosts.local.yml": "a93b09b9c530e0bf615f475666d7a8c367d56ac8d8a9cd69855c9f7bdabe6700",
+        "overrides.yml": "9332c1faaabe04ddc470e7316a1bbd104ca8df4cca5d915be93d5de8917e7856"
+      },
+      "credential_profile": "keepalived-only.yml",
+      "args": [
+        "--shrink-lb",
+        "--limit",
+        "lb3"
+      ]
+    },
+    {
+      "label": "entry-shrink-final-status",
+      "source_sha": "f09bd65a5e9fd449fbfa380f068dacc98082559c",
+      "source_digest": "4c6e0f96bba090b3f2ae0473d06be941f3efa9997975ca7a754de4792ba066be",
+      "started_at": "2026-09-09T19:43:52.357954+00:00",
+      "seconds": 22.72,
+      "returncode": 0,
+      "config_sha256": {
+        "hosts.local.yml": "34b7e7fe68d7d65b8a67b347a8ec59cd3f765686a7b07ca6b0353c3eb9b7a22d",
+        "overrides.yml": "9332c1faaabe04ddc470e7316a1bbd104ca8df4cca5d915be93d5de8917e7856"
+      },
+      "credential_profile": "cluster-only.yml",
+      "args": [
+        "--status"
+      ]
+    },
+    {
+      "label": "logical-backup-fixed",
+      "source_sha": "f09bd65a5e9fd449fbfa380f068dacc98082559c",
+      "source_digest": "4c6e0f96bba090b3f2ae0473d06be941f3efa9997975ca7a754de4792ba066be",
+      "started_at": "2026-09-09T19:13:26.897775+00:00",
+      "seconds": 8.1,
+      "returncode": 0,
+      "config_sha256": {
+        "hosts.local.yml": "5a568f81d723e71bd7d2bbc8a6afcb3f966e9c8268163d1b76fe814dbd1a8059",
+        "overrides.yml": "9332c1faaabe04ddc470e7316a1bbd104ca8df4cca5d915be93d5de8917e7856",
+        "backup-logical.yml": "778df9ef5babab3bd42d2855d743ee69a7b600df884f76c0509b2c79c5e96a41"
+      },
+      "credential_profile": "cluster-only.yml",
+      "args": [
+        "--backup",
+        "-e",
+        "@/lab/config/backup-logical.yml"
+      ]
+    },
+    {
+      "label": "physical-backup-fixed",
+      "source_sha": "f09bd65a5e9fd449fbfa380f068dacc98082559c",
+      "source_digest": "4c6e0f96bba090b3f2ae0473d06be941f3efa9997975ca7a754de4792ba066be",
+      "started_at": "2026-09-09T19:13:35.064233+00:00",
+      "seconds": 28.07,
+      "returncode": 0,
+      "config_sha256": {
+        "hosts.local.yml": "5a568f81d723e71bd7d2bbc8a6afcb3f966e9c8268163d1b76fe814dbd1a8059",
+        "overrides.yml": "9332c1faaabe04ddc470e7316a1bbd104ca8df4cca5d915be93d5de8917e7856",
+        "backup-xtrabackup.yml": "66d6f8e1e8a2275960794c0512ee86befaebc85dce1e1941479f4ca8e404c655"
+      },
+      "credential_profile": "physical-backup.yml",
+      "args": [
+        "--backup",
+        "-e",
+        "@/lab/config/backup-xtrabackup.yml"
+      ]
+    },
+    {
+      "label": "disk-full-recovered-health",
+      "source_sha": "f09bd65a5e9fd449fbfa380f068dacc98082559c",
+      "source_digest": "4c6e0f96bba090b3f2ae0473d06be941f3efa9997975ca7a754de4792ba066be",
+      "started_at": "2026-09-09T19:26:22.411740+00:00",
+      "seconds": 29.95,
+      "returncode": 0,
+      "config_sha256": {
+        "hosts.local.yml": "74260c0a9ae184fd032c506ccc2c96e0064bd42afc425f0d55a1788bb873ef4f",
+        "overrides.yml": "9332c1faaabe04ddc470e7316a1bbd104ca8df4cca5d915be93d5de8917e7856"
+      },
+      "credential_profile": "runtime.yml",
+      "args": [
+        "--status"
+      ]
+    }
+  ],
+  "topologies": {
+    "colocated": {
+      "result": "PASS",
+      "port_cases": 150,
+      "unexpected_port_failures": 0,
+      "identity_and_router_keys_preserved": true,
+      "seed_and_type_samples_verified": true
+    },
+    "mixed": {
+      "result": "PASS",
+      "port_cases": 150,
+      "unexpected_port_failures": 0,
+      "identity_and_router_keys_preserved": true,
+      "seed_and_type_samples_verified": true
+    },
+    "three-entry": {
+      "result": "PASS",
+      "port_cases": 150,
+      "unexpected_port_failures": 0,
+      "identity_and_router_keys_preserved": true,
+      "seed_and_type_samples_verified": true
+    },
+    "dedicated": {
+      "result": "PASS",
+      "port_cases": 300,
+      "unexpected_port_failures": 0,
+      "identity_and_router_keys_preserved": true,
+      "final_effective_config": {
+        "db1": [
+          400,
+          16384,
+          50,
+          600
+        ],
+        "db2": [
+          400,
+          16384,
+          50,
+          600
+        ],
+        "db3": [
+          400,
+          16384,
+          50,
+          600
+        ]
+      }
+    }
+  },
+  "writers": {
+    "writer-fd-rolling": {
+      "attempts": 2023,
+      "acknowledged": 2021,
+      "failed_attempts": 2,
+      "max_ack_gap_seconds": 3.474125,
+      "acknowledged_missing_or_changed": 0,
+      "unacknowledged_present": 0
+    },
+    "writer-full-rerun": {
+      "attempts": 1925,
+      "acknowledged": 1922,
+      "failed_attempts": 3,
+      "max_ack_gap_seconds": 3.449722,
+      "acknowledged_missing_or_changed": 0,
+      "unacknowledged_present": 0
+    },
+    "writer-scale-mysql": {
+      "attempts": 822,
+      "acknowledged": 822,
+      "failed_attempts": 0,
+      "max_ack_gap_seconds": 0.826354,
+      "acknowledged_missing_or_changed": 0,
+      "unacknowledged_present": 0
+    },
+    "writer-scale-remove": {
+      "attempts": 89,
+      "acknowledged": 88,
+      "failed_attempts": 1,
+      "max_ack_gap_seconds": 0.669897,
+      "acknowledged_missing_or_changed": 0,
+      "unacknowledged_present": 0
+    },
+    "writer-entry-scaling": {
+      "attempts": 4159,
+      "acknowledged": 4154,
+      "failed_attempts": 5,
+      "max_ack_gap_seconds": 1.004185,
+      "existing_router_identity_keyring_preserved": true,
+      "coverage": "Writer started during existing router2 reconciliation, before router3 installation; ran through LB expansion and both shrink operations.",
+      "acknowledged_missing_or_changed": 0,
+      "unacknowledged_present": 0
+    },
+    "writer-dedicated-release": {
+      "attempts": 2611,
+      "acknowledged": 2610,
+      "failed_attempts": 1,
+      "max_ack_gap_seconds": 3.403009,
+      "acknowledged_missing_or_changed": 0,
+      "unacknowledged_present": 0
+    },
+    "writer-colocated-repeat": {
+      "attempts": 1448,
+      "acknowledged": 1448,
+      "failed_attempts": 0,
+      "max_ack_gap_seconds": 0.754671,
+      "acknowledged_missing_or_changed": 0,
+      "unacknowledged_present": 0
+    },
+    "writer-mixed-repeat": {
+      "attempts": 1426,
+      "acknowledged": 1426,
+      "failed_attempts": 0,
+      "max_ack_gap_seconds": 0.760799,
+      "acknowledged_missing_or_changed": 0,
+      "unacknowledged_present": 0
+    },
+    "writer-report-host-legacy": {
+      "attempts": 1385,
+      "acknowledged": 1383,
+      "failed_attempts": 2,
+      "max_ack_gap_seconds": 3.843597,
+      "acknowledged_missing_or_changed": 0,
+      "unacknowledged_present": 0
+    },
+    "writer-three-entry-repeat": {
+      "attempts": 2940,
+      "acknowledged": 2940,
+      "failed_attempts": 0,
+      "max_ack_gap_seconds": 0.819308,
+      "acknowledged_missing_or_changed": 0,
+      "unacknowledged_present": 0
+    }
+  },
+  "faults": {
+    "primary-service": {
+      "result": "PASS",
+      "attempts": 559,
+      "acknowledged": 558,
+      "failed_attempts": 1,
+      "max_ack_gap_seconds": 3.42305,
+      "acknowledged_missing_or_changed": 0,
+      "unacknowledged_present": 0
+    },
+    "router-service": {
+      "result": "PASS",
+      "attempts": 581,
+      "acknowledged": 580,
+      "failed_attempts": 1,
+      "max_ack_gap_seconds": 1.20285,
+      "acknowledged_missing_or_changed": 0,
+      "unacknowledged_present": 0
+    },
+    "haproxy-service": {
+      "result": "PASS",
+      "attempts": 578,
+      "acknowledged": 564,
+      "failed_attempts": 14,
+      "max_ack_gap_seconds": 3.49843,
+      "acknowledged_missing_or_changed": 0,
+      "unacknowledged_present": 0
+    },
+    "keepalived-service": {
+      "result": "PASS",
+      "attempts": 577,
+      "acknowledged": 575,
+      "failed_attempts": 2,
+      "max_ack_gap_seconds": 1.794966,
+      "acknowledged_missing_or_changed": 0,
+      "unacknowledged_present": 0
+    },
+    "primary-crash": {
+      "result": "PASS",
+      "attempts": 526,
+      "acknowledged": 448,
+      "failed_attempts": 78,
+      "max_ack_gap_seconds": 24.769312,
+      "acknowledged_missing_or_changed": 0,
+      "unacknowledged_present": 0
+    },
+    "lb-crash": {
+      "result": "PASS",
+      "attempts": 567,
+      "acknowledged": 565,
+      "failed_attempts": 2,
+      "max_ack_gap_seconds": 3.519665,
+      "acknowledged_missing_or_changed": 0,
+      "unacknowledged_present": 0
+    },
+    "colocated-crash": {
+      "result": "PASS",
+      "attempts": 504,
+      "acknowledged": 452,
+      "failed_attempts": 52,
+      "max_ack_gap_seconds": 25.110495,
+      "acknowledged_missing_or_changed": 0,
+      "unacknowledged_present": 0
+    }
+  },
+  "majority_loss": {
+    "write_protection": "PASS",
+    "automatic_recovery_within_25_seconds": "FAIL",
+    "controlled_recovery": "PASS",
+    "force_used": false,
+    "stalled_primary_shutdown_required_sigkill": true,
+    "seconds": 104.11,
+    "acknowledged": 20,
+    "failed_attempts": 80,
+    "acknowledged_data_preserved": true
+  },
+  "complete_outage": {
+    "mode": "execute",
+    "returncode": 0,
+    "seconds": 6.23,
+    "all_members_observed_offline": true,
+    "gtid_sets_equal": true,
+    "force_used": false
+  },
+  "backup_restore": {
+    "logical": {
+      "result": "PASS",
+      "business_tables": {
+        "auto_ids": {
+          "rows": 10,
+          "data_sha256": "c13d91e17ce58334058251e6f64821c81464a1a595fc07d527cc2cbfdc8bad65",
+          "ddl_sha256": "53f015fe821b799a8e4d98a99a8742bf8368742d995e79805100a0cb52a0ef85"
+        },
+        "events": {
+          "rows": 11040,
+          "data_sha256": "c642e4f262d0f5ee6491d73b937cc9ccc41bffd790c5a3fe3935b2d622e951e0",
+          "ddl_sha256": "e1f64d1efef542b6022535399f2986edb69aff53f91e16f47862bfd19e91038a"
+        },
+        "type_samples": {
+          "rows": 8,
+          "data_sha256": "e4d0187d6f402eee08a70c6fdcea99dbd9cdd1fe5d6948e7a71a768ba4c11903",
+          "ddl_sha256": "a81613528aa5a0dfcf3f19e8f01949bb106c29a3ddf1648c5fdabf9ea2e682d8"
+        }
+      },
+      "isolated_replication_verified": true,
+      "schema_metadata_exact_match": true,
+      "ddl_difference": "Only redundant explicit CHARACTER SET utf8mb4 on columns; column/index/constraint/table option metadata verified exactly"
+    },
+    "xtrabackup": {
+      "result": "PASS",
+      "business_tables": {
+        "auto_ids": {
+          "rows": 10,
+          "data_sha256": "c13d91e17ce58334058251e6f64821c81464a1a595fc07d527cc2cbfdc8bad65",
+          "ddl_sha256": "5b943d5004fb9887716fcd300c83118a738c69548919c9545a8a89707485898a"
+        },
+        "events": {
+          "rows": 11040,
+          "data_sha256": "c642e4f262d0f5ee6491d73b937cc9ccc41bffd790c5a3fe3935b2d622e951e0",
+          "ddl_sha256": "c3ea7ed11fa64387bc8a3a4f909e83175df42d652f340fcdab30753f39171fd8"
+        },
+        "type_samples": {
+          "rows": 8,
+          "data_sha256": "e4d0187d6f402eee08a70c6fdcea99dbd9cdd1fe5d6948e7a71a768ba4c11903",
+          "ddl_sha256": "a40def58f5529438d16cb881a94224d59d9de7f46d1f6a3b6c55a0bb73e49f79"
+        }
+      },
+      "isolated_replication_verified": true
+    },
+    "source_cluster_unchanged": true,
+    "disk_full": {
+      "result": "PASS",
+      "expected_backup_failure": 2,
+      "filesystem_bytes": 1048576,
+      "success_manifest_absent": true
+    }
+  },
+  "address_discovery": {
+    "result": "PASS",
+    "override_removal_preserved_ip_configuration_and_pids": true,
+    "advertised_addresses": {
+      "db1": "172.30.88.11",
+      "db2": "172.30.88.12",
+      "db3": "172.30.88.13"
+    },
+    "metadata_endpoints": [
+      "172.30.88.11:3306",
+      "172.30.88.12:3306",
+      "172.30.88.13:3306"
+    ],
+    "system_hostnames_unresolvable_from_other_database_nodes_and_all_routers": true,
+    "cross_node_dns_failures": 15,
+    "existing_change_guard": {
+      "result": "PASS",
+      "rejected_before_configuration_or_restart": true
+    },
+    "legacy_upgrade_preserved_identity": true
+  },
+  "native_kernel": {
+    "result": "PASS",
+    "tested_source_sha": "6811d2c13e6526b6bedc853c24d149dbf1ebf046",
+    "sysctl_values_verified": 41,
+    "cold_boot_all_runtime_checks_passed": true,
+    "thp": "always madvise [never]",
+    "io": "PASS: vda scheduler=mq-deadline nr_requests=64",
+    "managed_file_hashes": {
+      "/etc/sysctl.d/99-mysql-stable-optimization.conf": "21ed235552110fa4b8dcf91feeebfdc57f69ef971da1abf2b00d2b5c838d67f1",
+      "/usr/local/bin/optimize-io-stable.sh": "ed349a54de5d0fabd62e8a7bfb247458e5104c00bd12eaf86111cdc198997cfa",
+      "/etc/systemd/system/disable-thp-stable.service": "ff5020163fa1fd749db95fd0b382397025af4fb0896fd222ddd89e4ddfc1eff2",
+      "/etc/systemd/system/optimize-io-stable.service": "8884196a7c8df80b05b5935254ec945f5ef71645853fb32bf7c5613a4e9ce033",
+      "/etc/security/limits.conf": "9fdf711223315b03e00736c362ecd4807ecf4b936a33619df36caf7ed490e586"
+    }
+  },
+  "components": {
+    "router": {
+      "result": "PASS",
+      "unselected_component_state_preserved": true
+    },
+    "haproxy": {
+      "result": "PASS",
+      "unselected_component_state_preserved": true
+    },
+    "keepalived": {
+      "result": "PASS",
+      "unselected_component_state_preserved": true
+    }
+  },
+  "images": [
+    {
+      "Name": "controller-image",
+      "Platform": [
+        "linux/arm64"
+      ],
+      "StartedAt": "2026-09-10T04:43:30.963696154+08:00",
+      "CompletedAt": "2026-09-10T04:43:33.254308445+08:00",
+      "Status": "completed",
+      "Materials": [
+        {
+          "URI": "pkg:docker/python@3.13-slim-bookworm?platform=linux%2Farm64",
+          "Digests": [
+            "sha256:ed86c82274b3c69b52fb5820f358f0bd7df0b603332063cb5c6e32bd220c3e6e"
+          ]
+        }
+      ],
+      "Attachments": [
+        {
+          "Digest": "sha256:1613c48c2670c647b0ebae9b3a121a95c4dda03689f09f61e242e5bfe22c01d0",
+          "Type": "application/vnd.oci.image.index.v1+json"
+        },
+        {
+          "Digest": "sha256:60ed715617c7b46b1559792b279b8d9514df144a10ebb57e809f9f31a3f1f0cb",
+          "Type": "https://slsa.dev/provenance/v1"
+        },
+        {
+          "Digest": "sha256:39d392eb162138b476d7781d1e98d0eb255673eec5c82230a738fea9ce4f04b1",
+          "Platform": "linux/arm64",
+          "Type": "application/vnd.oci.image.manifest.v1+json"
+        }
+      ]
+    },
+    {
+      "Name": "node-image",
+      "Platform": [
+        "linux/amd64"
+      ],
+      "StartedAt": "2026-09-10T04:43:28.4575381+08:00",
+      "CompletedAt": "2026-09-10T04:43:30.856259402+08:00",
+      "Status": "completed",
+      "Materials": [
+        {
+          "URI": "pkg:docker/rockylinux@9?platform=linux%2Famd64",
+          "Digests": [
+            "sha256:d7be1c094cc5845ee815d4632fe377514ee6ebcf8efaed6892889657e5ddaaa6"
+          ]
+        }
+      ],
+      "Attachments": [
+        {
+          "Digest": "sha256:c7736161dcca38d8fcf1104843843c3b57739a13eb706c4c1127b23d0e5972d8",
+          "Type": "application/vnd.oci.image.index.v1+json"
+        },
+        {
+          "Digest": "sha256:bbcf3b890f1c1b8c47e6d60c771cc72f08593e3b1588b15187f6045b8a8d04e1",
+          "Type": "https://slsa.dev/provenance/v1"
+        },
+        {
+          "Digest": "sha256:3571d2c1ceff499d1b942839b32fa7b6b482ebf7ed2fdde291b03b419c21914c",
+          "Platform": "linux/amd64",
+          "Type": "application/vnd.oci.image.manifest.v1+json"
+        }
+      ]
+    },
+    {
+      "Name": "controller-image",
+      "Platform": [
+        "linux/arm64"
+      ],
+      "StartedAt": "2026-09-10T04:12:57.017332694+08:00",
+      "CompletedAt": "2026-09-10T04:12:58.335918707+08:00",
+      "Status": "completed",
+      "Materials": [
+        {
+          "URI": "pkg:docker/python@3.13-slim-bookworm?platform=linux%2Farm64",
+          "Digests": [
+            "sha256:ed86c82274b3c69b52fb5820f358f0bd7df0b603332063cb5c6e32bd220c3e6e"
+          ]
+        }
+      ],
+      "Attachments": [
+        {
+          "Digest": "sha256:6f1314517acc89874848b958458c90c4b5760b335b09cc0bb2232de8989a73e2",
+          "Type": "application/vnd.oci.image.index.v1+json"
+        },
+        {
+          "Digest": "sha256:9b0fbb3fda05703b64c9eddee9b0e7d63aa0c13145970463c5ce0902c4b81b67",
+          "Type": "https://slsa.dev/provenance/v1"
+        },
+        {
+          "Digest": "sha256:39d392eb162138b476d7781d1e98d0eb255673eec5c82230a738fea9ce4f04b1",
+          "Platform": "linux/arm64",
+          "Type": "application/vnd.oci.image.manifest.v1+json"
+        }
+      ]
+    },
+    {
+      "Name": "node-image",
+      "Platform": [
+        "linux/amd64"
+      ],
+      "StartedAt": "2026-09-10T04:12:54.931125903+08:00",
+      "CompletedAt": "2026-09-10T04:12:56.912087807+08:00",
+      "Status": "completed",
+      "Materials": [
+        {
+          "URI": "pkg:docker/rockylinux@9?platform=linux%2Famd64",
+          "Digests": [
+            "sha256:d7be1c094cc5845ee815d4632fe377514ee6ebcf8efaed6892889657e5ddaaa6"
+          ]
+        }
+      ],
+      "Attachments": [
+        {
+          "Digest": "sha256:d14f0551d71be138921dcfdb3c8557e5db88c6ed2bc6f75215737ec436ba536a",
+          "Type": "application/vnd.oci.image.index.v1+json"
+        },
+        {
+          "Digest": "sha256:1dcbbfeb6b9c3dccab7901622249171be16078eea2946125458dcdb1e534a54e",
+          "Type": "https://slsa.dev/provenance/v1"
+        },
+        {
+          "Digest": "sha256:3571d2c1ceff499d1b942839b32fa7b6b482ebf7ed2fdde291b03b419c21914c",
+          "Platform": "linux/amd64",
+          "Type": "application/vnd.oci.image.manifest.v1+json"
+        }
+      ]
+    },
+    {
+      "Name": "controller-image",
+      "Platform": [
+        "linux/arm64"
+      ],
+      "StartedAt": "2026-09-10T03:54:24.740278992+08:00",
+      "CompletedAt": "2026-09-10T03:54:26.819508515+08:00",
+      "Status": "completed",
+      "Materials": [
+        {
+          "URI": "pkg:docker/python@3.13-slim-bookworm?platform=linux%2Farm64",
+          "Digests": [
+            "sha256:ed86c82274b3c69b52fb5820f358f0bd7df0b603332063cb5c6e32bd220c3e6e"
+          ]
+        }
+      ],
+      "Attachments": [
+        {
+          "Digest": "sha256:77ab2bcf19ed5b3f797174488d9bd0805520f4f84d6a6112df306d686e485775",
+          "Type": "application/vnd.oci.image.index.v1+json"
+        },
+        {
+          "Digest": "sha256:3bc4dbf009d45b1b4a9ca772c4e8bae0308841ced1ddd33d941d4cf6356cd8a1",
+          "Type": "https://slsa.dev/provenance/v1"
+        },
+        {
+          "Digest": "sha256:39d392eb162138b476d7781d1e98d0eb255673eec5c82230a738fea9ce4f04b1",
+          "Platform": "linux/arm64",
+          "Type": "application/vnd.oci.image.manifest.v1+json"
+        }
+      ]
+    },
+    {
+      "Name": "node-image",
+      "Platform": [
+        "linux/amd64"
+      ],
+      "StartedAt": "2026-09-10T03:54:22.575760323+08:00",
+      "CompletedAt": "2026-09-10T03:54:24.632757212+08:00",
+      "Status": "completed",
+      "Materials": [
+        {
+          "URI": "pkg:docker/rockylinux@9?platform=linux%2Famd64",
+          "Digests": [
+            "sha256:d7be1c094cc5845ee815d4632fe377514ee6ebcf8efaed6892889657e5ddaaa6"
+          ]
+        }
+      ],
+      "Attachments": [
+        {
+          "Digest": "sha256:6255e6a4efd4570c4812014ef86ee002171c624cb1bbaef45348b9aed2a70a27",
+          "Type": "application/vnd.oci.image.index.v1+json"
+        },
+        {
+          "Digest": "sha256:ceec137d0f2c4d9d6f09305246d0ec29784b44a607437c21f433d496430c5eb8",
+          "Type": "https://slsa.dev/provenance/v1"
+        },
+        {
+          "Digest": "sha256:3571d2c1ceff499d1b942839b32fa7b6b482ebf7ed2fdde291b03b419c21914c",
+          "Platform": "linux/amd64",
+          "Type": "application/vnd.oci.image.manifest.v1+json"
+        }
+      ]
+    },
+    {
+      "Name": "controller-image",
+      "Platform": [
+        "linux/arm64"
+      ],
+      "StartedAt": "2026-09-10T00:23:02.54259108+08:00",
+      "CompletedAt": "2026-09-10T00:25:20.861675007+08:00",
+      "Status": "completed",
+      "Materials": [
+        {
+          "URI": "pkg:docker/python@3.13-slim-bookworm?platform=linux%2Farm64",
+          "Digests": [
+            "sha256:ed86c82274b3c69b52fb5820f358f0bd7df0b603332063cb5c6e32bd220c3e6e"
+          ]
+        }
+      ],
+      "Attachments": [
+        {
+          "Digest": "sha256:f912042e29b46c172652788ba4973e13bac027d09e36de4e7a344adb6d52d1bf",
+          "Type": "application/vnd.oci.image.index.v1+json"
+        },
+        {
+          "Digest": "sha256:c59a943fae337fbe606c79618b8916645e93e2a3f7356a98d3ec7e447156b3ab",
+          "Type": "https://slsa.dev/provenance/v1"
+        },
+        {
+          "Digest": "sha256:39d392eb162138b476d7781d1e98d0eb255673eec5c82230a738fea9ce4f04b1",
+          "Platform": "linux/arm64",
+          "Type": "application/vnd.oci.image.manifest.v1+json"
+        }
+      ]
+    },
+    {
+      "Name": "node-image",
+      "Platform": [
+        "linux/amd64"
+      ],
+      "StartedAt": "2026-09-10T00:22:01.192189607+08:00",
+      "CompletedAt": "2026-09-10T00:23:02.377869044+08:00",
+      "Status": "completed",
+      "Materials": [
+        {
+          "URI": "pkg:docker/rockylinux@9?platform=linux%2Famd64",
+          "Digests": [
+            "sha256:d7be1c094cc5845ee815d4632fe377514ee6ebcf8efaed6892889657e5ddaaa6"
+          ]
+        }
+      ],
+      "Attachments": [
+        {
+          "Digest": "sha256:626491961066da4ff9507fcb8ddf6443f2a76d41e9c15fd534b9e239a2fd8483",
+          "Type": "application/vnd.oci.image.index.v1+json"
+        },
+        {
+          "Digest": "sha256:001a107ee203bf68506086578ede04651ca63a28b95eff77feb72f34abd3699a",
+          "Type": "https://slsa.dev/provenance/v1"
+        },
+        {
+          "Digest": "sha256:3571d2c1ceff499d1b942839b32fa7b6b482ebf7ed2fdde291b03b419c21914c",
+          "Platform": "linux/amd64",
+          "Type": "application/vnd.oci.image.manifest.v1+json"
+        }
+      ]
+    }
+  ],
+  "installed_versions": {
+    "db1": {
+      "packages": {
+        "mysql-community-server": "mysql-community-server-8.4.11-1.el9.x86_64",
+        "mysql-shell": "mysql-shell-8.4.10-1.el9.x86_64"
+      },
+      "elf": {
+        "/usr/sbin/mysqld": "ELF64 x86-64"
+      },
+      "os_release": "Rocky Linux release 9.3 (Blue Onyx)"
+    },
+    "db2": {
+      "packages": {
+        "mysql-community-server": "mysql-community-server-8.4.11-1.el9.x86_64",
+        "mysql-shell": "mysql-shell-8.4.10-1.el9.x86_64"
+      },
+      "elf": {
+        "/usr/sbin/mysqld": "ELF64 x86-64"
+      },
+      "os_release": "Rocky Linux release 9.3 (Blue Onyx)"
+    },
+    "db3": {
+      "packages": {
+        "mysql-community-server": "mysql-community-server-8.4.11-1.el9.x86_64",
+        "mysql-shell": "mysql-shell-8.4.10-1.el9.x86_64"
+      },
+      "elf": {
+        "/usr/sbin/mysqld": "ELF64 x86-64"
+      },
+      "os_release": "Rocky Linux release 9.3 (Blue Onyx)"
+    },
+    "router1": {
+      "packages": {
+        "mysql-router-community": "mysql-router-community-8.4.10-1.el9.x86_64",
+        "mysql-shell": "mysql-shell-8.4.10-1.el9.x86_64"
+      },
+      "elf": {
+        "/usr/bin/mysqlrouter": "ELF64 x86-64"
+      },
+      "os_release": "Rocky Linux release 9.3 (Blue Onyx)"
+    },
+    "router2": {
+      "packages": {
+        "mysql-router-community": "mysql-router-community-8.4.10-1.el9.x86_64",
+        "mysql-shell": "mysql-shell-8.4.10-1.el9.x86_64"
+      },
+      "elf": {
+        "/usr/bin/mysqlrouter": "ELF64 x86-64"
+      },
+      "os_release": "Rocky Linux release 9.3 (Blue Onyx)"
+    },
+    "router3": {
+      "packages": {
+        "mysql-router-community": "mysql-router-community-8.4.10-1.el9.x86_64",
+        "mysql-shell": "mysql-shell-8.4.10-1.el9.x86_64"
+      },
+      "elf": {
+        "/usr/bin/mysqlrouter": "ELF64 x86-64"
+      },
+      "os_release": "Rocky Linux release 9.3 (Blue Onyx)"
+    },
+    "lb1": {
+      "packages": {
+        "haproxy": "haproxy-2.8.14-3.el9_8.2.x86_64",
+        "keepalived": "keepalived-2.2.8-6.el9.x86_64"
+      },
+      "elf": {
+        "/usr/sbin/haproxy": "ELF64 x86-64",
+        "/usr/sbin/keepalived": "ELF64 x86-64"
+      },
+      "os_release": "Rocky Linux release 9.3 (Blue Onyx)"
+    },
+    "lb2": {
+      "packages": {
+        "haproxy": "haproxy-2.8.14-3.el9_8.2.x86_64",
+        "keepalived": "keepalived-2.2.8-6.el9.x86_64"
+      },
+      "elf": {
+        "/usr/sbin/haproxy": "ELF64 x86-64",
+        "/usr/sbin/keepalived": "ELF64 x86-64"
+      },
+      "os_release": "Rocky Linux release 9.3 (Blue Onyx)"
+    },
+    "lb3": {
+      "packages": {
+        "haproxy": "haproxy-2.8.14-3.el9_8.2.x86_64",
+        "keepalived": "keepalived-2.2.8-6.el9.x86_64"
+      },
+      "elf": {
+        "/usr/sbin/haproxy": "ELF64 x86-64",
+        "/usr/sbin/keepalived": "ELF64 x86-64"
+      },
+      "os_release": "Rocky Linux release 9.3 (Blue Onyx)"
+    }
+  },
+  "router_session_compatibility": {
+    "result": "PASS",
+    "fixed_sessions": 10,
+    "concurrent_short_transactions": 200,
+    "features": [
+      "LAST_INSERT_ID",
+      "temporary tables",
+      "user variables",
+      "prepared statements",
+      "rollback"
+    ]
+  },
+  "static_validation": {
+    "unit_tests": 93,
+    "gate_commands": 48,
+    "result": "PASS"
+  },
+  "public_probe_negative_tests": {
+    "missing-current": {
+      "expected_rejection": true,
+      "code": 1
+    },
+    "external-host": {
+      "expected_rejection": true,
+      "code": 1
+    },
+    "bad-output-path": {
+      "expected_rejection": true,
+      "code": 1
+    },
+    "empty-ledger": {
+      "expected_rejection": true,
+      "code": 1
+    },
+    "zero-ack": {
+      "expected_rejection": true,
+      "code": 1
+    },
+    "noclobber": {
+      "old_evidence_preserved": true
+    }
+  },
+  "fixture_corrections": [
+    "LB shrink test supplied the documented VRRP credential after its absence was rejected before changes.",
+    "Cross-node DNS checks exclude normal local NSS self resolution; all other DB and Router nodes failed both address-family checks.",
+    "Disk-full command output remains censored by no_log; ENOSPC was verified independently instead of expecting secret-bearing tool output."
+  ],
+  "resources": {
+    "vm_cpu_limit": 6,
+    "vm_memory_gib_limit": 12,
+    "vm_disk_gib_limit": 60,
+    "container_memory_sum_peak_gib": 3.943,
+    "container_cpu_sum_peak_cores": 3.604,
+    "samples": 1375,
+    "sample_start": "2026-09-09T16:23:54.984490+00:00",
+    "sample_end": "2026-09-09T21:19:38.979019+00:00",
+    "vm_used_from_available_peak_gib": 3.598,
+    "vm_memory_sampling_start": "2026-09-09T19:36:57.661889+00:00",
+    "allocated_disk_peak_bytes": {
+      "tmp/ha-validation-20260910": 11046928384,
+      "tmp/kernel-validation-20260910": 1062551552
+    },
+    "oom_events_observed": 0,
+    "sampling_note": "Docker stats memory excludes some cache; VM MemTotal-MemAvailable sampling starts during entry scaling. Ten-second sampling is not an instantaneous peak."
+  },
+  "cleanup": {
+    "status": "PASS",
+    "owned_vm_count_removed": 2,
+    "removed_lab_roots": [
+      "tmp/ha-validation-20260910",
+      "tmp/kernel-validation-20260910"
+    ],
+    "virtual_disks_data_backups_images_credentials_and_cache_removed": true,
+    "short_socket_metadata_removed": true,
+    "lima_download_removed": true,
+    "lab_allocated_gib_before_cleanup": 10.138,
+    "preserved": "Tracked rebuild templates, probes, plans and sanitized report; pre-existing unrelated workspaces were retained.",
+    "colima_state_unchanged": true
+  },
+  "unverified_boundaries": [
+    "native RHEL kernel",
+    "SELinux enforcing",
+    "physical power loss",
+    "cross-machine network partition",
+    "production PKI",
+    "production firewall policy",
+    "NFS and rsync backup targets",
+    "production performance and capacity"
+  ],
+  "xtrabackup_rpm": "percona-xtrabackup-84-8.4.0-6.1.el9.x86_64",
+  "expected_rejections": [
+    {
+      "label": "minimum-router-rejected",
+      "expected_result": "REJECT",
+      "actual_returncode": 1,
+      "reason": "Router must retain two nodes",
+      "source_sha": "f09bd65a5e9fd449fbfa380f068dacc98082559c"
+    },
+    {
+      "label": "minimum-lb-rejected",
+      "expected_result": "REJECT",
+      "actual_returncode": 1,
+      "reason": "LB must retain two nodes",
+      "source_sha": "f09bd65a5e9fd449fbfa380f068dacc98082559c"
+    },
+    {
+      "label": "scale-primary-rejected",
+      "expected_result": "REJECT",
+      "actual_returncode": 2,
+      "reason": "Addition cannot target an existing primary",
+      "source_sha": "f09bd65a5e9fd449fbfa380f068dacc98082559c"
+    },
+    {
+      "label": "report-host-existing-change-rejected",
+      "expected_result": "REJECT",
+      "actual_returncode": 2,
+      "reason": "Registered address cannot change during ordinary deployment",
+      "source_sha": "80930d67c44c1b50b565fab0281300ca13608f04"
+    },
+    {
+      "label": "backup-disk-full-confirmed",
+      "expected_result": "REJECT",
+      "actual_returncode": 2,
+      "reason": "Full bounded backup filesystem must fail",
+      "source_sha": "f09bd65a5e9fd449fbfa380f068dacc98082559c"
+    }
+  ]
+}

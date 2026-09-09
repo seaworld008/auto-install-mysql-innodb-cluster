@@ -116,3 +116,8 @@ mysql_report_host_override: "{{ ansible_host }}"
 不会因为移除本地覆盖项而改回系统主机名。首次 bootstrap 前应选定稳定的通告地址。
 对已注册成员设置不同地址时，普通安装或配置更新会在写入新 my.cnf 前拒绝；
 地址变更须另行规划成员维护与元数据更新，不能当作普通滚动参数修改。
+
+若各主机使用不同的通告名称，先移除 settings 文件中的全局覆盖项，再在对应 MySQL 主机
+的 inventory 变量下设置 `mysql_report_host_override`，避免 `-e` 的全局值覆盖逐机设置。
+此参数控制成员通告，不替代网络连通要求：inventory 地址及通告地址都必须按部署流程
+在相关数据库和 Router 节点之间可达。
