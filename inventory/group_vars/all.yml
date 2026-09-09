@@ -232,7 +232,6 @@ mysql_kernel_params_stable:
   "kernel.panic": 30
   "kernel.panic_on_oops": 1
   "kernel.core_uses_pid": 1
-  "kernel.core_pattern": "/var/crash/core.%e.%p.%h.%t"
   "kernel.randomize_va_space": 2
 
 # 系统资源限制 - 动态调整

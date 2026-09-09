@@ -93,3 +93,7 @@ SSD 128、HDD 64，可用 `mysql_kernel_io_queue_depth_ssd` / `mysql_kernel_io_q
 全局文件句柄上限 `fs.file-max` / `fs.nr_open` 按容量下限配置，只提高、不降低当前运行值；
 默认下限至少为 1048576，避免低资源档位把 systemd 服务已有的硬限制压低，导致新服务启动失败。
 这与每个登录会话的 PAM 限制是不同层次的设置。
+
+崩溃转储由操作系统的 Apport / systemd-coredump 等服务管理，通用配置不覆盖
+`kernel.core_pattern`，也不创建或修改 `/var/crash` 的权限。维护已有环境时，按其原有
+崩溃收集服务核对目录权限，避免性能配置与系统故障诊断服务互相覆盖。

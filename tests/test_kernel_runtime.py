@@ -45,8 +45,10 @@ class KernelRuntimeTests(unittest.TestCase):
         self.assertNotIn('mysql_kernel_params_stable',self.play['vars'])
         self.assertNotIn('mysql_limits_stable',self.play['vars'])
         self.assertNotIn('kernel.sched_migration_cost_ns',defaults['mysql_kernel_params_stable'])
+        self.assertNotIn('kernel.core_pattern',defaults['mysql_kernel_params_stable'])
         migration=next(t for t in self.play['tasks'] if t['name']=='将受管参数从旧 sysctl.conf 迁移到单一配置文件')
         self.assertIn('kernel.sched_migration_cost_ns',migration['loop'])
+        self.assertIn('kernel.core_pattern',migration['loop'])
 
     def test_global_descriptor_limits_never_reduce_existing_capacity(self):
         task=next(t for t in self.play['tasks'] if t['name']=='全局文件句柄上限只提高不降低')

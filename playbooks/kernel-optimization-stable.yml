@@ -294,7 +294,7 @@
         state: absent
         sysctl_file: /etc/sysctl.conf
         reload: false
-      loop: "{{ (mysql_kernel_params_stable | dict2items) + [{'key': 'kernel.sched_migration_cost_ns'}] }}"
+      loop: "{{ (mysql_kernel_params_stable | dict2items) + [{'key': 'kernel.sched_migration_cost_ns'}, {'key': 'kernel.core_pattern'}] }}"
 
     - name: 应用内核参数
       ansible.posix.sysctl:
@@ -403,13 +403,6 @@
       ansible.builtin.command: /usr/local/bin/optimize-io-stable.sh
       register: io_apply
       changed_when: "'CHANGED:' in io_apply.stdout"
-
-    # 创建崩溃转储目录
-    - name: 创建核心转储目录
-      file:
-        path: /var/crash
-        state: directory
-        mode: '0755'
 
     # 验证优化效果
     - name: 验证关键内核参数
