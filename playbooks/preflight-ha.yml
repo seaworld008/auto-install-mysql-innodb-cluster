@@ -9,6 +9,7 @@
     haproxy_nodes_count: "{{ groups['haproxy_lb'] | default([]) | length }}"
     preflight_require_router: true
     preflight_require_haproxy: true
+    preflight_require_keepalived: "{{ preflight_require_haproxy | bool }}"
     preflight_target_hosts: >-
       {{
         (groups['mysql_cluster'] | default([]))
@@ -62,6 +63,23 @@
           - mysql_nodes_count | int >= mysql_ha_min_nodes
         fail_msg: "MySQL 集群节点数不足：当前 {{ mysql_nodes_count }}，最小高可用要求 {{ mysql_ha_min_nodes }}（建议3）"
         success_msg: "MySQL 集群节点数满足高可用要求：{{ mysql_nodes_count }}"
+
+    - name: 初始化本轮拓扑检查数据
+      ansible.builtin.set_fact:
+        preflight_host_addresses: {}
+        preflight_lb_priorities: []
+
+    - name: 记录各主机的部署地址
+      ansible.builtin.set_fact:
+        preflight_host_addresses: >-
+          {{ preflight_host_addresses | default({}) | combine({item: hostvars[item].ansible_host | default(item) | lower}) }}
+      loop: "{{ preflight_target_hosts | unique }}"
+
+    - name: 要求跨角色共置使用同一主机身份
+      ansible.builtin.assert:
+        that:
+          - preflight_host_addresses.values() | unique | length == preflight_host_addresses | length
+        fail_msg: "不同 inventory 主机名指向同一部署地址；共置必须复用同一主机名加入多个角色组。"
 
     - name: 检查每台 MySQL 主机都定义了 server_id
       assert:
@@ -147,10 +165,16 @@
         fail_msg: "PRIMARY_AND_SECONDARY 不支持 round-robin-with-fallback；自动读写分离推荐 round-robin。"
       when: preflight_require_router | bool
 
+    - name: 检查 HAProxy 后端类型
+      ansible.builtin.assert:
+        that:
+          - haproxy_backend_target == 'router'
+        fail_msg: "HAProxy 必须接入 Router 层。"
+      when: preflight_require_haproxy | bool
+
     - name: 检查入口层关键变量
       assert:
         that:
-          - haproxy_backend_target == 'router'
           - (keepalived_auth_pass | string) is match('^[A-Za-z0-9_.-]{1,8}$')
           - not ((keepalived_auth_pass | string | trim) is match(credential_placeholder_pattern))
           - >-
@@ -166,7 +190,24 @@
           keepalived_auth_pass 必须替换占位值且不超过 8 个字符；
           Keepalived VIP 必须是已按环境确认的非示例 IPv4 地址。
         success_msg: "入口层关键变量检查通过"
-      when: preflight_require_haproxy | bool
+      when: preflight_require_keepalived | bool
+
+    - name: 记录入口节点的有效优先级
+      ansible.builtin.set_fact:
+        preflight_lb_priorities: >-
+          {{ preflight_lb_priorities | default([]) + [hostvars[item].keepalived_priority | default(150 if item == groups['haproxy_lb'][0] else 100) | int] }}
+      loop: "{{ groups['haproxy_lb'] | default([]) }}"
+      when: preflight_require_keepalived | bool
+
+    - name: 要求入口优先级合法且唯一
+      ansible.builtin.assert:
+        that:
+          - preflight_lb_priorities | default([]) | length > 0
+          - preflight_lb_priorities | min >= 1
+          - preflight_lb_priorities | max <= 254
+          - preflight_lb_priorities | unique | length == preflight_lb_priorities | length
+        fail_msg: "Keepalived 优先级必须为 1..254 且各节点不同；三节点请显式配置如 150/120/100。"
+      when: preflight_require_keepalived | bool
 
     - name: 检查备份配置（启用时）
       assert:
@@ -263,11 +304,11 @@
   hosts: >-
     {{
       'haproxy_lb'
-      if preflight_require_haproxy | default(true) | bool
+      if preflight_require_keepalived | default(preflight_require_haproxy | default(true)) | bool
       else 'localhost'
     }}
-  gather_facts: "{{ preflight_require_haproxy | default(true) | bool }}"
-  become: "{{ preflight_require_haproxy | default(true) | bool }}"
+  gather_facts: "{{ preflight_require_keepalived | default(preflight_require_haproxy | default(true)) | bool }}"
+  become: "{{ preflight_require_keepalived | default(preflight_require_haproxy | default(true)) | bool }}"
   tasks:
     - name: 检查 Keepalived 网卡名是否存在
       assert:
@@ -275,4 +316,4 @@
           - keepalived_interface in ansible_interfaces
         fail_msg: "主机 {{ inventory_hostname }} 上未找到 Keepalived 网卡 {{ keepalived_interface }}，请改成真实网卡名。"
         success_msg: "主机 {{ inventory_hostname }} 的 Keepalived 网卡存在"
-      when: preflight_require_haproxy | default(true) | bool
+      when: preflight_require_keepalived | default(preflight_require_haproxy | default(true)) | bool

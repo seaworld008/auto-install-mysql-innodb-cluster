@@ -46,6 +46,24 @@ MySQL defaults to the 8.4 LTS release line; 8.0 is also configurable.
 
 The Ansible control node manages hosts through SSH; it is not in the SQL traffic path.
 
+## Choose a deployment scenario
+
+The default diagram is one layout, not a fixed host count. Inventory can place a canonical host in
+multiple role groups or add a third Router and entry node.
+
+| Layout or task | Detailed guide |
+| --- | --- |
+| 3 MySQL + 2 dedicated Routers + 2 entry hosts | [Dedicated](docs/scenarios/DEDICATED.md) |
+| Three hosts sharing database, routing and entry roles | [Colocated](docs/scenarios/COLOCATED.md) |
+| Database-side Routers with two dedicated entry hosts | [Mixed](docs/scenarios/MIXED.md) |
+| Three Routers and three entry hosts | [Expanded entry tier](docs/scenarios/THREE_ENTRY.md) |
+| MySQL, Router, HAProxy or Keepalived separately | [Component operations](docs/scenarios/COMPONENTS.md) |
+| Kernel optimization only | [Kernel guide](docs/scenarios/KERNEL.md) |
+| Scale, configure, back up and restore | [Scenario index](docs/scenarios/README.md) |
+
+Start with [shared setup](docs/scenarios/COMMON.md). Guides include configuration, commands,
+verification and rollback. Keepalived remains on the HAProxy hosts because it checks the local HAProxy service.
+
 ## Get started
 
 The control node requires Python 3.12+; managed Linux hosts require Python 3.9+ and SSH access.
@@ -90,7 +108,7 @@ transaction behavior before choosing automatic splitting. See [application conne
 ## Operate
 
 Use the same entrypoint, inventory and Vault with `--mysql-only`, `--install-routers`,
-`--configure-lb`, `--apply-config`, `--scale-mysql-add`, `--scale-mysql-remove`,
+`--configure-lb`, `--install-haproxy`, `--install-keepalived`, `--apply-config`, `--scale-mysql-add`, `--scale-mysql-remove`,
 `--shrink-router`, `--shrink-lb`, `--backup` or `--status`.
 
 Update inventory before adding nodes; explicitly select a new primary when removing the writer.
@@ -146,3 +164,5 @@ storage; the VM is capped at 6 CPUs and 12 GiB. This is useful for learning and 
 
 Documentation is Chinese-first. Reproducible issues, deployment feedback and pull requests are welcome.
 Licensed under the [MIT License](LICENSE).
+
+Read-only checks accept `--scope mysql|router|haproxy|full`; full is the default and includes VIP ownership.

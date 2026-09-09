@@ -75,7 +75,7 @@ inventory/hosts-ha-reference.yml
 inventory/hosts.yml
 ```
 
-这份示例展示 Router / HAProxy 与 MySQL 同机部署的形态，适合实验或基础检查。生产环境不建议以同机部署作为默认基线，因为数据库层、路由层和入口层故障域会耦合。
+这份示例以同一个主机名跨组引用，展示 Router / HAProxy 与 MySQL 同机部署的形态，适合实验或基础检查。生产环境不建议以同机部署作为默认基线，因为数据库层、路由层和入口层故障域会耦合。
 
 ### 研究 Router 部署方式
 
@@ -146,7 +146,7 @@ mysql_hardware_profile: "optimized_8c32g"
 修改 inventory 后，至少运行：
 
 ```bash
-./.venv/bin/ansible-inventory -i inventory/hosts.local.yml --list >/tmp/inventory-local.json
+./.venv/bin/ansible-inventory -i inventory/hosts.local.yml --list >/dev/null
 ./.venv/bin/ansible-playbook -i inventory/hosts.local.yml playbooks/site.yml \
   --syntax-check --ask-vault-pass -e @inventory/vault.local.yml
 ./scripts/deploy_dedicated_routers.sh --check-prereq \
@@ -165,3 +165,10 @@ mysql_hardware_profile: "optimized_8c32g"
 - 不要把真实 IP、密码、私钥、Vault 口令或云厂商密钥提交到仓库。
 - 不要关闭 SSH host key 校验；fingerprint 变化时先查明原因。
 - 不要仅凭 syntax-check 宣称生产就绪；真实环境部署、故障演练、恢复演练仍需单独执行。
+
+## 可复制的方案模板
+
+`examples/topologies/` 提供 dedicated、colocated、mixed、three-entry 四个最小拓扑模板。
+它们只定义主机和角色，不复制运行参数。按 [公共准备](../docs/scenarios/COMMON.md) 复制到
+本地 inventory，使用显式 settings extra vars 覆盖环境差异。三节点入口必须设置唯一优先级。
+同一角色组不能用多个别名指向同一部署地址；共置时复用同一主机名加入不同组。

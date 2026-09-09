@@ -212,3 +212,10 @@ CI 还覆盖全部 playbook syntax-check、Python 3.12 / 3.13、固定 SHA 的 A
 校正本地 override。组身份不一致会阻断状态检查，不会自动更改健康集群的 UUID。
 完整部署承担依赖安装与账号收敛，`--apply-config` 仅用于受管配置更新。
 应用端口、TLS 和重试行为见 [应用接入指南](docs/runbooks/APPLICATION_CONNECTIONS.md)。
+
+## 其他拓扑与组件操作
+
+默认示例之外，可选择 [独立、共置、混合或三节点接入层](docs/scenarios/README.md)。
+[组件指南](docs/scenarios/COMPONENTS.md) 覆盖只部署 MySQL、Router、HAProxy、Keepalived；
+[内核专项](docs/scenarios/KERNEL.md) 可单独执行。只读状态检查使用 `--scope` 选择范围，
+默认 full 保留全部 HA 检查；该选项不能用于缩减完整部署范围。

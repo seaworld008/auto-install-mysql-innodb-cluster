@@ -407,3 +407,10 @@ npx --yes markdownlint-cli2@0.23.2
 
 `mysql_group_replication_group_name_override` 在创建时传给 AdminAPI groupName。
 已存在集群应以实际组 UUID 对齐配置，成员与配置不匹配时部署和状态检查拒绝通过。
+
+## 拓扑与分层检查
+
+角色组数量可超过最低要求；四种拓扑见 [方案目录](../scenarios/README.md)。
+`preflight_require_keepalived`、`health_require_keepalived` 是检查流程内部控制，默认跟随 HAProxy
+范围启用。使用 CLI `--scope` 选择检查范围，不在生产配置中把完整 HA 检查永久关掉。
+`mysql_kernel_backup_root` 默认 `/var/backups/mysql-kernel`，用于内核专项修改前的配置备份。

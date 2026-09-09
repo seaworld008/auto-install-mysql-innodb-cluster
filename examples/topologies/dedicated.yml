@@ -1,4 +1,4 @@
-# 三主机共置参考：同一主机加入多个角色组。
+# 仅拓扑示例；复制到 inventory/hosts.local.yml 后修改文档地址。
 all:
   vars:
     ansible_user: root
@@ -7,15 +7,22 @@ all:
     db1:
       ansible_host: 192.0.2.11
       mysql_server_id: 1
-      keepalived_priority: 150
     db2:
       ansible_host: 192.0.2.12
       mysql_server_id: 2
-      keepalived_priority: 120
     db3:
       ansible_host: 192.0.2.13
       mysql_server_id: 3
-      keepalived_priority: 100
+    router1:
+      ansible_host: 192.0.2.21
+    router2:
+      ansible_host: 192.0.2.22
+    lb1:
+      ansible_host: 192.0.2.31
+      keepalived_priority: 150
+    lb2:
+      ansible_host: 192.0.2.32
+      keepalived_priority: 120
   children:
     mysql_cluster:
       children:
@@ -28,11 +35,9 @@ all:
             db3: {}
     mysql_router:
       hosts:
-        db1: {}
-        db2: {}
-        db3: {}
+        router1: {}
+        router2: {}
     haproxy_lb:
       hosts:
-        db1: {}
-        db2: {}
-        db3: {}
+        lb1: {}
+        lb2: {}

@@ -154,9 +154,7 @@
           - --quiet
           - "{{ item }}"
       changed_when: false
-      loop:
-        - haproxy
-        - keepalived
+      loop: "{{ ['haproxy'] + (['keepalived'] if health_require_keepalived | default(health_require_haproxy | default(true)) | bool else []) }}"
       when: health_require_haproxy | default(true) | bool
 
     - name: 检查 HAProxy 监听端口
@@ -196,10 +194,9 @@
           Keepalived VIP {{ keepalived_vip }} 未绑定，或同时出现在多个
           haproxy_lb 节点上。
         success_msg: "Keepalived VIP {{ keepalived_vip }} 已唯一绑定"
-      when: health_require_haproxy | default(true) | bool
+      when: health_require_keepalived | default(health_require_haproxy | default(true)) | bool
 
     - name: 输出健康检查结论
       ansible.builtin.debug:
         msg: >-
-          已启用的 MySQL Cluster、Router、HAProxy、Keepalived 和 VIP
-          健康检查均通过。
+          本次选择范围内的健康检查通过；未选择的组件不属于本次检查结论。

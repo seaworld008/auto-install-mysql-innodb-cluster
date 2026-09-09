@@ -50,6 +50,9 @@ class OperatorCliTests(unittest.TestCase):
             if [[ -n "${FAKE_PLAYBOOK_LOG:-}" ]]; then
               printf '%s\\n' "$*" >>"$FAKE_PLAYBOOK_LOG"
             fi
+            if [[ -n "${FAKE_PLAYBOOK_FAIL_CONTAINS:-}" && "$*" == *"${FAKE_PLAYBOOK_FAIL_CONTAINS}"* ]]; then
+              exit 42
+            fi
             exit "${FAKE_PLAYBOOK_EXIT:-0}"
             """,
         )
@@ -239,6 +242,84 @@ class OperatorCliTests(unittest.TestCase):
         self.assertIn("playbooks/preflight-ha.yml", calls[0])
         self.assertIn("playbooks/shrink-mysql.yml", calls[1])
         self.assertNotIn("playbooks/health-check-ha.yml", "\n".join(calls))
+
+    def test_single_entry_component_changes_only_requested_service(self):
+        for action, selected, excluded in (
+            ('--install-haproxy', 'install-haproxy.yml', 'install-keepalived.yml'),
+            ('--install-keepalived', 'install-keepalived.yml', 'install-haproxy.yml'),
+        ):
+            with self.subTest(action=action):
+                log = self.temp_path / (selected + '.log')
+                result = self._run(DEPLOY_SCRIPT, action, '-i', str(self.inventory_path),
+                    environment={'FAKE_PLAYBOOK_LOG': str(log)})
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                calls = log.read_text().splitlines()
+                self.assertEqual(len(calls), 4)
+                self.assertIn('preflight-ha.yml', calls[0])
+                self.assertIn('validate-ha.yml', calls[1])
+                self.assertIn(selected, calls[2])
+                self.assertIn('validate-ha.yml', calls[3])
+                self.assertNotIn(excluded, log.read_text())
+                self.assertNotIn('kernel-optimization', log.read_text())
+                if action == '--install-haproxy':
+                    self.assertIn('preflight_require_keepalived=false', calls[0])
+                    self.assertIn('health_require_haproxy=false', calls[1])
+                    self.assertIn('health_require_keepalived=false', calls[3])
+                else:
+                    self.assertIn('health_require_keepalived=false', calls[1])
+                    self.assertNotIn('health_require_keepalived=false', calls[3])
+
+    def test_entry_dependency_failure_never_installs_components(self):
+        for action in ('--install-haproxy', '--install-keepalived'):
+            log = self.temp_path / (action + '.log')
+            result = self._run(DEPLOY_SCRIPT, action, '-i', str(self.inventory_path), environment={
+                'FAKE_PLAYBOOK_LOG': str(log), 'FAKE_PLAYBOOK_FAIL_CONTAINS': 'validate-ha.yml'})
+            self.assertEqual(result.returncode, 42)
+            self.assertNotIn('install-', log.read_text())
+
+    def test_scoped_status_is_explicit_and_does_not_advertise_vip(self):
+        for scope in ('mysql', 'router', 'haproxy'):
+            log = self.temp_path / (scope + '.log')
+            result = self._run(DEPLOY_SCRIPT, '--status', '--scope', scope, '-i', str(self.inventory_path),
+                environment={'FAKE_PLAYBOOK_LOG': str(log)})
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertNotIn('192.0.2.100', result.stdout)
+            self.assertIn('validate-ha.yml', log.read_text())
+        for args in (('--production-ready', '--scope', 'mysql'),
+                     ('--status', '--scope', 'invalid'),
+                     ('--production-ready', '--scope', ''),
+                     ('--kernel-optimize-only', '--skip-kernel-optimization'),
+                     ('--install-haproxy', '--limit', 'lb1')):
+            log = self.temp_path / 'rejected.log'
+            result = self._run(DEPLOY_SCRIPT, *args, '-i', str(self.inventory_path),
+                environment={'FAKE_PLAYBOOK_LOG': str(log)})
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse(log.exists())
+
+    def test_kernel_only_does_not_require_database_or_entry_checks(self):
+        log = self.temp_path / 'kernel.log'
+        result = self._run(DEPLOY_SCRIPT, '--kernel-optimize-only', '--limit', 'host1',
+            '-i', str(self.inventory_path), environment={'FAKE_PLAYBOOK_LOG': str(log)})
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(len(log.read_text().splitlines()), 1)
+        self.assertIn('kernel-optimization-stable.yml --limit host1', log.read_text())
+
+    def test_full_scope_overrides_user_attempt_to_disable_ha_gates(self):
+        disabled = ('preflight_require_router=false preflight_require_haproxy=false '
+                    'preflight_require_keepalived=false health_require_router=false '
+                    'health_require_haproxy=false health_require_keepalived=false')
+        for action in ('--check-prereq', '--status', '--production-ready'):
+            log = self.temp_path / (action + '-full.log')
+            result = self._run(DEPLOY_SCRIPT, action, '-i', str(self.inventory_path), '-e', disabled,
+                environment={'FAKE_PLAYBOOK_LOG': str(log)})
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            for call in log.read_text().splitlines():
+                if any(name in call for name in ('preflight-ha.yml', 'validate-ha.yml', 'site.yml')):
+                    self.assertGreater(call.rfind('preflight_require_keepalived=true'),
+                                       call.rfind('preflight_require_keepalived=false'))
+                if 'validate-ha.yml' in call:
+                    self.assertGreater(call.rfind('health_require_keepalived=true'),
+                                       call.rfind('health_require_keepalived=false'))
 
 
 if __name__ == "__main__":

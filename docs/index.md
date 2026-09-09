@@ -15,6 +15,11 @@ title: MySQL InnoDB Cluster 文档
 | 规划部署 | [完整指南](https://github.com/seaworld008/auto-install-mysql-innodb-cluster/blob/main/DEPLOYMENT_COMPLETE_GUIDE.md) · [部署前检查](https://github.com/seaworld008/auto-install-mysql-innodb-cluster/blob/main/PRE_DEPLOYMENT_CHECKLIST.md) |
 | 接入应用 | [连接、事务与 TLS](runbooks/APPLICATION_CONNECTIONS.md) |
 
+## 按场景落地
+
+从 [方案索引](scenarios/README.md) 选择独立、共置、混合、三节点接入层或组件单独部署。
+每篇提供参数准备、执行命令、验证、排障与回退。
+
 ## 部署与运维
 
 - [服务器配置](runbooks/SERVER_CONFIGURATION.md)

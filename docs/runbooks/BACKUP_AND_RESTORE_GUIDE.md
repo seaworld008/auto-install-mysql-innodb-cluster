@@ -13,12 +13,19 @@
 - “恢复”目前以运维 runbook 形式提供，不做一键覆盖式自动恢复
 - 生产环境恢复强烈建议先在新节点或隔离环境验证，再决定是否回切业务流量
 
+## 可直接执行的方案
+
+新部署请使用 [完整备份参数与命令](../scenarios/BACKUPS.md) 和 [隔离恢复步骤](../scenarios/RESTORE.md)。
+下文的 YAML 片段用于说明字段，不能作为完整 extra vars 字典直接替换 backup_config。
+真实命令必须使用本地 inventory、settings 和 Vault，不直接连接仓库示例地址。
+
 ## 1. 当前主线支持的备份能力
 
 主入口：
 
 ```bash
-./scripts/deploy_dedicated_routers.sh --backup -i inventory/hosts-with-dedicated-routers.yml
+# 先按 docs/scenarios/COMMON.md 定义 COMMON_ARGS
+./scripts/deploy_dedicated_routers.sh --backup "${COMMON_ARGS[@]}" -e @inventory/backup.local.yml
 ```
 
 配置入口：
@@ -185,7 +192,8 @@ backup_config:
 ## 5. 执行备份
 
 ```bash
-./scripts/deploy_dedicated_routers.sh --backup -i inventory/hosts-with-dedicated-routers.yml
+# 先按 docs/scenarios/COMMON.md 定义 COMMON_ARGS
+./scripts/deploy_dedicated_routers.sh --backup "${COMMON_ARGS[@]}" -e @inventory/backup.local.yml
 ```
 
 成功后，当前实现会在备份目录下生成按时间和主机区分的目录结构。
@@ -292,7 +300,8 @@ backup_config:
 ### 日常备份
 
 ```bash
-./scripts/deploy_dedicated_routers.sh --backup -i inventory/hosts-with-dedicated-routers.yml
+# 先按 docs/scenarios/COMMON.md 定义 COMMON_ARGS
+./scripts/deploy_dedicated_routers.sh --backup "${COMMON_ARGS[@]}" -e @inventory/backup.local.yml
 ```
 
 ### 恢复演练

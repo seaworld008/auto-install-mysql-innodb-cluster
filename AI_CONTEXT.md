@@ -387,3 +387,11 @@ README 是面向使用者的功能、架构、快速使用与导航入口，不�
 不得通过移除首页的过程描述来宣称未执行的生产验收或隐瞒会影响使用的限制。
 本地模拟入口为 `tests/lab/lab.py`，方案见 `docs/runbooks/LOCAL_SIMULATION.md`。
 新建组 UUID 由 AdminAPI groupName 设置，已存在成员必须匹配配置，禁止自动热改组身份。
+
+## 场景与组件边界
+
+`docs/scenarios/` 为方案导航和复制执行步骤，`examples/topologies/` 只存拓扑，不复制运行配置。
+主入口支持 `--install-haproxy`、`--install-keepalived`，先验证依赖再只安装目标组件。
+`--scope full|mysql|router|haproxy` 只用于检查操作。完整流程仍要求 Keepalived/VIP。
+同主机跨组表示共置，同角色内地址必须唯一；三入口需显式唯一优先级。
+内核备份根目录为 `mysql_kernel_backup_root`，备份失败必须先停止，不忽略错误继续改参数。

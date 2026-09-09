@@ -50,6 +50,9 @@ All should route through `scripts/deploy_dedicated_routers.sh`:
 
 - `--production-ready`
 - `--mysql-only`
+- `--install-routers`
+- `--install-haproxy`
+- `--install-keepalived`
 - `--apply-config`
 - `--scale-mysql-add`
 - `--scale-mysql-remove`
