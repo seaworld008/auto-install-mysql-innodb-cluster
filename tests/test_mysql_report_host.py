@@ -71,6 +71,10 @@ class ReportHostTests(unittest.TestCase):
         self.assertTrue(task['no_log'])
         self.assertLess(self.tasks.index(task),
                         next(i for i,t in enumerate(self.tasks) if t['name']=='创建集群管理用户'))
+        readiness = next(t for t in self.tasks if t['name'] == '等待现有集群成员恢复 ONLINE')
+        self.assertEqual(readiness['ansible.mysql.mysql_query']['login_user'], 'root')
+        self.assertEqual(readiness['ansible.mysql.mysql_query']['login_password'], '{{ mysql_root_password }}')
+        self.assertEqual(readiness['ansible.mysql.mysql_query']['config_file'], '')
 
     def test_inventory_override_survives_group_vars_precedence(self):
         with tempfile.TemporaryDirectory(dir=ROOT / 'tmp') as directory:

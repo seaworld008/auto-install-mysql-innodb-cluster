@@ -876,8 +876,9 @@
 
     - name: 等待现有集群成员恢复 ONLINE
       ansible.mysql.mysql_query:
-        login_user: "{{ mysql_cluster_user }}"
-        login_password: "{{ mysql_cluster_password }}"
+        # 实际 primary 可能排在后面的滚动批次；账号尚未收敛时仍需验证成员健康。
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
         login_unix_socket: "{{ mysql_socket_path }}"
         config_file: ""
         query: |
