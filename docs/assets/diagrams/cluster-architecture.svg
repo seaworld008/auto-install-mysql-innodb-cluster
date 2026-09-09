@@ -73,9 +73,9 @@
   <text x="907" y="591" class="small">Primary role follows cluster elections</text>
 
   <path d="M44 639H1236" stroke="#344d6a"/>
-  <text x="44" y="672" class="text">3 MySQL hosts</text>
-  <text x="300" y="672" class="text">2 Router hosts</text>
-  <text x="560" y="672" class="text">2 entry hosts</text>
-  <text x="864" y="672" class="small">Architecture illustration · Default HA topology</text>
+  <text x="262" y="672" class="text">2 entry hosts</text>
+  <text x="596" y="672" class="text">2 Router hosts</text>
+  <text x="880" y="672" class="text">3 MySQL hosts</text>
+  <text x="44" y="672" class="eyebrow">DEFAULT HA</text>
   <text x="44" y="699" class="small">Representative paths: both entry hosts reach the Router tier; either Router can reach any cluster member.</text>
 </svg>
