@@ -409,6 +409,7 @@ $(render_private_key_field)
     ansible_python_interpreter: auto_silent
     keepalived_vip: $(yaml_quote "$KEEPALIVED_VIP")
     mysql_group_replication_group_name_override: $(yaml_quote "$MYSQL_GROUP_REPLICATION_UUID")
+    mysql_report_host_override: '{{ ansible_host }}'
 EOF
 
 mv "$TEMP_FILE" "$INVENTORY_FILE"

@@ -94,3 +94,25 @@ mysql_router_max_idle_server_connections + 1024` 计算，覆盖客户端、自�
 
 `mysql_table_definition_cache` 默认按表缓存容量的一半计算，但至少为 MySQL 接受的 400。
 因此低资源档位不会生成随后被服务端自动改写的 128，便于对照配置与运行值。
+
+## 数据库通告地址与 DNS
+
+MySQL Shell 和 Router 会读取集群元数据中的成员地址。SSH 能连接 `ansible_host`，
+不代表其他节点能解析数据库的系统主机名。新集群若使用固定 IPv4 地址，可在
+本地 settings 或 inventory 的 `all.vars` 中设置：
+
+```yaml
+mysql_report_host_override: "{{ ansible_host }}"
+```
+
+`mysql_report_host_override` 是本地输入，最终解析为运行变量 `mysql_report_host`；
+使用单独的覆盖名称，避免 inventory 的 all.vars 被默认 group_vars 覆盖。
+每台数据库使用自身 inventory 地址通告成员，不需要为其系统主机名额外配置 DNS。
+也可按主机配置稳定的 DNS 名称；该名称必须从所有 MySQL 和 Router 节点解析并连通。
+通告地址不包含端口，端口仍由 `mysql_port` 管理。
+采用严格 TLS 校验时，证书 SAN 必须覆盖所用地址。
+
+默认留空：新实例沿用 MySQL 的系统主机名；已有集群成员保留实际 `report_host`，
+不会因为移除本地覆盖项而改回系统主机名。首次 bootstrap 前应选定稳定的通告地址。
+对已注册成员设置不同地址时，普通安装或配置更新会在写入新 my.cnf 前拒绝；
+地址变更须另行规划成员维护与元数据更新，不能当作普通滚动参数修改。

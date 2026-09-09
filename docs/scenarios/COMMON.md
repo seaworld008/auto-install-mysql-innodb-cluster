@@ -52,6 +52,8 @@ mysql_group_replication_group_name_override: "CHANGE_ME_UUID"
 mysql_hardware_profile: "optimized_8c32g"
 mysql_release_line: "8.4"
 mysql_cluster_name: "prodCluster"
+# 新集群用目标机实际地址通告成员，避免依赖系统主机名 DNS。
+mysql_report_host_override: "{{ ansible_host }}"
 YAML
 )
 python3 -c 'import uuid; print(uuid.uuid4())'

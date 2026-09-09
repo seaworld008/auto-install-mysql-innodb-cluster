@@ -57,6 +57,14 @@
       - mysql-server
       - mysql-shell
   tasks:
+    - name: 验证 MySQL 通告地址格式
+      ansible.builtin.assert:
+        that:
+          - mysql_report_host is string
+          - mysql_report_host | length <= 253
+          - mysql_report_host == '' or mysql_report_host is match('^[A-Za-z0-9_.-]+\\Z')
+        fail_msg: "mysql_report_host 必须为空，或不含端口/空白的 IPv4 地址或 DNS 名称。"
+
     - name: 验证目标操作系统受支持
       assert:
         that:
@@ -221,6 +229,60 @@
       ansible.builtin.stat:
         path: "{{ mysql_datadir }}/mysql"
       register: mysql_target_system_database
+
+    - name: 检查已有集群元数据目录
+      ansible.builtin.stat:
+        path: "{{ item }}/mysql_innodb_cluster_metadata"
+      loop: "{{ [mysql_datadir, mysql_default_datadir] | unique | list }}"
+      register: mysql_metadata_directories
+
+    - name: 记录已有集群身份状态
+      ansible.builtin.set_fact:
+        mysql_has_cluster_metadata: "{{ mysql_metadata_directories.results | selectattr('stat.exists') | list | length > 0 }}"
+
+    - name: 检查已有 MySQL 本地 socket
+      ansible.builtin.stat:
+        path: "{{ mysql_socket_path }}"
+      register: mysql_existing_socket
+      when: mysql_has_cluster_metadata | bool
+
+    - name: 读取已有成员的通告地址
+      ansible.mysql.mysql_query:
+        login_user: "{{ mysql_cluster_user }}"
+        login_password: "{{ mysql_cluster_password }}"
+        login_unix_socket: "{{ mysql_socket_path if mysql_existing_socket.stat.issock | default(false) else mysql_default_socket_path }}"
+        query: "SELECT @@GLOBAL.report_host AS report_host, @@GLOBAL.hostname AS hostname"
+      register: mysql_existing_report_address
+      changed_when: false
+      no_log: true
+      when: mysql_has_cluster_metadata | bool
+
+    - name: 拒绝在普通部署中改变已有成员通告地址
+      ansible.builtin.assert:
+        that:
+          - >-
+            mysql_report_host == '' or
+            mysql_report_host | lower ==
+            (mysql_existing_report_address.query_result[0][0].report_host or
+             mysql_existing_report_address.query_result[0][0].hostname) | lower
+        fail_msg: >-
+          mysql_report_host 与已有成员的实际通告地址不同。
+          普通部署不会迁移已注册的成员地址；请保留当前值，按独立维护方案处理地址变更。
+      when: mysql_has_cluster_metadata | bool
+
+    - name: 保留已有成员通告地址或采用新实例配置
+      ansible.builtin.set_fact:
+        mysql_effective_report_host: >-
+          {{ mysql_report_host if mysql_report_host | length > 0 else
+             ((mysql_existing_report_address.query_result[0][0].report_host or
+               mysql_existing_report_address.query_result[0][0].hostname)
+              if mysql_has_cluster_metadata | bool else ansible_facts.nodename) }}
+
+    - name: 验证最终通告地址不含配置控制字符
+      ansible.builtin.assert:
+        that:
+          - mysql_effective_report_host == '' or mysql_effective_report_host is match('^[A-Za-z0-9_.:-]+\\Z')
+        fail_msg: "已有通告地址包含不安全字符，拒绝写入 my.cnf。"
 
     - name: 检查 datadir 迁移中断标记
       ansible.builtin.stat:

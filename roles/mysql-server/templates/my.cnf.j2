@@ -6,6 +6,10 @@
 # Basic Settings
 user = {{ mysql_user }}
 port = {{ mysql_port }}
+{% set report_host = mysql_effective_report_host | default(mysql_report_host | default('')) %}
+{% if report_host | length > 0 %}
+report_host = {{ report_host }}
+{% endif %}
 mysqlx_port = {{ mysql_admin_port }}
 server_id = {{ mysql_server_id }}
 datadir = {{ mysql_datadir }}

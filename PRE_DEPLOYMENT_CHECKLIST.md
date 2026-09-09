@@ -92,3 +92,9 @@ ansible-playbook -i inventory/hosts.local.yml playbooks/site.yml --syntax-check 
 [组件指南](docs/scenarios/COMPONENTS.md) 覆盖只部署 MySQL、Router、HAProxy、Keepalived；
 [内核专项](docs/scenarios/KERNEL.md) 可单独执行。只读状态检查使用 `--scope` 选择范围，
 默认 full 保留全部 HA 检查；该选项不能用于缩减完整部署范围。
+
+## 成员地址发现
+
+- [ ] 新集群已选定 `mysql_report_host`：可按主机使用 `{{ ansible_host }}` 通告固定 IPv4 地址。
+- [ ] 使用默认系统主机名或自定义 DNS 名称时，所有 MySQL 与 Router 节点都能解析并访问该地址。
+- [ ] 已有集群保留当前注册地址，不通过普通配置更新迁移成员地址。

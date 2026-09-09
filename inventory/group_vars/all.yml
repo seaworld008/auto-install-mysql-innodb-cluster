@@ -31,6 +31,9 @@ mysql_cluster_recovery_method: "clone"
 mysql_group_replication_ip_allowlist: "127.0.0.1/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
 
 mysql_port: 3306
+# 新集群可在本地 inventory/settings 中设为 "{{ ansible_host }}"，避免依赖系统主机名解析。
+# 留空时新实例使用系统主机名，已有成员保留实际地址；普通部署不迁移注册地址。
+mysql_report_host: "{{ mysql_report_host_override | default('') }}"
 mysql_admin_port: 33062
 mysql_group_replication_port: 33061
 

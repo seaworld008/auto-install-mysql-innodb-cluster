@@ -226,3 +226,10 @@ CI 还覆盖全部 playbook syntax-check、Python 3.12 / 3.13、固定 SHA 的 A
 [组件指南](docs/scenarios/COMPONENTS.md) 覆盖只部署 MySQL、Router、HAProxy、Keepalived；
 [内核专项](docs/scenarios/KERNEL.md) 可单独执行。只读状态检查使用 `--scope` 选择范围，
 默认 full 保留全部 HA 检查；该选项不能用于缩减完整部署范围。
+
+### 数据库通告地址
+
+新集群可在本地覆盖文件设置 `mysql_report_host_override: "{{ ansible_host }}"`，按 inventory
+中的 IPv4 地址注册成员。默认系统主机名或自定义 DNS 名称则必须从所有数据库和 Router
+主机解析。已有成员的实际地址会保留，普通部署拒绝将其改为另一个地址。
+详细配置见 [成员地址与 DNS](docs/scenarios/CONFIGURATION.md#数据库通告地址与-dns)。
