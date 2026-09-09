@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" role="img" aria-labelledby="title desc">
+  <title id="title">MySQL InnoDB Cluster layered architecture</title>
+  <desc id="desc">Applications connect to a floating VIP on one of two HAProxy and Keepalived hosts. HAProxy forwards to two MySQL Routers. Routers discover a three-member InnoDB Cluster with one primary and two secondaries. Ansible manages these layers through one inventory and operator entrypoint.</desc>
+  <defs>
+    <linearGradient id="bg" x2="1" y2="1"><stop stop-color="#10213b"/><stop offset="1" stop-color="#182e4a"/></linearGradient>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="#64c7ff"/></marker>
+    <marker id="muted" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10Z" fill="#8196af"/></marker>
+    <style>text{font-family:Arial,Helvetica,sans-serif}.heading{fill:#f5f9ff;font-size:22px;font-weight:700}.text{fill:#d3deec;font-size:18px}.small{fill:#a5b8d0;font-size:16px}.eyebrow{fill:#75d2ff;font-size:14px;font-weight:700;letter-spacing:2px}.panel{fill:#162c47;stroke:#344d6a;stroke-width:1.5}.node{fill:#213d5c;stroke:#51708f;stroke-width:1.5}.line{fill:none;stroke:#64c7ff;stroke-width:2.5;marker-end:url(#arrow)}</style>
+  </defs>
+  <rect width="1280" height="720" rx="24" fill="url(#bg)"/>
+  <text x="44" y="49" class="eyebrow">MYSQL INNODB CLUSTER AUTOMATION</text>
+  <text x="44" y="90" fill="#fff" font-size="34" font-weight="700">One workflow. Three infrastructure layers.</text>
+  <text x="44" y="121" class="text">Stable application access · Topology-aware routing · Replicated data</text>
+
+  <rect x="44" y="157" width="1192" height="69" rx="12" fill="#263555" stroke="#6872a6"/>
+  <text x="66" y="186" class="heading">Ansible control plane</text>
+  <text x="66" y="211" class="small">Inventory + Vault</text>
+  <text x="385" y="186" class="text">Deploy → Configure → Scale → Check → Back up</text>
+  <text x="385" y="211" class="small">One operator entrypoint · Shared playbooks · Central runtime configuration</text>
+
+  <rect x="240" y="252" width="302" height="357" rx="16" class="panel"/>
+  <rect x="574" y="252" width="252" height="357" rx="16" class="panel"/>
+  <rect x="858" y="252" width="378" height="357" rx="16" class="panel"/>
+  <text x="262" y="283" class="eyebrow">01 / ENTRY</text>
+  <text x="596" y="283" class="eyebrow">02 / ROUTING</text>
+  <text x="880" y="283" class="eyebrow">03 / DATABASE</text>
+  <text x="262" y="314" class="heading">HAProxy + Keepalived</text>
+  <text x="596" y="314" class="heading">MySQL Router</text>
+  <text x="880" y="314" class="heading">MySQL InnoDB Cluster</text>
+
+  <rect x="44" y="350" width="165" height="98" rx="12" class="node"/>
+  <text x="66" y="389" class="heading">Application</text>
+  <text x="66" y="419" class="small">Driver / Pool</text>
+  <path d="M209 392H263" class="line"/>
+  <rect x="267" y="352" width="248" height="72" rx="12" fill="#164962" stroke="#64c7ff"/>
+  <text x="287" y="381" class="heading">Floating VIP</text>
+  <text x="287" y="407" class="small">3307 / 3308 / 3309</text>
+  <path d="M337 424V450" class="line"/>
+  <path d="M446 424V544H429" fill="none" stroke="#8196af" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#muted)"/>
+  <rect x="267" y="454" width="248" height="58" rx="10" class="node"/>
+  <text x="286" y="478" class="text">LB 1 · VIP owner</text>
+  <text x="286" y="500" class="small">HAProxy + Keepalived</text>
+  <rect x="267" y="529" width="164" height="58" rx="10" class="node"/>
+  <text x="284" y="554" class="text">LB 2 · Standby</text>
+  <text x="284" y="576" class="small">VIP failover</text>
+
+  <path d="M515 483H555V401H597" class="line"/>
+  <path d="M555 483H597" class="line"/>
+  <rect x="601" y="362" width="198" height="77" rx="12" class="node"/>
+  <text x="622" y="394" class="heading">Router 1</text>
+  <text x="622" y="421" class="small">RW / RO / Split</text>
+  <rect x="601" y="456" width="198" height="77" rx="12" class="node"/>
+  <text x="622" y="488" class="heading">Router 2</text>
+  <text x="622" y="515" class="small">RW / RO / Split</text>
+  <text x="600" y="567" class="small">Cluster metadata</text>
+  <text x="600" y="589" class="small">guides backend selection</text>
+
+  <path d="M840 382V494" fill="none" stroke="#64c7ff" stroke-width="2.5"/>
+  <path d="M799 401H840V382H882" class="line"/>
+  <path d="M799 494H840V477H882" class="line"/>
+  <rect x="886" y="352" width="322" height="67" rx="12" fill="#16483f" stroke="#5dceb0"/>
+  <text x="907" y="381" class="heading">Primary</text>
+  <text x="907" y="405" class="small">Read / Write</text>
+  <path d="M1047 419V450" stroke="#5dceb0" stroke-width="2"/>
+  <path d="M961 450H1134M961 450V462M1134 450V462" fill="none" stroke="#5dceb0" stroke-width="2"/>
+  <rect x="886" y="466" width="152" height="66" rx="10" class="node"/>
+  <rect x="1056" y="466" width="152" height="66" rx="10" class="node"/>
+  <text x="900" y="494" class="text">Secondary 1</text>
+  <text x="900" y="518" class="small">Read only</text>
+  <text x="1070" y="494" class="text">Secondary 2</text>
+  <text x="1070" y="518" class="small">Read only</text>
+  <text x="907" y="568" class="small">Group Replication · Single-primary mode</text>
+  <text x="907" y="591" class="small">Primary role follows cluster elections</text>
+
+  <path d="M44 639H1236" stroke="#344d6a"/>
+  <text x="44" y="672" class="text">3 MySQL hosts</text>
+  <text x="300" y="672" class="text">2 Router hosts</text>
+  <text x="560" y="672" class="text">2 entry hosts</text>
+  <text x="864" y="672" class="small">Architecture illustration · Default HA topology</text>
+  <text x="44" y="699" class="small">Representative paths: both entry hosts reach the Router tier; either Router can reach any cluster member.</text>
+</svg>

@@ -87,7 +87,7 @@ LIMACTL="$(command -v limactl)"
 临时节点沿用 `config/compose.yml` 的 systemd、cgroup、资源和卷规则，使用未占用的
 `.14` / `.23` / `.33` 地址；一次只添加一个角色，不能降低三数据库、双 Router、双 LB
 的 HA 门槛。缩容使用 `--scale-mysql-remove --target ... --new-primary ...`、
-`--shrink-router --target ...`、`--shrink-lb --target ...`。先完成逻辑摘除再停容器。
+`--shrink-router --limit ...`、`--shrink-lb --limit ...`。先完成逻辑摘除再停容器。
 扩容参数及拓扑准备见 [操作指南](OPERATOR_GUIDE.md)，不另写 SQL 加入集群流程。
 
 备份覆盖文件应从源码 `backup_config` 完整生成后只改 `enabled`、`method`、`type`

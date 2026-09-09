@@ -23,15 +23,28 @@ rolling configuration changes and backups.
 
 ## Architecture
 
-```text
-Application → Keepalived VIP → HAProxy × 2 → MySQL Router × 2
-                                             ↓
-                             MySQL InnoDB Cluster × 3
-                              Primary + 2 Secondaries
-```
+![Layered architecture: floating VIP, two HAProxy and Keepalived hosts, two Routers, and a three-member MySQL cluster](docs/assets/diagrams/cluster-architecture.svg)
+
+*Default HA topology. Paths are illustrative: both Routers select backends from cluster metadata, and the VIP has one owner at a time.*
 
 HAProxy forwards to Router. Router discovers the writable member from cluster metadata.
 MySQL defaults to the 8.4 LTS release line; 8.0 is also configurable.
+
+## Why use this project?
+
+- **A connected deployment workflow:** prepare hosts, install MySQL, form the cluster, configure routing and check the complete topology.
+- **A stable application entry:** separate the floating VIP from database roles, with Router discovering the current writer.
+- **Configuration you can keep using:** shared playbooks and hardware profiles support subsequent changes and scaling.
+- **Built-in operating safeguards:** preserve Router identity, check group UUIDs and minimum node counts, and stop on failures.
+- **A practical handover:** Chinese-first runbooks, configuration references, restore procedures and local simulation help teams share operating knowledge.
+
+| Layer | Default hosts | Responsibility |
+| --- | --- | --- |
+| Entry | 2 HAProxy + Keepalived | Floating VIP, TCP forwarding and backend checks |
+| Routing | 2 dedicated MySQL Routers | Topology-aware RW, RO and optional split routing |
+| Database | 3 MySQL instances | Group Replication with a single primary |
+
+The Ansible control node manages hosts through SSH; it is not in the SQL traffic path.
 
 ## Get started
 
@@ -84,6 +97,44 @@ Update inventory before adding nodes; explicitly select a new primary when remov
 Backups are disabled by default and support local, NFS and rsync targets.
 Existing Router identity and keyring are preserved during configuration convergence.
 Plan maintenance windows and validate certificates, capacity, failover and isolated recovery for your environment.
+
+## Configuration and hardware profiles
+
+Runtime defaults, hardware profiles and backup settings live in `inventory/group_vars/all.yml`.
+Local inventory describes the environment; Vault or an external secret manager supplies credentials.
+
+```bash
+./scripts/config_manager.sh --list
+./scripts/config_manager.sh --current
+./scripts/config_manager.sh --validate
+./scripts/config_manager.sh --switch optimized_8c32g
+```
+
+Profiles include `optimized_8c32g`, the historical high-connection `original_10k`, and
+`simulation_minimal` for isolated functional tests. Switching a profile changes the local selector;
+apply it in a maintenance window through the main operator entrypoint. Size resources for your workload.
+
+## Backup and local simulation
+
+Choose MySQL Shell logical dumps or Percona XtraBackup physical backups, with local, NFS or rsync
+storage. Backups are opt-in. Restore into an isolated target and validate schema and data separately;
+see the [backup and restore guide](docs/runbooks/BACKUP_AND_RESTORE_GUIDE.md).
+
+On Apple Silicon, the [local simulation](docs/runbooks/LOCAL_SIMULATION.md) uses a dedicated Lima VM
+and Rocky Linux x86_64 systemd containers as isolated hosts. The existing Ansible workflow installs
+the database and routing services. Generated credentials, downloads and disks stay in ignored local
+storage; the VM is capped at 6 CPUs and 12 GiB. This is useful for learning and functional validation.
+
+## Repository map
+
+| Directory | Contents |
+| --- | --- |
+| `inventory/` | Environment templates and runtime configuration |
+| `playbooks/`, `roles/` | Deployment, configuration, scaling and health checks |
+| `scripts/` | Operator entrypoint and helpers |
+| `tests/` | Regression tests and local host simulation |
+| `docs/` | Runbooks, references, drill templates and maintainer guides |
+| `.github/workflows/` | Quality checks and documentation publishing |
 
 ## Documentation and contributing
 
