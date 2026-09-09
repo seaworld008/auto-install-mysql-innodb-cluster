@@ -14,6 +14,7 @@
 mysql_wait_timeout: 900
 mysql_interactive_timeout: 900
 mysql_router_max_total_connections: 1000
+mysql_router_max_idle_server_connections: 0
 mysql_router_route_max_connections: 500
 ```
 

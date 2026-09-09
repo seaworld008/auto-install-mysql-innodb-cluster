@@ -304,7 +304,8 @@ rsync 强制 BatchMode、`StrictHostKeyChecking=yes` 和指定的
 `mysql_router_metadata_connect_timeout`、`mysql_router_metadata_read_timeout`、
 `mysql_router_routing_connect_timeout`、`mysql_router_client_connect_timeout`、
 `mysql_router_max_connect_errors`、`mysql_router_max_total_connections` 和
-`mysql_router_route_max_connections`。
+`mysql_router_route_max_connections` 和 `mysql_router_max_idle_server_connections`。
+后者默认 `0`，不跨客户端复用空闲后端连接；应用仍应使用有界连接池。
 
 已有 bootstrap 配置且 `mysql_router_rebootstrap: false` 时不会重复 bootstrap。
 受管端口、连接数、超时和策略会直接原子更新现有配置，保留 Router 身份和 keyring；

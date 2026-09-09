@@ -122,6 +122,8 @@ VAULT_ARGS=(--vault-password-file ~/.config/ansible/mysql-cluster-vault-pass)
   `restorecon`。
 - RedHat 重跑先使用 0600 临时 option file 和无副作用查询探测目标 root 密码；
   已生效时跳过首次临时密码流程，无法安全探测或恢复时直接阻断。
+- Router 默认关闭跨客户端空闲后端连接复用（`mysql_router_max_idle_server_connections: 0`），
+  应用使用有界连接池；连接与会话语义见 [应用接入指南](docs/runbooks/APPLICATION_CONNECTIONS.md)。
 - HAProxy 只接入 Router，避免主从切换后静态 MySQL primary 路径失效。
 - HAProxy stats 默认仅监听 `127.0.0.1:8404`。
 - Keepalived 跟踪 HAProxy systemd 状态；连续检查失败后进入 `FAULT` 并释放 VIP。

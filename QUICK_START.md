@@ -83,7 +83,7 @@ keepalived_auth_pass: "CHANGE_ME"
 - `docs/reference/VARIABLE_REFERENCE.md`
 - `docs/reference/ARCHITECTURE_AND_EVIDENCE.md`
 
-事务型应用优先选择 `3307`。证书与连接池配置见 [应用接入指南](docs/runbooks/APPLICATION_CONNECTIONS.md)。
+事务型应用优先选择 `3307`，并使用有界应用连接池。证书与连接池配置见 [应用接入指南](docs/runbooks/APPLICATION_CONNECTIONS.md)。
 
 ## 其他拓扑与组件操作
 

@@ -31,6 +31,7 @@
 - [ ] `inventory/group_vars/all.yml` 的非敏感配置已确认，未写入真实密码
 - [ ] `inventory/vault.local.yml` 是有效 Vault 密文且未被 Git 跟踪，或已配置等价外部 Secret
 - [ ] `mysql_hardware_profile` 已确认
+- [ ] 保留 Router 空闲池默认值 `mysql_router_max_idle_server_connections: 0`；如调整，已验证混合入口事务及会话隔离
 - [ ] 已按 `docs/reference/VARIABLE_REFERENCE.md` 复核关键变量
 - [ ] Vault / 外部 Secret 已覆盖三个 `CHANGE_ME_*` 业务密码占位符
 - [ ] `keepalived_auth_pass` 已通过 Vault / 外部 Secret 覆盖，非占位值且不超过 8 个字符
