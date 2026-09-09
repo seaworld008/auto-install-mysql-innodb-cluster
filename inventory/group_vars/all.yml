@@ -178,6 +178,80 @@ mysql_net_write_timeout: "{{ mysql_config_profiles[mysql_hardware_profile].net_w
 
 # 内核配置备份与 sysctl 源目录分离，避免递归复制自身
 mysql_kernel_backup_root: "/var/backups/mysql-kernel"
+mysql_kernel_io_queue_depth_ssd: 128
+mysql_kernel_io_queue_depth_hdd: 64
+
+# 内核优化参数 - 行业最佳实践
+mysql_kernel_params_stable:
+  # 网络参数优化 - 稳定且保守的配置
+  "net.core.somaxconn": "{{ conn_queue_size }}"
+  "net.core.netdev_max_backlog": 5000
+  "net.ipv4.tcp_max_syn_backlog": "{{ (conn_queue_size | int / 2) | round | int }}"
+  "net.ipv4.tcp_tw_reuse": 1
+  "net.ipv4.tcp_fin_timeout": 15
+  "net.ipv4.tcp_keepalive_time": 1800
+  "net.ipv4.tcp_keepalive_intvl": 30
+  "net.ipv4.tcp_keepalive_probes": 3
+  "net.ipv4.ip_local_port_range": "1024 65535"
+  "net.ipv4.tcp_rmem": "4096 65536 4194304"
+  "net.ipv4.tcp_wmem": "4096 65536 4194304"
+  "net.core.rmem_max": 4194304
+  "net.core.wmem_max": 4194304
+  "net.core.rmem_default": 65536
+  "net.core.wmem_default": 65536
+  "net.core.default_qdisc": "fq"
+  "net.ipv4.tcp_congestion_control": "bbr"
+  "net.ipv4.tcp_slow_start_after_idle": 0
+  "net.ipv4.tcp_window_scaling": 1
+  "net.ipv4.tcp_timestamps": 1
+  "net.ipv4.tcp_sack": 1
+
+  # 内存管理优化 - MySQL官方最佳实践
+  "vm.swappiness": 0
+  "vm.dirty_ratio": 10
+  "vm.dirty_background_ratio": 3
+  "vm.dirty_expire_centisecs": 3000
+  "vm.dirty_writeback_centisecs": 500
+  "vm.overcommit_memory": 0
+  "vm.overcommit_ratio": 50
+  "vm.nr_hugepages": 0
+
+  # 文件系统优化 - 基于负载测试的参数
+  "fs.file-max": "{{ [file_max | int, 1048576] | max }}"
+  "fs.nr_open": "{{ [file_max | int, 1048576] | max }}"
+  "fs.inotify.max_user_watches": 65536
+  "fs.inotify.max_user_instances": 128
+
+  # 内核调度优化 - 数据库工作负载优化
+  "kernel.sched_autogroup_enabled": 0
+  "kernel.sem": "250 32000 100 128"
+  "kernel.shmmax": "{{ shmmax_bytes }}"
+  "kernel.shmall": "{{ (shmmax_bytes | int / 4096) | round | int }}"
+
+  # 安全和稳定性参数 - 生产环境标准
+  "kernel.panic": 30
+  "kernel.panic_on_oops": 1
+  "kernel.core_uses_pid": 1
+  "kernel.core_pattern": "/var/crash/core.%e.%p.%h.%t"
+  "kernel.randomize_va_space": 2
+
+# 系统资源限制 - 动态调整
+mysql_limits_stable:
+  - { domain: 'mysql', type: 'soft', item: 'nofile', value: "{{ nofile_limit }}" }
+  - { domain: 'mysql', type: 'hard', item: 'nofile', value: "{{ nofile_limit }}" }
+  - { domain: 'mysql', type: 'soft', item: 'nproc', value: "{{ nproc_limit }}" }
+  - { domain: 'mysql', type: 'hard', item: 'nproc', value: "{{ nproc_limit }}" }
+  - { domain: 'mysql', type: 'soft', item: 'stack', value: 8192 }
+  - { domain: 'mysql', type: 'hard', item: 'stack', value: 8192 }
+  - { domain: 'mysql', type: 'soft', item: 'core', value: 'unlimited' }
+  - { domain: 'mysql', type: 'hard', item: 'core', value: 'unlimited' }
+  - { domain: 'root', type: 'soft', item: 'nofile', value: "{{ nofile_limit }}" }
+  - { domain: 'root', type: 'hard', item: 'nofile', value: "{{ nofile_limit }}" }
+  - { domain: '*', type: 'soft', item: 'nofile', value: "{{ (nofile_limit | int / 2) | round | int }}" }
+  - { domain: '*', type: 'hard', item: 'nofile', value: "{{ (nofile_limit | int / 2) | round | int }}" }
+  - { domain: '*', type: 'soft', item: 'nproc', value: "{{ (nproc_limit | int / 2) | round | int }}" }
+  - { domain: '*', type: 'hard', item: 'nproc', value: "{{ (nproc_limit | int / 2) | round | int }}" }
+
 
 # 系统配置
 mysql_user: "mysql"

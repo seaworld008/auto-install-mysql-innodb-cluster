@@ -1,6 +1,6 @@
 """Regression checks for actual kernel-run failures found during VM acceptance."""
 from pathlib import Path
-import shutil,subprocess,sys,tempfile,unittest
+import os,shutil,subprocess,sys,tempfile,unittest
 import yaml
 from jinja2 import Environment, StrictUndefined
 
@@ -39,6 +39,63 @@ class KernelRuntimeTests(unittest.TestCase):
             task=next(t for t in tasks if t['name']==name)
             self.assertNotIn('when',task)
             self.assertTrue(task['systemd']['enabled'])
+
+    def test_runtime_parameters_have_one_source_and_drop_obsolete_sysctl(self):
+        defaults=yaml.safe_load((ROOT/'inventory/group_vars/all.yml').read_text())
+        self.assertNotIn('mysql_kernel_params_stable',self.play['vars'])
+        self.assertNotIn('mysql_limits_stable',self.play['vars'])
+        self.assertNotIn('kernel.sched_migration_cost_ns',defaults['mysql_kernel_params_stable'])
+        migration=next(t for t in self.play['tasks'] if t['name']=='将受管参数从旧 sysctl.conf 迁移到单一配置文件')
+        self.assertIn('kernel.sched_migration_cost_ns',migration['loop'])
+
+    def test_global_descriptor_limits_never_reduce_existing_capacity(self):
+        task=next(t for t in self.play['tasks'] if t['name']=='全局文件句柄上限只提高不降低')
+        defaults=yaml.safe_load((ROOT/'inventory/group_vars/all.yml').read_text())
+        limits={key:defaults['mysql_kernel_params_stable'][key] for key in ('fs.file-max','fs.nr_open')}
+        play={'hosts':'localhost','gather_facts':False,'vars':{
+            'file_max':65536,'mysql_kernel_params_stable':limits,
+            'kernel_file_limits_current':{'results':[
+                {'item':'fs.file-max','stdout':'9223372036854775807'},
+                {'item':'fs.nr_open','stdout':'2097152'}]}},
+            'tasks':[task,{'ansible.builtin.assert':{'that':[
+                "mysql_kernel_params_stable['fs.file-max'] | int == 9223372036854775807",
+                "mysql_kernel_params_stable['fs.nr_open'] | int == 2097152"]}}]}
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory)/'limits.yml';path.write_text(yaml.safe_dump([play]))
+            result=subprocess.run([ANSIBLE,'-i','localhost,','-c','local',str(path)],capture_output=True,text=True,timeout=30)
+            self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+
+    def test_io_apply_check_and_failure_are_observable(self):
+        template=Environment(undefined=StrictUndefined).from_string(
+            (ROOT/'playbooks/templates/optimize-io-stable.sh.j2').read_text())
+        rendered=template.render(mysql_kernel_io_queue_depth_ssd=128,mysql_kernel_io_queue_depth_hdd=64)
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)
+            queue=root/'sys/block/vda/queue';queue.mkdir(parents=True)
+            (queue/'scheduler').write_text('none [mq-deadline]\n')
+            (queue/'rotational').write_text('1\n')
+            (queue/'nr_requests').write_text('128\n')
+            bin_dir=root/'bin';bin_dir.mkdir()
+            lsblk=bin_dir/'lsblk';lsblk.write_text('#!/bin/sh\nprintf "vda disk 0\\n"\n');lsblk.chmod(0o755)
+            script=root/'io.sh'
+            # Redirect only the filesystem dependency; execute the rendered shell logic.
+            script.write_text(rendered.replace('/sys/block/',str(root/'sys/block')+'/'))
+            env={**os.environ,'PATH':str(bin_dir)+os.pathsep+os.environ['PATH']}
+            def run(*args):
+                return subprocess.run(['bash',str(script),*args],env=env,capture_output=True,text=True,timeout=5)
+            before=run('--check')
+            self.assertNotEqual(before.returncode,0)
+            self.assertEqual((queue/'nr_requests').read_text(),'128\n')
+            applied=run();self.assertEqual(applied.returncode,0,applied.stderr)
+            self.assertIn('CHANGED:',applied.stdout)
+            self.assertEqual(run('--check').returncode,0)
+            repeated=run();self.assertEqual(repeated.returncode,0,repeated.stderr)
+            self.assertNotIn('CHANGED:',repeated.stdout)
+            (queue/'nr_requests').unlink();(queue/'nr_requests').mkdir()
+            self.assertNotEqual(run().returncode,0)
+            lsblk.write_text('#!/bin/sh\nprintf "vda disk 1\\n"\n')
+            skipped=run();self.assertEqual(skipped.returncode,0,skipped.stderr)
+            self.assertIn('NOT_APPLICABLE:',skipped.stdout)
 
     def test_report_does_not_mistake_available_never_for_selected_never(self):
         env=Environment(undefined=StrictUndefined)

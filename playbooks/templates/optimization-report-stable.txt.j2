@@ -51,4 +51,4 @@ THP 选中状态: {{ 'UNAVAILABLE' if thp_status.rc != 0 else ('PASS: never' if 
 {% for unit in kernel_units_enabled.results %}
 {{ unit.item }}: {{ unit.stdout }} (rc={{ unit.rc }})
 {% endfor %}
-磁盘状态采集: {{ 'PASS' if scheduler_status.rc == 0 else 'FAIL' }}
+磁盘状态采集: {{ 'NOT_APPLICABLE' if 'NOT_APPLICABLE:' in scheduler_status.stdout else ('PASS' if scheduler_status.rc == 0 else 'FAIL') }}

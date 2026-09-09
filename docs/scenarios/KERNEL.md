@@ -76,3 +76,20 @@ ansible kernel_targets -i inventory/kernel.local.yml -b -m shell \
 每次执行都会确认 THP 与 I/O 持久化服务已启用；即使 unit 文件未变化，也能恢复被禁用的服务。
 THP 以输出中实际选中的 `[never]` 为准，而不是仅包含可选项 `never`。目标必须为 Linux。
 重启后复查服务启用状态及实际参数，不能用文件存在替代持久化验证。
+
+通用 sysctl 与 PAM 参数分别由 `inventory/group_vars/all.yml` 中
+`mysql_kernel_params_stable`、`mysql_limits_stable` 管理。PAM limits 只影响登录会话，
+不会改变 systemd 管理的 mysqld 服务限制；服务应另行检查 `systemctl show mysqld -p LimitNOFILE`
+（Ubuntu 服务名为 `mysql`），并按该服务的容量需求配置 drop-in。
+
+I/O 脚本只处理可写的整块磁盘，跳过只读介质。它按内核支持情况选择调度器，默认队列深度为
+SSD 128、HDD 64，可用 `mysql_kernel_io_queue_depth_ssd` / `mysql_kernel_io_queue_depth_hdd`
+调整。调度器或队列写入失败会中止；`/usr/local/bin/optimize-io-stable.sh --check` 只核验实际值。
+没有适用磁盘时明确报告 `NOT_APPLICABLE`，不认定为已完成磁盘调优。
+
+配置文件和启动脚本不嵌入执行时间，重复运行参数不变时保持内容稳定。
+不再向通用 sysctl 写入已从现代内核移除的 `kernel.sched_migration_cost_ns`，也不自动操作 debugfs。
+
+全局文件句柄上限 `fs.file-max` / `fs.nr_open` 按容量下限配置，只提高、不降低当前运行值；
+默认下限至少为 1048576，避免低资源档位把 systemd 服务已有的硬限制压低，导致新服务启动失败。
+这与每个登录会话的 PAM 限制是不同层次的设置。
