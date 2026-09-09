@@ -248,9 +248,11 @@
 
     - name: 读取已有成员的通告地址
       ansible.mysql.mysql_query:
-        login_user: "{{ mysql_cluster_user }}"
-        login_password: "{{ mysql_cluster_password }}"
+        # 集群管理员账号尚待收敛；使用安装阶段已有的 root 通道。
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
         login_unix_socket: "{{ mysql_socket_path if mysql_existing_socket.stat.issock | default(false) else mysql_default_socket_path }}"
+        config_file: ""
         query: "SELECT @@GLOBAL.report_host AS report_host, @@GLOBAL.hostname AS hostname"
       register: mysql_existing_report_address
       changed_when: false

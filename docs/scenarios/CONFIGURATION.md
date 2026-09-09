@@ -121,3 +121,6 @@ mysql_report_host_override: "{{ ansible_host }}"
 的 inventory 变量下设置 `mysql_report_host_override`，避免 `-e` 的全局值覆盖逐机设置。
 此参数控制成员通告，不替代网络连通要求：inventory 地址及通告地址都必须按部署流程
 在相关数据库和 Router 节点之间可达。
+
+已有成员的前置地址检查使用安装流程中的 root 本地连接；集群管理员账号在后续步骤创建或更新，
+因此地址检查不依赖尚待收敛的管理员账号及其目标密码。

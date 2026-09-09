@@ -60,6 +60,18 @@ class ReportHostTests(unittest.TestCase):
         self.assertEqual(template.render(mysql_report_host='', mysql_effective_report_host='db1.example.test'),
                          'report_host = db1.example.test\n')
 
+    def test_address_read_does_not_depend_on_account_awaiting_reconciliation(self):
+        task = next(t for t in self.tasks if t['name'] == '读取已有成员的通告地址')
+        query = task['ansible.mysql.mysql_query']
+        self.assertEqual(query['login_user'], 'root')
+        self.assertEqual(query['login_password'], '{{ mysql_root_password }}')
+        self.assertEqual(query['config_file'], '')
+        self.assertIn('mysql_existing_socket.stat.issock', query['login_unix_socket'])
+        self.assertNotIn('mysql_cluster_password', str(query))
+        self.assertTrue(task['no_log'])
+        self.assertLess(self.tasks.index(task),
+                        next(i for i,t in enumerate(self.tasks) if t['name']=='创建集群管理用户'))
+
     def test_inventory_override_survives_group_vars_precedence(self):
         with tempfile.TemporaryDirectory(dir=ROOT / 'tmp') as directory:
             root = Path(directory)
