@@ -385,7 +385,7 @@ npx --yes markdownlint-cli2@0.23.2
 
 涉及 datadir、备份、入口流量、集群成员或缩容的变更，还必须在隔离 staging 演练。
 
-## v0.4.0 模拟与签名配置
+## 模拟与签名配置
 
 `mysql_config_profiles.simulation_minimal` 是唯一配置源中的低资源功能模拟档位，
 通过 `mysql_hardware_profile: simulation_minimal` 选择；不得用作生产容量承诺。
@@ -394,3 +394,16 @@ npx --yes markdownlint-cli2@0.23.2
 `backup_config.percona_release.rpm_key_url`、`rpm_key_sha256`、`rpm_key_fingerprint`
 分别限定 Percona Release 签名公钥来源、下载内容与导入指纹。自定义 backup_config
 覆盖字典需要保留这些字段；不允许通过禁用 GPG 校验解决安装失败。
+
+## 配置管理与集群身份
+
+`./scripts/config_manager.sh --list` 从 `mysql_config_profiles` 动态列出档位。
+`--switch PROFILE` 仅原子修改 `mysql_hardware_profile`，兼容历史别名
+`8c32g-optimized` 和 `original-10k`。`--restore BACKUP` 只恢复备份里的档位，
+不会覆盖当前账号、网络或其他运行配置；备份以 `0600` 权限保存在忽略目录。
+
+`--validate` 检查活动档位和被运行参数引用的键，不以缺失字段的配置报告成功。
+切换后使用本地 inventory 和 Vault 在维护窗口执行 `--apply-config`。
+
+`mysql_group_replication_group_name_override` 在创建时传给 AdminAPI groupName。
+已存在集群应以实际组 UUID 对齐配置，成员与配置不匹配时部署和状态检查拒绝通过。

@@ -1,143 +1,97 @@
 # MySQL InnoDB Cluster Automation
 
-English summary for global discovery. The primary documentation is Chinese-first; this page gives international users enough context to evaluate the project and find the correct runbooks.
+**Deploy and operate MySQL high availability through one Ansible workflow.**
 
-## What This Project Does
+[![CI](https://github.com/seaworld008/auto-install-mysql-innodb-cluster/actions/workflows/ansible-ci.yml/badge.svg?branch=main)](https://github.com/seaworld008/auto-install-mysql-innodb-cluster/actions/workflows/ansible-ci.yml)
+[![Release](https://img.shields.io/github/v/release/seaworld008/auto-install-mysql-innodb-cluster)](https://github.com/seaworld008/auto-install-mysql-innodb-cluster/releases/latest)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-This repository provides an Ansible-based automation mainline for deploying and operating MySQL InnoDB Cluster with:
+[中文](README.md) · [Quick start](QUICK_START.md) · [Documentation](docs/index.md)
 
-- MySQL Server and InnoDB Cluster
-- MySQL Router
-- HAProxy and Keepalived
-- MySQL scale-out and scale-in workflows
-- Router and load balancer shrink workflows
-- Rolling configuration application
-- Optional logical or physical backups
+Ansible automation for **MySQL Server, InnoDB Cluster, MySQL Router, HAProxy and Keepalived**.
+Built for DBAs, SREs and platform teams that want a shared workflow for installation, scaling,
+rolling configuration changes and backups.
 
-The project is intentionally converged around one runtime configuration file and one operator entrypoint:
+## Capabilities
 
-- Runtime source of truth: `inventory/group_vars/all.yml`
-- Main operator entrypoint: `scripts/deploy_dedicated_routers.sh`
-- Compatibility wrapper only: `deploy.sh`
+- Deploy a three-member InnoDB Cluster with a dedicated Router layer and a highly available VIP.
+- Connect applications through explicit read/write, read-only or optional read/write splitting ports.
+- Add and remove MySQL members, shrink Router/LB tiers and apply configuration changes incrementally.
+- Check member health, cluster identity, entry services, ports and unique VIP ownership.
+- Run opt-in MySQL Shell logical or Percona XtraBackup physical backups; use isolated restore runbooks.
+- Prepare local systemd-based Linux hosts for simulation using the same Ansible deployment entrypoint.
 
-## Recommended Topology
+## Architecture
 
 ```text
-Application
-  -> HAProxy VIP or DNS
-  -> MySQL Router cluster
-  -> MySQL InnoDB Cluster
+Application → Keepalived VIP → HAProxy × 2 → MySQL Router × 2
+                                             ↓
+                             MySQL InnoDB Cluster × 3
+                              Primary + 2 Secondaries
 ```
 
-Default high availability baseline:
+HAProxy forwards to Router. Router discovers the writable member from cluster metadata.
+MySQL defaults to the 8.4 LTS release line; 8.0 is also configurable.
 
-| Layer | Baseline | Notes |
-| --- | --- | --- |
-| MySQL InnoDB Cluster | 3 nodes | One primary plus secondaries |
-| MySQL Router | 2+ nodes | Dedicated router layer recommended |
-| HAProxy + Keepalived | 2+ nodes | Shared entry through VIP or DNS |
-| MySQL release line | 8.4 LTS by default | MySQL 8.0 compatibility retained |
+## Get started
 
-## Quick Start
+The control node requires Python 3.12+; managed Linux hosts require Python 3.9+ and SSH access.
 
 ```bash
-# Control node: Python 3.12+; managed nodes: Python 3.9+
+git clone https://github.com/seaworld008/auto-install-mysql-innodb-cluster.git
+cd auto-install-mysql-innodb-cluster
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
 ansible-galaxy collection install -r collections/requirements.yml
-
 ./scripts/setup-servers.sh
 ansible-vault create inventory/vault.local.yml
+```
 
+Configure the generated inventory and encrypted credentials using the [quick start](QUICK_START.md).
+Verify host fingerprints through a trusted channel before connecting. Then run:
+
+```bash
 ./scripts/deploy_dedicated_routers.sh --check-prereq \
-  -i inventory/hosts.local.yml \
-  --ask-vault-pass -e @inventory/vault.local.yml
+  -i inventory/hosts.local.yml --ask-vault-pass -e @inventory/vault.local.yml
 ./scripts/deploy_dedicated_routers.sh --production-ready \
-  -i inventory/hosts.local.yml \
-  --ask-vault-pass -e @inventory/vault.local.yml
+  -i inventory/hosts.local.yml --ask-vault-pass -e @inventory/vault.local.yml
 ./scripts/deploy_dedicated_routers.sh --status \
-  -i inventory/hosts.local.yml \
-  --ask-vault-pass -e @inventory/vault.local.yml
+  -i inventory/hosts.local.yml --ask-vault-pass -e @inventory/vault.local.yml
 ```
 
-The generated local inventory and Vault file are ignored by Git. Replace every
-`CHANGE_ME_*` value, use a unique Group Replication UUID per cluster, and verify
-each SSH host-key fingerprint through a trusted channel before connecting.
+Runtime settings live in [`inventory/group_vars/all.yml`](inventory/group_vars/all.yml).
+Real addresses and secrets belong in ignored local inventories, Ansible Vault or an external secret manager.
 
-## Main Operations
+## Connect applications
 
-All supported operator workflows should route through `scripts/deploy_dedicated_routers.sh`.
+| Workload | VIP | Direct Router |
+| --- | --- | --- |
+| Writes, transactions and read-after-write access | `3307` | `6446` |
+| Read-only queries that tolerate replica lag | `3308` | `6447` |
+| Optional automatic read/write splitting | `3309` | `6450` |
 
-| Operation | Command |
-| --- | --- |
-| Full production candidate deployment | `--production-ready` |
-| MySQL only | `--mysql-only` |
-| Rolling configuration apply | `--apply-config` |
-| Add MySQL node | `--scale-mysql-add` |
-| Remove MySQL node | `--scale-mysql-remove` |
-| Remove Router node | `--shrink-router` |
-| Remove HAProxy node | `--shrink-lb` |
-| Optional backup | `--backup` |
-| Status check | `--status` |
+Start transactional applications with the explicit read/write endpoint. Validate driver, pool and
+transaction behavior before choosing automatic splitting. See [application connections](docs/runbooks/APPLICATION_CONNECTIONS.md).
 
-## Local Validation
+## Operate
 
-```bash
-git diff --check
-for script in deploy.sh validate_deployment.sh scripts/*.sh; do
-  bash -n "$script" || exit 1
-done
-python -m unittest discover tests
-./validate_deployment.sh
-ansible-playbook -i inventory/hosts.yml playbooks/site.yml --syntax-check
-ansible-playbook -i inventory/hosts-ha-reference.yml playbooks/site.yml --syntax-check
-ansible-playbook -i inventory/hosts-with-dedicated-routers.yml playbooks/site.yml --syntax-check
-ansible-inventory -i inventory/hosts.yml --list
-ansible-inventory -i inventory/hosts-ha-reference.yml --list
-ansible-inventory -i inventory/hosts-with-dedicated-routers.yml --list
-```
+Use the same entrypoint, inventory and Vault with `--mysql-only`, `--install-routers`,
+`--configure-lb`, `--apply-config`, `--scale-mysql-add`, `--scale-mysql-remove`,
+`--shrink-router`, `--shrink-lb`, `--backup` or `--status`.
 
-Blocking documentation and YAML lint:
+Update inventory before adding nodes; explicitly select a new primary when removing the writer.
+Backups are disabled by default and support local, NFS and rsync targets.
+Existing Router identity and keyring are preserved during configuration convergence.
+Plan maintenance windows and validate certificates, capacity, failover and isolated recovery for your environment.
 
-```bash
-npx --yes markdownlint-cli2@0.23.2
-yamllint .
-```
+## Documentation and contributing
 
-## Documentation Map
+- [Deployment guide](DEPLOYMENT_COMPLETE_GUIDE.md) and [pre-deployment checklist](PRE_DEPLOYMENT_CHECKLIST.md)
+- [Operator guide](docs/runbooks/OPERATOR_GUIDE.md) and [variable reference](docs/reference/VARIABLE_REFERENCE.md)
+- [Backup and restore](docs/runbooks/BACKUP_AND_RESTORE_GUIDE.md)
+- [Local simulation](docs/runbooks/LOCAL_SIMULATION.md)
+- [Contributing](CONTRIBUTING.md), [security policy](SECURITY.md) and [changelog](CHANGELOG.md)
 
-- Chinese main README: `README.md`
-- Quick start: `QUICK_START.md`
-- Deployment guide: `DEPLOYMENT_COMPLETE_GUIDE.md`
-- Pre-deployment checklist: `PRE_DEPLOYMENT_CHECKLIST.md`
-- AI agent context: `AI_CONTEXT.md`
-- Operator onboarding and change guide: `docs/runbooks/OPERATOR_GUIDE.md`
-- Inventory selection guide: `inventory/README.md`
-- Server configuration runbook: `docs/runbooks/SERVER_CONFIGURATION.md`
-- Troubleshooting runbook: `docs/runbooks/TROUBLESHOOTING.md`
-- HA blueprint: `docs/reference/DEPLOYMENT_HA_BLUEPRINT_ZH.md`
-- Architecture and evidence guide: `docs/reference/ARCHITECTURE_AND_EVIDENCE.md`
-- Variable reference: `docs/reference/VARIABLE_REFERENCE.md`
-- Backup and restore guide: `docs/runbooks/BACKUP_AND_RESTORE_GUIDE.md`
-- Staging validation template: `docs/templates/staging-validation-record.md`
-- Failover drill template: `docs/templates/failover-drill-record.md`
-- Isolated restore drill template: `docs/templates/restore-drill-record.md`
-- Historical analysis reports: `docs/reports/`
-
-## Status Boundary
-
-Static validation can prove that syntax and inventory parsing pass. It cannot prove production readiness, failover behavior, performance capacity, or backup recovery correctness. Real environment validation, staging failover drills, and isolated restore exercises are still required before production adoption.
-
-## v0.3.1 deployment fixes
-
-This release fixes modern Ubuntu/Debian libaio package selection, missing peer
-facts during rolling installation, delegated member endpoint resolution, and
-Router configuration convergence. Existing Router identity/keyring are retained;
-managed options update atomically and restart only on changes. Split routing uses
-the canonical bootstrap section and a compatible round-robin strategy.
-
-Every play stops on a failed node. Unsupported CLI scope options fail before
-execution. Real deployment, failover, backup/restore and capacity validation remain
-pending in an isolated staging environment. See the Chinese operator guide for
-maintenance-window rollout and rollback instructions.
+Documentation is Chinese-first. Reproducible issues, deployment feedback and pull requests are welcome.
+Licensed under the [MIT License](LICENSE).

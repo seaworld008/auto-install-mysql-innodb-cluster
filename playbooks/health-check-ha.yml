@@ -22,11 +22,22 @@
               "SELECT COUNT(*) FROM performance_schema.replication_group_members WHERE MEMBER_ID = @@server_uuid AND MEMBER_STATE = 'ONLINE'"
             ).fetchOne();
             print('ANSIBLE_SELF_ONLINE=' + row[0]);
+            var group = session.runSql('SELECT @@GLOBAL.group_replication_group_name').fetchOne()[0];
+            print('ANSIBLE_GROUP_MATCH=' + (group.toLowerCase() === '{{ mysql_group_replication_group_name | lower }}' ? '1' : '0'));
         stdin: "{{ mysql_cluster_password }}\n"
         stdin_add_newline: false
       register: mysql_self_membership
       changed_when: false
       no_log: true
+
+    - name: 要求组 UUID 与 inventory 一致
+      ansible.builtin.assert:
+        that:
+          - "'ANSIBLE_GROUP_MATCH=1' in mysql_self_membership.stdout"
+        fail_msg: >-
+          {{ inventory_hostname }} 的运行时组 UUID 与配置不一致。
+          请确认集群身份并修正本地 mysql_group_replication_group_name_override；
+          不会自动修改运行中集群 UUID。
 
     - name: 要求本机属于当前在线集群
       ansible.builtin.assert:

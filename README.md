@@ -1,500 +1,136 @@
 # MySQL InnoDB Cluster 自动化部署
 
-[![quality gate](https://img.shields.io/github/actions/workflow/status/seaworld008/auto-install-mysql-innodb-cluster/ansible-ci.yml?branch=main&label=quality%20gate&logo=githubactions&logoColor=white&style=flat-square)](https://github.com/seaworld008/auto-install-mysql-innodb-cluster/actions/workflows/ansible-ci.yml)
-[![release](https://img.shields.io/github/v/release/seaworld008/auto-install-mysql-innodb-cluster?label=release&style=flat-square)](https://github.com/seaworld008/auto-install-mysql-innodb-cluster/releases)
-[![license MIT](https://img.shields.io/badge/license-MIT-2E8B57?style=flat-square)](LICENSE)
-[![automation Ansible](https://img.shields.io/badge/automation-Ansible-EE0000?logo=ansible&logoColor=white&style=flat-square)](collections/requirements.yml)
-[![MySQL 8.4 LTS | 8.0](https://img.shields.io/badge/MySQL-8.4%20LTS%20%7C%208.0-4479A1?logo=mysql&logoColor=white&style=flat-square)](inventory/group_vars/all.yml)
-[![InnoDB Cluster](https://img.shields.io/badge/InnoDB%20Cluster-group%20replication-005C84?logo=mysql&logoColor=white&style=flat-square)](playbooks/configure-cluster.yml)
-[![MySQL Router](https://img.shields.io/badge/MySQL%20Router-r%2Fw%20split-0F6CBD?style=flat-square)](playbooks/install-router.yml)
-[![HA entry](https://img.shields.io/badge/HAProxy%20%2B%20Keepalived-HA%20entry-106DA9?style=flat-square)](docs/reference/DEPLOYMENT_HA_BLUEPRINT_ZH.md)
-[![operations](https://img.shields.io/badge/operations-scale%20%7C%20backup%20%7C%20rolling%20config-6A5ACD?style=flat-square)](DEPLOYMENT_COMPLETE_GUIDE.md)
+**从主机准备到集群运维，让 MySQL 高可用部署有章可循。**
 
-面向运维和平台团队的 MySQL InnoDB Cluster 自动化部署与运维方案，基于 Ansible 编排 MySQL Server、MySQL Router、HAProxy、Keepalived、扩缩容、滚动配置应用和可选备份流程。
+[![CI](https://github.com/seaworld008/auto-install-mysql-innodb-cluster/actions/workflows/ansible-ci.yml/badge.svg?branch=main)](https://github.com/seaworld008/auto-install-mysql-innodb-cluster/actions/workflows/ansible-ci.yml)
+[![Release](https://img.shields.io/github/v/release/seaworld008/auto-install-mysql-innodb-cluster)](https://github.com/seaworld008/auto-install-mysql-innodb-cluster/releases/latest)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-> 当前仓库以中文文档为主，适合需要快速落地 MySQL 高可用自动化主线的中文 DevOps、DBA、SRE 和后端团队。英文摘要见文末。
+[English](README_EN.md) · [快速开始](QUICK_START.md) · [完整部署指南](DEPLOYMENT_COMPLETE_GUIDE.md) · [文档中心](docs/index.md)
 
-## 快速导航
+基于 Ansible 的 MySQL InnoDB Cluster 部署与运维工具，面向 DBA、SRE、平台工程和后端团队。
+统一编排 **MySQL Server、MySQL Router、HAProxy 与 Keepalived**，从首次安装到节点扩缩容、滚动配置和备份，复用同一套配置与操作入口。
 
-- [Quick Start](#quick-start)
-- [English Summary](README_EN.md)
-- [部署指南](DEPLOYMENT_COMPLETE_GUIDE.md)
-- [部署前检查清单](PRE_DEPLOYMENT_CHECKLIST.md)
-- [操作员上手与变更指南](docs/runbooks/OPERATOR_GUIDE.md)
-- [AI Agent Context](AI_CONTEXT.md)
-- [备份与恢复指南](docs/runbooks/BACKUP_AND_RESTORE_GUIDE.md)
-- [高可用部署蓝图](docs/reference/DEPLOYMENT_HA_BLUEPRINT_ZH.md)
-- [变量参考](docs/reference/VARIABLE_REFERENCE.md)
-- [架构图与证据留存](docs/reference/ARCHITECTURE_AND_EVIDENCE.md)
-- [文档站点入口](docs/index.md)
-- [故障排查](docs/runbooks/TROUBLESHOOTING.md)
-- [Release](https://github.com/seaworld008/auto-install-mysql-innodb-cluster/releases)
-- [Issues](https://github.com/seaworld008/auto-install-mysql-innodb-cluster/issues)
+## 你可以用它做什么
 
-## 项目定位
+| 能力 | 说明 |
+| --- | --- |
+| 集群部署 | 安装 MySQL，创建 InnoDB Cluster，逐台加入成员 |
+| 高可用接入 | 独立 Router 层连接集群，双 HAProxy + Keepalived 提供 VIP |
+| 读写接入 | 提供明确的读写、只读端口，以及可选自动读写分离端口 |
+| 生命周期管理 | MySQL 扩缩容、Router/LB 缩容与配置滚动应用 |
+| 状态检查 | 检查成员 ONLINE、集群身份、入口服务、监听端口及 VIP 唯一归属 |
+| 备份与恢复 | 可选 MySQL Shell 逻辑备份、Percona XtraBackup 物理备份，配套隔离恢复指南 |
+| 本地模拟 | 用独立 Linux VM 和 systemd 容器准备模拟主机，复用正式 Ansible 部署流程 |
 
-这个项目不是单次执行的安装脚本集合，而是一条可持续维护的 MySQL InnoDB Cluster 自动化主线。它把数据库层、路由层和入口层的常见部署动作收敛到同一套 Ansible inventory、group vars、playbooks 和入口脚本中，方便团队在后续扩容、缩容、配置变更和备份时继续复用。
+运行配置集中在 [`inventory/group_vars/all.yml`](inventory/group_vars/all.yml)，所有日常操作通过
+[`scripts/deploy_dedicated_routers.sh`](scripts/deploy_dedicated_routers.sh) 执行。
 
-核心目标：
+## 架构
 
-- 用 Ansible 自动化部署 MySQL InnoDB Cluster。
-- 通过 MySQL Router、HAProxy 和 Keepalived 提供分层接入能力。
-- 支持显式读写端口、显式只读端口和单端口自动读写分离入口。
-- 将扩容、缩容、滚动配置应用、内核优化和可选备份纳入统一入口。
-- 让仓库成为可审计、可协作、可继续演进的运维资产。
-
-## 适合场景
-
-- 从零部署 3 节点 MySQL InnoDB Cluster。
-- 为 MySQL Cluster 增加独立 MySQL Router 层。
-- 通过 HAProxy + Keepalived 提供统一 VIP 入口。
-- 将 MySQL 运维操作标准化为 Ansible playbook。
-- 在测试、预生产或生产候选环境中验证 MySQL 8.0 / 8.4 高可用拓扑。
-- 作为企业内部数据库自动化方案的起点进行二次定制。
-
-不建议直接用于以下情况：
-
-- 没有测试环境验证，直接对现网数据库执行首次部署。
-- 未替换默认占位密码和示例 IP。
-- 需要一键恢复覆盖现网数据的场景。本仓库提供备份自动化和恢复 runbook，恢复仍建议人工确认后执行。
-- 需要已经验证的性能承诺或 SLA。本仓库提供自动化配置与静态校验，不替代真实压测、故障演练和容量评估。
-
-## 核心能力
-
-| 能力 | 当前支持情况 | 入口 |
-| --- | --- | --- |
-| MySQL Server 安装 | 支持 | `playbooks/install-mysql.yml` |
-| InnoDB Cluster 配置 | 支持 | `playbooks/configure-cluster.yml` |
-| MySQL Router 部署 | 支持 | `playbooks/install-router.yml` |
-| HAProxy 部署 | 支持 | `playbooks/install-haproxy.yml` |
-| Keepalived VIP | 支持 | `playbooks/install-keepalived.yml` |
-| 单端口自动读写分离 | 支持 | HAProxy `3309`，Router `6450` |
-| 显式读写 / 只读入口 | 支持 | HAProxy `3307/3308`，Router `6446/6447` |
-| MySQL 扩容 / 缩容 | 支持 | `--scale-mysql-add` / `--scale-mysql-remove` |
-| Router / HAProxy 缩容 | 支持 | `--shrink-router` / `--shrink-lb` |
-| 滚动应用配置 | 支持 | `--apply-config` |
-| 内核优化 | 支持 | `--kernel-optimize-only` |
-| 逻辑备份 | 支持，可选 | `backup_config.method: logical` |
-| XtraBackup 物理备份 | 支持，可选 | `backup_config.method: xtrabackup` |
-| 自动恢复 | 不做一键覆盖 | 参考 `docs/runbooks/BACKUP_AND_RESTORE_GUIDE.md` |
-
-## 默认拓扑
-
-默认高可用基线由 `inventory/group_vars/all.yml` 和预检查 playbook 控制：
-
-| 层级 | 默认建议 | 说明 |
-| --- | --- | --- |
-| MySQL InnoDB Cluster | 3 节点 | `mysql_primary` + `mysql_secondary` |
-| MySQL Router | 2 节点起 | 推荐独立部署，降低与数据库层的故障耦合 |
-| HAProxy + Keepalived | 2 节点起 | 对应用提供统一 VIP / 四层入口 |
-| MySQL 版本线 | `8.4` 默认，兼容 `8.0` | 由 `mysql_release_line` 控制 |
-| 默认容量模型 | 8C32G MySQL + 4C8G Router | 作为仓库内置配置基线，不等同于压测结果 |
-
-推荐链路：
-
-```text
-Application
-  -> HAProxy VIP
-  -> MySQL Router cluster
-  -> MySQL InnoDB Cluster
+```mermaid
+flowchart LR
+    App[应用] --> VIP[Keepalived VIP]
+    VIP --> HA[HAProxy × 2]
+    HA --> Router[MySQL Router × 2]
+    Router --> Primary[MySQL Primary]
+    Router --> Secondary[MySQL Secondary × 2]
+    Primary <--> Secondary
 ```
 
-## 端口矩阵
+| 层级 | 默认拓扑 | 职责 |
+| --- | --- | --- |
+| 数据库 | 3 台 MySQL | Group Replication 与单主写入 |
+| 路由 | 2 台独立 Router | 根据集群元数据选择后端 |
+| 入口 | 2 台 HAProxy + Keepalived | VIP 与四层转发 |
 
-| 端口 | 所在层 | 类型 | 说明 |
-| --- | --- | --- | --- |
-| `3309` | HAProxy VIP | 自动读写分离 | 推荐给大多数应用评估的默认入口 |
-| `3307` | HAProxy VIP | 强制读写 | DDL、批处理、强一致写入 |
-| `3308` | HAProxy VIP | 强制只读 | 报表、查询服务、只读任务 |
-| `6450` | MySQL Router | 自动读写分离 | 绕过 HAProxy 直连 Router 时使用 |
-| `6446` | MySQL Router | 强制读写 | 运维直连或应急接入 |
-| `6447` | MySQL Router | 强制只读 | 只读分析或排查 |
-| `8404` | HAProxy | 监控 | HAProxy stats 页面，默认仅监听 `127.0.0.1` |
+HAProxy 后端指向 Router；主节点切换后，由 Router 跟随集群拓扑选择写入节点。
+节点规格、网络规划与接入方式见 [部署蓝图](docs/reference/DEPLOYMENT_HA_BLUEPRINT_ZH.md)。
 
-## Quick Start
+## 快速开始
 
-### 1. 克隆仓库
+准备可通过 SSH 管理的 Linux 主机。控制节点使用 **Python 3.12+**，目标节点预装 **Python 3.9+**。
+MySQL 默认使用 **8.4 LTS**，也可选择 8.0；目标发行版清单见 [部署前检查](PRE_DEPLOYMENT_CHECKLIST.md)。
 
 ```bash
 git clone https://github.com/seaworld008/auto-install-mysql-innodb-cluster.git
 cd auto-install-mysql-innodb-cluster
-```
 
-### 2. 安装本地依赖
-
-控制节点必须使用 Python 3.12+。目标节点必须在首次连接前预装
-Python 3.9+；RHEL 8 需先安装 `python39`，本地 inventory 的
-`auto_silent` 会优先发现受支持解释器。
-
-```bash
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
 ansible-galaxy collection install -r collections/requirements.yml
-```
 
-### 3. 生成本地 inventory 并准备 Secret
-
-```bash
-# 默认生成 inventory/hosts.local.yml
+# 生成本地 inventory，再创建加密凭据文件
 ./scripts/setup-servers.sh
-
-# 检查非敏感运行参数；不要在此写入真实密码
-vim inventory/group_vars/all.yml
-
-# 在加密编辑器中写入真实 MySQL 密码和 VRRP 口令
 ansible-vault create inventory/vault.local.yml
 ```
 
-`inventory/hosts.local.yml`、`inventory/vault.local.yml` 及向导生成的备份均已被 Git 忽略。仓库中已跟踪的 `hosts-*.yml` 只作为脱敏模板和 CI 输入；不要向其中写入真实 IP、SSH 密码或私钥路径。向导拒绝覆盖 Git 已跟踪的 inventory，并将本地文件以 `0600` 权限写入。不确定配置边界时，先看 [inventory 使用说明](inventory/README.md)。
-
-至少需要确认：
-
-- 本地 inventory 中的 `ansible_host`、`ansible_user` 和 SSH key 配置；只有不提供私钥时，向导才逐节点收集 SSH 密码。
-- 加密的 `inventory/vault.local.yml` 或外部 Secret 已覆盖三个 MySQL 密码和不超过 8 个字符的 `keepalived_auth_pass`。
-- 本地 `mysql_group_replication_group_name_override` 是当前独立集群专用的唯一 UUID；向导会自动生成，不能复用默认值或其他集群的 UUID。
-- `keepalived_vip` 是当前内网可用且未被占用的 VIP。
-- `mysql_release_line` 符合目标版本线，当前支持 `8.0` 和 `8.4`。
-- 目标主机数量满足 `mysql_ha_min_nodes`、`router_ha_min_nodes`、`haproxy_ha_min_nodes`。
-
-Vault 文件中直接使用运行时变量名：
-
-```yaml
-mysql_root_password: "CHANGE_ME_ROOT_PASSWORD"  # 在 Vault 编辑器中替换
-mysql_cluster_password: "CHANGE_ME_CLUSTER_PASSWORD"  # 在 Vault 编辑器中替换
-mysql_replication_password: "CHANGE_ME_REPLICATION_PASSWORD"  # 在 Vault 编辑器中替换
-keepalived_auth_pass: "CHANGE_ME"  # 替换为不超过 8 个字符的 VRRP 口令
-```
-
-SSH host key 校验默认启用。首次连接每台节点前，先用 `ssh-keyscan` 暂存公钥并用 `ssh-keygen -lf` 查看 fingerprint，再通过云控制台、机房控制台或管理员提供的可信渠道比对；只有确认一致后才能追加到 `~/.ssh/known_hosts`。完整流程见 [服务器配置指南](docs/runbooks/SERVER_CONFIGURATION.md)。
-
-多阶段操作会启动多个 Ansible 进程，因此 `--ask-vault-pass` 可能重复询问。
-自动化或长流程推荐使用仓库外、权限 `0600` 的
-`--vault-password-file "$HOME/.config/ansible/mysql-cluster-vault-pass"`；
-不要把 Vault 口令文件放进仓库。
-
-### 4. 执行前置检查
-
-先做本地 dry-run 级别检查，不连接目标机器：
-
-```bash
-git diff --check
-for script in deploy.sh validate_deployment.sh scripts/*.sh; do
-  bash -n "$script" || exit 1
-done
-ansible-inventory -i inventory/hosts.local.yml --list >/tmp/inventory-local.json
-ansible-playbook -i inventory/hosts.local.yml playbooks/site.yml --syntax-check \
-  --ask-vault-pass -e @inventory/vault.local.yml
-```
-
-再执行会连接目标机器、但不安装服务的前置检查：
+向导生成的本地 inventory 和 Vault 文件均被 Git 忽略。按 [快速开始](QUICK_START.md)
+填写数据库密码、VRRP 口令、VIP 与主机信息，并通过可信渠道核验 SSH 主机指纹后执行：
 
 ```bash
 ./scripts/deploy_dedicated_routers.sh --check-prereq \
-  -i inventory/hosts.local.yml \
-  --ask-vault-pass -e @inventory/vault.local.yml
-```
+  -i inventory/hosts.local.yml --ask-vault-pass -e @inventory/vault.local.yml
 
-### 5. 执行完整部署
-
-```bash
 ./scripts/deploy_dedicated_routers.sh --production-ready \
-  -i inventory/hosts.local.yml \
-  --ask-vault-pass -e @inventory/vault.local.yml
-```
+  -i inventory/hosts.local.yml --ask-vault-pass -e @inventory/vault.local.yml
 
-### 6. 查看状态
-
-```bash
 ./scripts/deploy_dedicated_routers.sh --status \
-  -i inventory/hosts.local.yml \
-  --ask-vault-pass -e @inventory/vault.local.yml
+  -i inventory/hosts.local.yml --ask-vault-pass -e @inventory/vault.local.yml
 ```
 
-首次部署、dry-run、重复执行和已部署后改配置的完整说明见 [操作员上手与变更指南](docs/runbooks/OPERATOR_GUIDE.md)。
+第一次使用？从 [快速开始](QUICK_START.md) 完成逐项配置；暂时没有 Linux 主机，可使用
+[本地模拟环境](docs/runbooks/LOCAL_SIMULATION.md) 熟悉流程。
+
+## 应用连接
+
+| 用途 | VIP 端口 | Router 直连端口 |
+| --- | --- | --- |
+| 写入、事务与读后写一致性访问 | `3307` | `6446` |
+| 允许副本延迟的只读访问 | `3308` | `6447` |
+| 可选自动读写分离 | `3309` | `6450` |
+
+事务型应用优先使用明确的读写入口；自动分离需按驱动、连接池与事务行为完成兼容性验证。
+证书、连接重试和路由选择见 [应用接入指南](docs/runbooks/APPLICATION_CONNECTIONS.md)。
 
 ## 常用操作
 
-```bash
-# 仅部署 MySQL Cluster
-./scripts/deploy_dedicated_routers.sh --mysql-only -i inventory/hosts.local.yml --ask-vault-pass -e @inventory/vault.local.yml
+在上述部署命令中替换操作参数，继续使用同一份本地 inventory 和 Vault：
 
-# 仅部署或重配 MySQL Router
-./scripts/deploy_dedicated_routers.sh --install-routers -i inventory/hosts.local.yml --ask-vault-pass -e @inventory/vault.local.yml
-
-# 仅部署或重配 HAProxy + Keepalived
-./scripts/deploy_dedicated_routers.sh --configure-lb -i inventory/hosts.local.yml --ask-vault-pass -e @inventory/vault.local.yml
-
-# 修改主配置后滚动应用
-./scripts/deploy_dedicated_routers.sh --apply-config -i inventory/hosts.local.yml --ask-vault-pass -e @inventory/vault.local.yml
-
-# 仅执行内核优化
-./scripts/deploy_dedicated_routers.sh --kernel-optimize-only -i inventory/hosts.local.yml --ask-vault-pass -e @inventory/vault.local.yml
-
-# MySQL 扩容，目标主机需先加入 inventory
-./scripts/deploy_dedicated_routers.sh --scale-mysql-add --limit mysql-node4 -i inventory/hosts.local.yml --ask-vault-pass -e @inventory/vault.local.yml
-
-# MySQL 缩容，缩容当前主节点时建议指定新主节点
-./scripts/deploy_dedicated_routers.sh --scale-mysql-remove --target mysql-node3 --new-primary mysql-node2 -i inventory/hosts.local.yml --ask-vault-pass -e @inventory/vault.local.yml
-
-# Router / HAProxy 缩容
-./scripts/deploy_dedicated_routers.sh --shrink-router --limit mysql-router-2 -i inventory/hosts.local.yml --ask-vault-pass -e @inventory/vault.local.yml
-./scripts/deploy_dedicated_routers.sh --shrink-lb --limit haproxy-2 -i inventory/hosts.local.yml --ask-vault-pass -e @inventory/vault.local.yml
-
-# 可选备份，需先启用 backup_config.enabled
-./scripts/deploy_dedicated_routers.sh --backup -i inventory/hosts.local.yml --ask-vault-pass -e @inventory/vault.local.yml
-```
-
-## 重复执行与幂等性
-
-仓库的目标是让部署流程尽量幂等和可重复收敛，但生产环境里“可重复执行”不等于“零影响”。
-
-- `--check-prereq`、`--status`、`--test-connection` 适合反复执行。
-- `--status` 与 `--test-connection` 为 fail-closed：Cluster 必须是 `OK`，Router、HAProxy、Keepalived、监听端口和 VIP 任一异常都会返回非零状态。
-- `--production-ready` 是完整部署 / 收敛入口，重复执行可能重新渲染配置、reload 或 restart 服务、再次执行内核优化，建议只在首次部署或维护窗口中使用。
-- 修改 `inventory/group_vars/all.yml` 后，优先用 `--apply-config` 滚动应用，而不是直接重复全量部署。
-- Router 默认 `mysql_router_rebootstrap: false`，不应在没有明确原因时重新 bootstrap。
-- 缩容、停止入口层、清理数据等破坏性动作必须显式执行，不能混入普通部署流程。
-
-更多边界和操作矩阵见 [操作员上手与变更指南](docs/runbooks/OPERATOR_GUIDE.md)。
-
-## 配置说明
-
-主要配置入口：
-
-| 文件 | 用途 |
+| 操作 | 参数 |
 | --- | --- |
-| `inventory/README.md` | inventory 文件选择说明，解释不同拓扑示例和 group_vars 的区别 |
-| `inventory/hosts.local.yml` | 被 Git 忽略的真实环境 inventory，由向导生成 |
-| `inventory/vault.local.yml` | 被 Git 忽略的 Ansible Vault 加密变量文件 |
-| `inventory/group_vars/all.yml` | 当前运行时主配置，仓库的单一真相源 |
-| `inventory/hosts-with-dedicated-routers.yml` | 推荐的独立 Router + HAProxy inventory 示例 |
-| `inventory/hosts-ha-reference.yml` | 高可用拓扑参考 inventory |
-| `collections/requirements.yml` | Ansible collections 依赖 |
-| `ansible.cfg` | Ansible 默认配置 |
+| 只部署数据库集群 | `--mysql-only` |
+| 部署 Router | `--install-routers` |
+| 部署入口层 | `--configure-lb` |
+| 滚动应用配置 | `--apply-config` |
+| 增加 MySQL 节点 | `--scale-mysql-add --limit mysql-node4` |
+| 移除 MySQL 节点 | `--scale-mysql-remove --target mysql-node3` |
+| 移除 Router / LB | `--shrink-router --target router-node3` / `--shrink-lb --target lb-node3` |
+| 执行备份 | `--backup` |
+| 检查状态 | `--status` |
 
-关键变量：
+扩容前先更新 inventory；移除当前 primary 时还需指定 `--new-primary`。
+备份默认关闭，支持 local、NFS、rsync 目标。完整步骤见 [运维指南](docs/runbooks/OPERATOR_GUIDE.md)。
 
-| 变量 | 默认值 | 是否必改 | 说明 |
-| --- | --- | --- | --- |
-| `mysql_release_line` | `8.4` | 视情况 | 支持 `8.0` / `8.4` |
-| `mysql_root_password` | `CHANGE_ME_ROOT_PASSWORD` | 是 | 由 Vault / 外部 Secret 覆盖的 root 初始密码 |
-| `mysql_cluster_password` | `CHANGE_ME_CLUSTER_PASSWORD` | 是 | 由 Vault / 外部 Secret 覆盖的 cluster admin 密码 |
-| `mysql_replication_password` | `CHANGE_ME_REPLICATION_PASSWORD` | 是 | 由 Vault / 外部 Secret 覆盖的复制用户密码 |
-| `mysql_group_replication_group_name_override` | 本地向导生成 | 是 | 覆盖历史示例值，每个独立集群必须唯一 |
-| `mysql_hardware_profile` | `optimized_8c32g` | 视情况 | 选择内置容量配置 |
-| `keepalived_vip` | `192.0.2.100` | 是 | RFC 5737 占位值；必须改为 HAProxy 入口 VIP |
-| `backup_config.enabled` | `false` | 视情况 | 备份默认关闭 |
-| `backup_config.method` | `logical` | 视情况 | 支持 `logical` / `xtrabackup` |
+## 使用原则
 
-## 项目结构
+- 真实地址和凭据放在受保护的本地 inventory、Ansible Vault 或外部 Secret 中。
+- 重复部署保留已有 Router 身份与 keyring；配置变更按节点滚动执行，安排维护窗口。
+- 每个集群使用独立组 UUID；已有集群以实际身份为准，配置不一致时停止操作并提示核对。
+- 上线前根据自己的拓扑完成证书配置、容量评估、故障切换和隔离恢复演练。
 
-```text
-.
-├── README.md
-├── QUICK_START.md
-├── DEPLOYMENT_COMPLETE_GUIDE.md
-├── PRE_DEPLOYMENT_CHECKLIST.md
-├── ansible.cfg
-├── collections/
-│   └── requirements.yml
-├── docs/
-│   ├── index.md
-│   ├── runbooks/
-│   ├── reference/
-│   ├── reports/
-│   ├── maintainers/
-│   ├── templates/
-│   └── decisions/
-├── examples/
-├── inventory/
-│   ├── group_vars/all.yml
-│   ├── hosts.local.yml
-│   ├── vault.local.yml
-│   └── hosts-*.yml
-├── playbooks/
-├── roles/
-├── scripts/
-│   ├── deploy_dedicated_routers.sh
-│   ├── config_manager.sh
-│   └── ...
-└── .github/workflows/ansible-ci.yml
-```
+## 文档与参与
 
-更多说明见 [docs/reference/PROJECT_STRUCTURE.md](docs/reference/PROJECT_STRUCTURE.md)。
+| 我想要…… | 从这里开始 |
+| --- | --- |
+| 部署第一个集群 | [快速开始](QUICK_START.md) · [检查清单](PRE_DEPLOYMENT_CHECKLIST.md) |
+| 规划和维护环境 | [部署指南](DEPLOYMENT_COMPLETE_GUIDE.md) · [变量参考](docs/reference/VARIABLE_REFERENCE.md) |
+| 接入应用与排障 | [应用接入](docs/runbooks/APPLICATION_CONNECTIONS.md) · [故障排查](docs/runbooks/TROUBLESHOOTING.md) |
+| 配置备份与演练恢复 | [备份恢复指南](docs/runbooks/BACKUP_AND_RESTORE_GUIDE.md) |
+| 本地开发与贡献 | [模拟环境](docs/runbooks/LOCAL_SIMULATION.md) · [贡献指南](CONTRIBUTING.md) |
+| 了解项目更新 | [Changelog](CHANGELOG.md) · [Release](https://github.com/seaworld008/auto-install-mysql-innodb-cluster/releases/latest) |
 
-## 技术栈
+欢迎提交可复现的问题、改进建议和 Pull Request。安全问题请按 [安全政策](SECURITY.md) 私下报告。
 
-- 自动化：Ansible、Ansible Collections。
-- 数据库：MySQL InnoDB Cluster，默认 MySQL 8.4 LTS，兼容 MySQL 8.0。
-- 路由层：MySQL Router。
-- 入口层：HAProxy、Keepalived。
-- 备份：MySQL Shell Dump、Percona XtraBackup。
-- 脚本：Bash、PowerShell 验证脚本。
-- CI：GitHub Actions，覆盖 Python 3.12/3.13、单元测试、全部 playbook syntax check、三套主 inventory、文档质量与 Actions CodeQL。
-
-## 本地检查
-
-```bash
-# Shell 语法检查
-for script in deploy.sh validate_deployment.sh scripts/*.sh; do
-  bash -n "$script" || exit 1
-done
-
-# Ansible 语法检查
-ansible-playbook -i inventory/hosts.local.yml playbooks/site.yml --syntax-check \
-  --ask-vault-pass -e @inventory/vault.local.yml
-
-# Inventory 校验
-ansible-inventory -i inventory/hosts.local.yml --list >/tmp/inventory-local.json
-
-# Diff 空白检查
-git diff --check
-
-# 回归测试
-python -m unittest discover -s tests -v
-
-# 与 CI 一致的阻断式文档质量检查
-npx --yes markdownlint-cli2@0.23.2
-python -m pip install 'yamllint>=1.37.0,<2.0.0'
-yamllint .
-```
-
-## 文档
-
-主入口：
-
-- [Quick Start](QUICK_START.md)
-- [完整部署指南](DEPLOYMENT_COMPLETE_GUIDE.md)
-- [部署前检查清单](PRE_DEPLOYMENT_CHECKLIST.md)
-- [GitHub Pages 文档站点入口](docs/index.md)
-- [AI Agent Context](AI_CONTEXT.md)
-- [操作员上手与变更指南](docs/runbooks/OPERATOR_GUIDE.md)
-
-Runbook：
-
-- [操作员上手与变更指南](docs/runbooks/OPERATOR_GUIDE.md)
-- [服务器配置指南](docs/runbooks/SERVER_CONFIGURATION.md)
-- [备份与恢复指南](docs/runbooks/BACKUP_AND_RESTORE_GUIDE.md)
-- [故障排查](docs/runbooks/TROUBLESHOOTING.md)
-
-参考资料：
-
-- [高可用部署蓝图](docs/reference/DEPLOYMENT_HA_BLUEPRINT_ZH.md)
-- [架构图与证据留存指南](docs/reference/ARCHITECTURE_AND_EVIDENCE.md)
-- [变量参考与配置示例](docs/reference/VARIABLE_REFERENCE.md)
-- [MySQL 内核优化最佳实践](docs/reference/MYSQL_KERNEL_BEST_PRACTICES.md)
-- [MySQL 8.0 / 8.4 交叉验证](docs/reference/MYSQL80_CLUSTER_CROSS_VALIDATION.md)
-- [项目结构总览](docs/reference/PROJECT_STRUCTURE.md)
-
-模板与维护者资料：
-
-- [Staging 验证记录模板](docs/templates/staging-validation-record.md)
-- [故障演练记录模板](docs/templates/failover-drill-record.md)
-- [隔离环境恢复演练模板](docs/templates/restore-drill-record.md)
-- [AI 维护说明](docs/maintainers/AI_MAINTAINER_GUIDE.md)
-- [English README](README_EN.md)
-
-## 安全说明
-
-- 不要把真实 IP、SSH 密码、MySQL 密码、私钥、Vault 口令或云厂商密钥写入任何 tracked 文件。
-- 真实拓扑仅写入权限为 `0600` 的 `inventory/hosts.local.yml`；优先使用 SSH key。
-- `inventory/group_vars/all.yml` 中的 `CHANGE_ME_*` 必须在部署时由加密 Vault 或外部 Secret 覆盖，禁止直接替换为明文真实密码。
-- SSH host key 校验默认启用；先从可信渠道核验 fingerprint，再写入 `~/.ssh/known_hosts`。
-- 公开披露安全问题前，请优先通过 GitHub Security Advisories 或维护者私下渠道报告。
-
-## Roadmap
-
-已完成的文档与协作增强：
-
-- 可复用的 staging 验证记录、故障演练和隔离恢复演练模板。
-- 架构图、端口视图、CLI 证据与截图留存规范。
-- 英文 README，便于全球开发者检索和初步评估。
-- 更细的变量参考表和配置示例。
-- 阻断式 Markdown lint / YAML lint workflow。
-- GitHub Pages 文档站点入口与发布工作流。
-
-仍需要真实环境补充的内容：
-
-- 脱敏后的部署截图、HAProxy stats 截图和 CLI 运行截图。
-- staging 故障演练记录。
-- 隔离环境恢复演练记录。
-- 压测、容量评估和生产级观测数据。
-
-## FAQ
-
-### 是否可以直接用于生产？
-
-仓库面向生产候选拓扑设计，但静态检查和 Ansible syntax check 不等于真实生产验证。建议先在测试或预生产环境完成部署、压测、故障转移、备份恢复演练，再进入生产。
-
-### 是否支持 Docker？
-
-当前主线是 Ansible 远程部署，不提供 Docker Compose 一键运行 MySQL Cluster。后续可以考虑增加用于学习和演示的容器化实验环境。
-
-### 默认密码可以直接用吗？
-
-不可以。默认值是 `CHANGE_ME_*` 占位符，预检查会阻止继续部署。请通过加密的 `inventory/vault.local.yml` 或外部 Secret 覆盖，禁止把真实密码明文写入 tracked 文件。
-
-### 如何选择 MySQL 8.0 还是 8.4？
-
-默认 `mysql_release_line: "8.4"`。如果你的环境仍要求 MySQL 8.0，可以改为 `8.0`，并在测试环境验证安装源、Router、备份工具和应用兼容性。
-
-### 备份是否默认开启？
-
-默认关闭。启用前请修改 `backup_config.enabled: true`，并确认 `method`、`type`、目标目录和权限。
-
-### CI 能证明部署一定成功吗？
-
-不能。CI 当前用于静态质量门：Ansible 语法、inventory 解析和部分过时参数守卫。真实部署仍依赖目标主机、网络、系统版本、权限、MySQL 源和安全策略。
-
-## 贡献
-
-欢迎通过 Issue 和 Pull Request 参与改进。提交前请阅读 [CONTRIBUTING.md](CONTRIBUTING.md)，并尽量运行本地检查命令。
-
-如果这个项目对你有帮助，欢迎 Star 支持，也欢迎把真实问题、部署反馈和改进建议提交到 Issues。
-
-## License
-
-本仓库使用 [MIT License](LICENSE)。如你计划在商业或企业场景中复用，请在引入前自行确认许可证与组织合规要求。
-
-## English Summary
-
-`auto-install-mysql-innodb-cluster` is an Ansible-based automation project for deploying and operating MySQL InnoDB Cluster with MySQL Router, HAProxy, Keepalived, scaling workflows, rolling configuration updates, kernel tuning, and optional logical or physical backups. The documentation is currently Chinese-first, with MySQL 8.4 LTS as the default release line and MySQL 8.0 compatibility retained.
-
-For a fuller English entrypoint, see [README_EN.md](README_EN.md).
-
-## v0.3.1 部署修复与升级注意事项
-
-- 首次安装不再依赖其他 MySQL 节点尚未采集的 facts；Group Replication 使用
-  `ansible_host`，未定义时使用 inventory 主机名。该地址必须能被所有集群节点直接访问；
-  SSH NAT / 跳板地址不能作为数据库节点地址，需为节点使用可互通的 inventory 地址。
-- Ubuntu 24.04/25.04/25.10 与 Debian 13 使用 `libaio1t64`，旧发行版使用 `libaio1`。
-- 任一节点失败即中止后续部署批次与操作；MySQL 滚动批次固定要求一台。
-- `mysql_primary` 必须有一个管理节点，`mysql_secondary` 覆盖其余集群成员。
-- 已有 Router 的端口、连接数、超时与路由策略由 `--apply-config` 原子更新；
-  保留 Router 身份和 keyring，有变化才重启，并按节点完成连接验证。
-  自动读写分离统一到 `routing:bootstrap_rw_split`，清除历史重复路由。
-- `--limit` 仅支持 MySQL 扩容、Router/LB 缩容和内核优化；其他操作传入该参数会在
-  执行前报错，避免静默变成全组操作。全组配置更新使用 `--apply-config`。
-- 当前配置中未被消费的 Router 线程、内存、连接池和 metadata 缓存字段已移除。
-
-升级前保存受保护的现有配置，在维护窗口执行 `--check-prereq`、`--apply-config` 和
-`--status`。自定义 Router 路由名称不属于本仓库 bootstrap 结构，会被明确拒绝；
-先人工核对迁移，不能通过清空 keyring 或自动强制 bootstrap 绕过。
-
-静态及本地回归测试不替代真实环境验收。首次部署、重复执行、故障切换、扩缩容、
-备份恢复和容量测试仍需在隔离 staging 执行并留存记录。
-
-## v0.4.0 模拟验证与运行修复
-
-本版集成 Rocky/MySQL 8.4 实测的包冲突、caching_sha2 账号、secondary 重复授权、
-mysqlsh 认证、Router bootstrap、Keepalived 脚本安全和 Percona RPM 公钥修复。
-管理账号在独立实例或当前在线 primary 收敛，secondary 依赖复制；不关闭只读保护。
-升级时应在 staging 运行完整部署与重复执行；`--apply-config` 不承担包安装与账号迁移。
-
-外置盘本地模拟使用独立 Lima VM（6 CPU / 12 GiB），配置生成、重建、测试顺序与
-定向清理见 [本机模拟方案](docs/runbooks/LOCAL_SIMULATION.md)。低资源档位
-`simulation_minimal` 仅用于模拟；50 总连接对应 45 用户连接，生产默认规格保持原值。
-
-[实测报告](docs/reports/LOCAL_SIMULATION_2026-09-08.md)记录了通过及未通过项。
-混合端口事务路由、严格 TLS 和组 UUID 配置归属仍待解决，不能据此声明已完成生产验收。
+本项目采用 [MIT License](LICENSE)。

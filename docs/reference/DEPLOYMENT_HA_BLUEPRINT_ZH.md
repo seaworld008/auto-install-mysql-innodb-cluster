@@ -54,7 +54,7 @@ HAProxy 后端固定为 Router。仓库不支持直接连接静态 MySQL primary
 | Router | 自动读写分离 | `6450` |
 | HAProxy | stats，仅 localhost | `8404` |
 
-应用默认优先使用 VIP `3309`。stats 默认绑定 `127.0.0.1`，远程观察应使用 SSH
+事务型应用优先使用 VIP `3307`；自动分离 `3309` 需先验证驱动与事务兼容性。stats 默认绑定 `127.0.0.1`，远程观察应使用 SSH
 tunnel 或受控监控代理。
 
 主配置默认 VIP `192.0.2.100` 属于 RFC 5737 文档地址，preflight 会阻断。

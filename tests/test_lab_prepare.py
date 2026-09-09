@@ -77,3 +77,47 @@ class LabPrepareTests(unittest.TestCase):
             lab.save_metadata()
             self.assertEqual((root / 'runtime/metadata-previous/mysql-ha/lima.yaml').read_bytes(), expected)
             self.assertEqual((root / 'runtime/metadata/mysql-ha/disk').resolve(), disk)
+
+    def test_source_digest_detects_bytes_and_mode_changes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory)
+            file = source / 'deploy.yml'
+            file.write_text('original')
+            baseline = prepare.source_digest(source)
+            self.assertEqual(prepare.source_digest(source), baseline)
+            file.write_text('modified')
+            self.assertNotEqual(prepare.source_digest(source), baseline)
+            file.write_text('original')
+            file.chmod(0o700)
+            self.assertNotEqual(prepare.source_digest(source), baseline)
+
+    def test_lima_version_and_source_drift_block_before_instance_commands(self):
+        import sys
+        from unittest.mock import patch, Mock
+        sys.path.insert(0, str(ROOT / 'tests/lab'))
+        try:
+            from lab import Lab
+        finally:
+            sys.path.pop(0)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            (root / 'manifest.json').write_text(json.dumps({
+                'owner': 'mysql-ha-lab-v1', 'root': str(root), 'lima_version': '2.2.0'}))
+            with patch('lab.output', return_value='limactl version 1.0.7\n') as command:
+                with self.assertRaises(ValueError):
+                    Lab(root, 'limactl')
+                self.assertEqual(command.call_args.args[0], ['limactl', '--version'])
+                self.assertEqual(command.call_count, 1)
+            with patch('lab.output', return_value='limactl version 2.2.0\n'):
+                lab = Lab(root, 'limactl')
+            (root / 'source').mkdir()
+            file = root / 'source/play.yml'
+            file.write_text('original')
+            lab.manifest['source_digest'] = prepare.source_digest(root / 'source')
+            lab.docker = Mock(return_value='ok')
+            self.assertEqual(lab.deploy(['--status']), 'ok')
+            lab.docker.reset_mock()
+            file.write_text('changed')
+            with self.assertRaises(ValueError):
+                lab.deploy(['--status'])
+            lab.docker.assert_not_called()
