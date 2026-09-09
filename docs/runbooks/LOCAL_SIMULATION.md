@@ -82,6 +82,47 @@ LIMACTL="$(command -v limactl)"
 命令失败会返回非零退出码。建议用 `set -o pipefail` 加 `tee` 保存输出至本地 reports。
 不要打印 `secrets/runtime.yml`，也不要上传生成目录、镜像、日志、备份或 SSH 密钥。
 
+## 可复用业务探针
+
+初始化工具会生成单独的随机 `lab_app_password`，并把测试探针复制到 `config/probe/`，
+在 manifest 中记录每个脚本的摘要。探针属于测试工具，不负责安装软件或管理复制组。
+它只接受本地模拟网段和已声明主机，默认测试固定的三类入口。
+
+完整部署成功后执行一次初始化；已有 `ha_lab` 数据库时会拒绝覆盖：
+
+```bash
+"$PYTHON" tests/lab/lab.py --root "$LAB_ROOT" --limactl "$LIMACTL" docker -- \
+  exec mysql-ha-lab-controller python /lab/config/probe/probe.py init
+"$PYTHON" tests/lab/lab.py --root "$LAB_ROOT" --limactl "$LIMACTL" docker -- \
+  exec mysql-ha-lab-controller python /lab/config/probe/probe.py ports --loops 50
+"$PYTHON" tests/lab/lab.py --root "$LAB_ROOT" --limactl "$LIMACTL" docker -- \
+  exec mysql-ha-lab-controller python /lab/config/probe/probe.py signature \
+  > "$LAB_ROOT/reports/data-baseline.json"
+```
+
+探针生成 1000 条种子记录和 8 条类型样本，覆盖中文、二进制、JSON、精确小数、微秒时间与 NULL。
+端口检查交替使用 RW、RO 和自动分离端口，包含只读拒写及事务前读、事务写入、读后写结果核对。
+`--host` 可选择 inventory 中的 Router 地址，直连使用 6446/6447/6450；VIP 使用 3307/3308/3309。
+
+在另一个终端持续写入，同时按测试表执行滚动变更或故障注入：
+
+```bash
+"$PYTHON" tests/lab/lab.py --root "$LAB_ROOT" --limactl "$LIMACTL" docker -- \
+  exec mysql-ha-lab-controller python /lab/config/probe/probe.py writer \
+  --label writer-failover-01 --seconds 180
+"$PYTHON" tests/lab/lab.py --root "$LAB_ROOT" --limactl "$LIMACTL" docker -- \
+  exec mysql-ha-lab-controller python /lab/config/probe/verify_ledger.py
+```
+
+每次使用新的 `writer-` 标签；已有账本或停止标记时拒绝覆盖。写入约每 200 ms 发起一次，
+时长最多 3600 秒。可创建 `reports/<标签>.stop` 提前结束，等待进程退出再校验。
+校验器检查每条已确认写入的 ID 与内容，并单独报告未获确认但实际已提交的记录；
+没有账本、空账本或完全没有成功写入时，不报告通过。
+切换到新建集群前先校验并归档旧账本，不能把旧集群的账本与新集群混合核对。
+
+业务探针默认使用隔离实验的连接方式，不能据此宣称生产证书链或主机名严格校验通过。
+生成数据、账本、配置中的凭据及未经脱敏的身份信息只保存在忽略目录中。
+
 ## 顺序测试方案与验收
 
 测试数据全部合成，初始业务数据不超过 100 MiB；不做生产容量压测。

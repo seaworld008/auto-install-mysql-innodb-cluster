@@ -40,11 +40,15 @@ def initialize(root: Path, ref: str, topology: str = 'dedicated') -> None:
     subprocess.run(['ssh-keygen', '-q', '-t', 'ed25519', '-N', '', '-C', 'isolated-mysql-lab',
                     '-f', str(root / 'secrets/id_ed25519')], check=True)
     credentials = {k: 'Aa9!' + secrets.token_hex(24) for k in (
-        'mysql_root_password', 'mysql_cluster_password', 'mysql_replication_password')}
+        'mysql_root_password', 'mysql_cluster_password', 'mysql_replication_password', 'lab_app_password')}
     credentials['keepalived_auth_pass'] = secrets.token_hex(4)
     write_yaml(root / 'secrets/runtime.yml', credentials)
     (root / 'secrets/runtime.yml').chmod(0o600)
     (root / 'secrets/known_hosts').touch(mode=0o600)
+    probe_dir = root / 'config/probe'
+    probe_dir.mkdir()
+    for name in ('probe.py', 'probe_guard.py', 'verify_ledger.py'):
+        shutil.copy(TEMPLATES / name, probe_dir / name)
     for name in ('node', 'controller'):
         destination = root / 'config' / (name + '-image')
         destination.mkdir()
@@ -79,6 +83,8 @@ def initialize(root: Path, ref: str, topology: str = 'dedicated') -> None:
         'template_sha256': hashlib.sha256((TEMPLATES / 'lima.yaml').read_bytes()).hexdigest(),
         'image_template_sha256': {name: hashlib.sha256((TEMPLATES / name).read_bytes()).hexdigest()
                                   for name in ('node.Dockerfile', 'controller.Dockerfile')},
+        'probe_sha256': {path.name: hashlib.sha256(path.read_bytes()).hexdigest()
+                         for path in sorted(probe_dir.glob('*.py'))},
     }, indent=2) + '\n')
     print('Generated private lab for source ' + sha)
 

@@ -62,6 +62,7 @@ class LabPrepareTests(unittest.TestCase):
             self.assertEqual((root / 'source/requirements.txt').read_bytes(),
                              (root / 'config/controller-image/requirements.txt').read_bytes())
             credentials = yaml.safe_load((root / 'secrets/runtime.yml').read_text())
+            self.assertGreaterEqual(len(credentials['lab_app_password']), 20)
             for name in ('config/compose.yml', 'config/hosts.local.yml', 'config/overrides.yml', 'manifest.json'):
                 for password in credentials.values():
                     self.assertNotIn(password, (root / name).read_text())
@@ -71,6 +72,8 @@ class LabPrepareTests(unittest.TestCase):
             self.assertEqual(before, (root / 'secrets/runtime.yml').read_bytes())
             manifest = json.loads((root / 'manifest.json').read_text())
             self.assertRegex(manifest['source_sha'], r'^[a-f0-9]{40}$')
+            self.assertEqual(set(manifest['probe_sha256']),
+                             {'probe.py', 'probe_guard.py', 'verify_ledger.py'})
 
     def test_output_outside_ignored_workspace_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
