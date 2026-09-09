@@ -239,6 +239,8 @@ show_connection_summary() {
 check_prerequisites() {
     local profile="${1:-full}"
     local credential_scope="${2:-}"
+    local scale_limit="${3:-}"
+    local scale_context python_bin
     if [[ -z "$credential_scope" ]]; then
         case "$profile" in
             router|haproxy) credential_scope=cluster ;;
@@ -270,6 +272,9 @@ check_prerequisites() {
             exit 1
             ;;
     esac
+    python_bin="$(detect_python)"
+    scale_context="$("$python_bin" -c 'import json,sys; print(json.dumps({"preflight_scale_limit": sys.argv[1]}))' "$scale_limit")"
+    profile_args+=("--extra-vars" "$scale_context")
     profile_args+=("--extra-vars" "preflight_credential_scope=$credential_scope preflight_read_only=false")
     log_step "执行前置检查"
     if (( ${#profile_args[@]} > 0 )); then
@@ -355,7 +360,7 @@ scale_mysql_add() {
         exit 1
     fi
     validate_single_host_limit "mysql_cluster" "$limit" "mysql_ha_min_nodes"
-    check_prerequisites "mysql"
+    check_prerequisites mysql install "$limit"
     apply_kernel_optimization "$limit"
     log_step "扩容 MySQL 节点: $limit"
     run_playbook playbooks/scale-mysql.yml --limit "$limit"

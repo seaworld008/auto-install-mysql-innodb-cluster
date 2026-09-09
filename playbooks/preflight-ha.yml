@@ -9,6 +9,7 @@
     haproxy_nodes_count: "{{ groups['haproxy_lb'] | default([]) | length }}"
     preflight_credential_scope: install
     preflight_read_only: false
+    preflight_scale_limit: ""
     preflight_require_router: true
     preflight_require_haproxy: true
     preflight_require_keepalived: "{{ preflight_require_haproxy | bool }}"
@@ -83,6 +84,20 @@
       loop: "{{ preflight_target_hosts }}"
       when:
         - hostvars[item].ansible_ssh_pass is defined or hostvars[item].ansible_password is defined
+
+    - name: 在安装前验证 MySQL 扩容目标归属
+      ansible.builtin.assert:
+        that:
+          - scale_policy.mysql_scale_target_group in groups
+          - scale_targets | length == 1
+          - scale_targets | difference(groups['mysql_secondary'] | default([])) | length == 0
+          - scale_targets | difference(groups[scale_policy.mysql_scale_target_group] | default([])) | length == 0
+        fail_msg: "扩容目标必须唯一，属于 mysql_secondary 及 scale_policy.mysql_scale_target_group。"
+      vars:
+        scale_targets: "{{ query('ansible.builtin.inventory_hostnames', preflight_scale_limit) }}"
+      when:
+        - not (preflight_read_only | bool)
+        - preflight_scale_limit | length > 0
 
     - name: 检查 MySQL InnoDB Cluster 最小 HA 节点数
       assert:

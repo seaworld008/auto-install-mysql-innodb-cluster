@@ -41,7 +41,7 @@ SHA-256：`bbdef91774885a0d05f7b048c4eb89ae2bcf3a0c252ae7ca7934e63df76d93c3`。
 LAB_ROOT="$PWD/tmp/mysql-simulation"
 PYTHON="$PWD/.venv/bin/python"
 LIMACTL="$(command -v limactl)"
-"$PYTHON" tests/lab/lab.py --root "$LAB_ROOT" --ref HEAD init
+"$PYTHON" tests/lab/lab.py --root "$LAB_ROOT" --ref HEAD --topology dedicated init
 "$PYTHON" tests/lab/lab.py --root "$LAB_ROOT" --limactl "$LIMACTL" vm-create
 "$PYTHON" tests/lab/lab.py --root "$LAB_ROOT" --limactl "$LIMACTL" start
 "$PYTHON" tests/lab/lab.py --root "$LAB_ROOT" --limactl "$LIMACTL" hosts
@@ -49,8 +49,24 @@ LIMACTL="$(command -v limactl)"
 "$PYTHON" tests/lab/lab.py --root "$LAB_ROOT" --limactl "$LIMACTL" deploy -- --status
 ```
 
-`init` 只读取指定 Git commit，记录完整 SHA，拒绝覆盖既有目录；不会包含未提交改动。
+`init` 的运行源码只来自指定 Git commit，记录完整 SHA，拒绝覆盖既有目录。
+实验生成器与 Dockerfile 来自当前工具，摘要写入 manifest；它们不会替换快照中的生产脚本。
 它生成独立 SSH 密钥、强随机数据库密码、VIP 密码与组 UUID。
+
+可将 `--topology dedicated` 改为以下任一选项；每个新环境使用不同的 `LAB_ROOT`，顺序启动：
+
+| 选项 | Linux 节点布局 | 容器 CPU 合计 | 容器内存合计 |
+| --- | --- | --- | --- |
+| `dedicated` | 3 MySQL + 2 Router + 2 LB | 6 | 7680 MiB |
+| `colocated` | 3 台主机，每台运行 MySQL + Router + LB | 5.5 | 8704 MiB |
+| `mixed` | 3 MySQL（其中 2 台兼任 Router）+ 2 LB | 5 | 7680 MiB |
+| `three-entry` | 3 MySQL + 3 Router + 3 LB | 5.98 | 8704 MiB |
+
+表中已包含控制容器；VM 总上限仍为 6 CPU / 12 GiB，保留系统开销。
+拓扑来自 `examples/topologies/`，优先使用快照内示例；旧提交缺少示例时使用当前工具的
+示例，并在 manifest 中注明来源及摘要。测试地址只能从文档网段映射到专用网络，
+不接受真实外部地址或未声明主机。共置角色复用同一主机身份。
+
 控制容器依赖从该源码快照的 `requirements.txt`、`collections/requirements.yml` 复制。
 每次重建记录实际镜像摘要；基础镜像标签和 RPM 仓库后续会变化，不能承诺包级逐字节重现。
 如需逐包复现，另建经过签名验证的仓库快照，不关闭 RPM 签名检查。
@@ -110,10 +126,12 @@ LIMACTL="$(command -v limactl)"
 ```bash
 "$PYTHON" tests/lab/lab.py --root "$LAB_ROOT" --limactl "$LIMACTL" stop
 "$PYTHON" tests/lab/lab.py --root "$LAB_ROOT" --limactl "$LIMACTL" start
-"$PYTHON" tests/lab/lab.py --root "$LAB_ROOT" --limactl "$LIMACTL" docker -- start \
-  mysql-ha-lab-mysql1 mysql-ha-lab-mysql2 mysql-ha-lab-mysql3 \
-  mysql-ha-lab-router1 mysql-ha-lab-router2 mysql-ha-lab-lb1 mysql-ha-lab-lb2 mysql-ha-lab-controller
+"$PYTHON" tests/lab/lab.py --root "$LAB_ROOT" --limactl "$LIMACTL" hosts
 ```
+
+`hosts` 使用已保存的 Compose 与固定 SSH 指纹恢复节点，不重建容器。
+`stop` 会先检查容器归属；发现其他项目容器时拒绝停止专用 VM。控制容器使用 init 转发退出信号，
+旧环境的控制容器也不会占用数据库的完整停机等待时间。
 
 启动 VM 不会重建或自动恢复 MySQL 复制组。完整停机后先检查集群状态，必要时按
 [故障排查](TROUBLESHOOTING.md)受控恢复，再执行 `deploy -- --status`。

@@ -29,6 +29,27 @@
         fail_msg: "backup_config.method 仅支持 logical/xtrabackup，backup_config.type 仅支持 local/nfs/rsync。"
         success_msg: "备份方法与目标配置通过"
 
+    - name: 要求备份执行组非空且仅包含集群成员
+      ansible.builtin.assert:
+        that:
+          - groups.get(backup_config.run_on_host_group, []) | length > 0
+          - groups.get(backup_config.run_on_host_group, []) | difference(groups.get('mysql_cluster', [])) | length == 0
+        fail_msg: "备份执行组必须非空，并复用 mysql_cluster 中已有的主机身份。"
+
+    - name: 初始化备份源地址列表
+      ansible.builtin.set_fact:
+        backup_source_addresses: []
+
+    - name: 收集备份源地址
+      ansible.builtin.set_fact:
+        backup_source_addresses: "{{ backup_source_addresses + [hostvars[item].ansible_host | default(item) | lower] }}"
+      loop: "{{ groups[backup_config.run_on_host_group] }}"
+
+    - name: 拒绝通过多个别名重复备份同一主机
+      ansible.builtin.assert:
+        that: backup_source_addresses | unique | length == backup_source_addresses | length
+        fail_msg: "备份执行组包含重复地址，请使用每台 MySQL 主机的唯一 inventory 身份。"
+
     - name: 检查 rsync 远端参数
       assert:
         that:
@@ -292,6 +313,7 @@
         argv:
           - xtrabackup
           - --decompress
+          - --remove-original
           - "--target-dir={{ xtrabackup_target_dir }}"
           - "--parallel={{ backup_config.xtrabackup.parallel }}"
       when:
@@ -310,6 +332,39 @@
         - backup_config.method == 'xtrabackup'
         - backup_config.xtrabackup.prepare | bool
 
+    - name: 读取物理备份实际检查点
+      ansible.builtin.slurp:
+        src: "{{ xtrabackup_target_dir }}/xtrabackup_checkpoints"
+      register: backup_physical_checkpoints
+      when: backup_config.method == 'xtrabackup'
+
+    - name: 核对物理备份准备状态
+      ansible.builtin.assert:
+        that:
+          - >-
+            (backup_physical_checkpoints.content | b64decode)
+            is search('(?m)^backup_type\s*=\s*' ~ expected_checkpoint ~ '\s*$')
+        fail_msg: "XtraBackup 检查点与本轮请求的准备状态不一致。"
+      vars:
+        expected_checkpoint: "{{ 'full-prepared' if backup_config.xtrabackup.prepare | bool else 'full-backuped' }}"
+      when: backup_config.method == 'xtrabackup'
+
+    - name: 统计物理备份保留的压缩文件
+      ansible.builtin.find:
+        paths: "{{ xtrabackup_target_dir }}"
+        patterns: ['*.zst', '*.lz4', '*.qp']
+        recurse: true
+      register: backup_compressed_files
+      when: backup_config.method == 'xtrabackup'
+
+    - name: 已准备备份不能保留可覆盖准备结果的压缩副本
+      ansible.builtin.assert:
+        that: backup_compressed_files.matched | int == 0
+        fail_msg: "已准备备份仍含压缩原件，必须处理后再标记成功。"
+      when:
+        - backup_config.method == 'xtrabackup'
+        - backup_config.xtrabackup.prepare | bool
+
     - name: 生成备份清单
       copy:
         dest: "{{ backup_manifest_path }}"
@@ -323,6 +378,8 @@
           backup_dir={{ backup_run_root }}
           timestamp={{ backup_timestamp }}
           tool={{ backup_config.logical_tool if backup_config.method == 'logical' else xtrabackup_package_name }}
+          xtrabackup_state={{ ('full-prepared' if backup_config.xtrabackup.prepare | bool else 'full-backuped') if backup_config.method == 'xtrabackup' else 'not-applicable' }}
+          xtrabackup_compressed_files={{ backup_compressed_files.matched | default(0) if backup_config.method == 'xtrabackup' else 0 }}
       when: backup_config.create_manifest | bool
 
     - name: 检查 rsync SSH known_hosts
