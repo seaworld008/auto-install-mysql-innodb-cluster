@@ -44,6 +44,7 @@
   <text x="284" y="554" class="text">LB 2 · Standby</text>
   <text x="284" y="576" class="small">VIP failover</text>
 
+  <path d="M431 558H555V483" class="line" stroke-dasharray="6 5"/>
   <path d="M515 483H555V401H597" class="line"/>
   <path d="M555 483H597" class="line"/>
   <rect x="601" y="362" width="198" height="77" rx="12" class="node"/>
@@ -58,6 +59,7 @@
   <path d="M840 382V494" fill="none" stroke="#64c7ff" stroke-width="2.5"/>
   <path d="M799 401H840V382H882" class="line"/>
   <path d="M799 494H840V477H882" class="line"/>
+  <path d="M840 494V546H1132V536" class="line"/>
   <rect x="886" y="352" width="322" height="67" rx="12" fill="#16483f" stroke="#5dceb0"/>
   <text x="907" y="381" class="heading">Primary</text>
   <text x="907" y="405" class="small">Read / Write</text>
