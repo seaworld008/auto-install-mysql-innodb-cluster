@@ -1,4 +1,4 @@
-MySQL 数据库服务器内核优化报告 - 行业最佳实践版本
+MySQL 主机内核配置与验证报告
 ====================================================================
 生成时间: {{ ansible_date_time.iso8601 }}
 服务器: {{ inventory_hostname }}
@@ -33,3 +33,22 @@ TCP 拥塞控制: {{ mysql_kernel_params_stable['net.ipv4.tcp_congestion_control
 备份目录
 --------------------------------------------------------------------
 {{ backup_dir }}
+
+逐项 sysctl 运行值核对
+--------------------------------------------------------------------
+{% for result in sysctl_verify.results %}
+{{ result.item.key }}
+  期望: {{ result.item.value }}
+  实际: {{ result.stdout }}
+  结果: {{ 'PASS' if result.rc == 0 and (result.stdout | split | join(' ')) == (result.item.value | string | split | join(' ')) else 'FAIL' }}
+{% endfor %}
+
+THP 选中状态: {{ 'UNAVAILABLE' if thp_status.rc != 0 else ('PASS: never' if '[never]' in thp_status.stdout else 'FAIL: never 未选中') }}
+说明: sysctl 只写入受管的 99-mysql-stable-optimization.conf；报告记录实际运行值，不是性能承诺。
+
+持久化服务
+--------------------------------------------------------------------
+{% for unit in kernel_units_enabled.results %}
+{{ unit.item }}: {{ unit.stdout }} (rc={{ unit.rc }})
+{% endfor %}
+磁盘状态采集: {{ 'PASS' if scheduler_status.rc == 0 else 'FAIL' }}

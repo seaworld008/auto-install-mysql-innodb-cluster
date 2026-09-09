@@ -57,7 +57,7 @@ Router 的配置观察命令：
 
 ```bash
 ansible mysql_router "${COMMON_ARGS[@]}" -b -m command \
-  -a 'grep max_total_connections /etc/mysqlrouter/mysqlrouter.conf'
+  -a 'grep max_total_connections /var/lib/mysqlrouter/mysqlrouter.conf'
 ```
 
 配置文件存在不代表全部连接行为已验证；还应在实际应用连接池中确认超时、连接数和重连行为。

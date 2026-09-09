@@ -52,7 +52,7 @@
       {%- endif -%}
     
     # 计算共享内存大小
-    shmmax_bytes: "{{ ((ansible_memtotal_mb * 1024 * 1024 * shmmax_ratio) | round | int) if ((ansible_memtotal_mb * 1024 * 1024 * shmmax_ratio) | round | int) < 68719476736 else 68719476736 }}"
+    shmmax_bytes: "{{ ((ansible_memtotal_mb * 1024 * 1024 * (shmmax_ratio | float)) | round | int) if ((ansible_memtotal_mb * 1024 * 1024 * (shmmax_ratio | float)) | round | int) < 68719476736 else 68719476736 }}"
     
     # 文件描述符限制
     nofile_limit: >-
@@ -146,6 +146,12 @@
       - { domain: '*', type: 'hard', item: 'nproc', value: "{{ (nproc_limit | int / 2) | round | int }}" }
 
   tasks:
+    - name: 要求内核优化目标为 Linux
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.system == 'Linux'
+        fail_msg: "内核优化只允许用于 Linux 目标，不能在 macOS 控制端执行。"
+
     - name: 显示内核优化开始信息
       debug:
         msg: |
@@ -331,14 +337,23 @@
         backup: yes
       register: sysctl_config
 
+    - name: 将受管参数从旧 sysctl.conf 迁移到单一配置文件
+      ansible.posix.sysctl:
+        name: "{{ item.key }}"
+        state: absent
+        sysctl_file: /etc/sysctl.conf
+        reload: false
+      loop: "{{ mysql_kernel_params_stable | dict2items }}"
+
     - name: 应用内核参数
-      sysctl:
+      ansible.posix.sysctl:
         name: "{{ item.key }}"
         value: "{{ item.value }}"
         state: present
-        reload: yes
+        sysctl_file: /etc/sysctl.d/99-mysql-stable-optimization.conf
+        sysctl_set: true
+        reload: false
       loop: "{{ mysql_kernel_params_stable | dict2items }}"
-      ignore_errors: yes
 
     # 系统资源限制优化
     - name: 更新系统资源限制
@@ -389,7 +404,6 @@
         name: disable-thp-stable
         enabled: yes
         daemon_reload: yes
-      when: thp_service.changed
 
     # I/O调度器优化
     - name: 获取磁盘列表
@@ -483,7 +497,6 @@
         name: optimize-io-stable
         enabled: yes
         daemon_reload: yes
-      when: io_service.changed
 
     - name: 立即执行I/O优化脚本
       command: /usr/local/bin/optimize-io-stable.sh
@@ -498,27 +511,54 @@
 
     # 验证优化效果
     - name: 验证关键内核参数
-      shell: "sysctl -n {{ item.key }}"
+      ansible.builtin.command:
+        argv: [sysctl, -n, "{{ item.key }}"]
+      changed_when: false
       loop: "{{ mysql_kernel_params_stable | dict2items }}"
       register: sysctl_verify
-      ignore_errors: yes
+
+    - name: 要求运行值与期望内核参数一致
+      ansible.builtin.assert:
+        that:
+          - (item.stdout | split | join(' ')) == (item.item.value | string | split | join(' '))
+        fail_msg: "内核参数 {{ item.item.key }} 运行值与期望值不一致。"
+      loop: "{{ sysctl_verify.results }}"
+      loop_control:
+        label: "{{ item.item.key }}"
 
     - name: 验证透明大页状态
       shell: "cat /sys/kernel/mm/transparent_hugepage/enabled"
       register: thp_status
-      ignore_errors: yes
+      changed_when: false
+      failed_when: false
+
+    - name: 要求存在 THP 接口时实际选中 never
+      ansible.builtin.assert:
+        that:
+          - thp_status.rc == 0
+          - "'[never]' in thp_status.stdout"
+        fail_msg: "THP 接口存在，但未实际禁用，请检查 sysfs 写入权限与错误日志。"
+      when: thp_enabled.stat.exists
 
     - name: 验证磁盘调度器
       shell: |
         for disk in $(lsblk -dno NAME | grep -E '^(sd|nvme|xvd|vd)' | head -3); do
-          if [[ -f "/sys/block/$disk/queue/scheduler" ]]; then
+          if [ -f "/sys/block/$disk/queue/scheduler" ]; then
             scheduler=$(cat /sys/block/$disk/queue/scheduler 2>/dev/null | grep -o '\[.*\]' | tr -d '[]' || echo '未知')
             requests=$(cat /sys/block/$disk/queue/nr_requests 2>/dev/null || echo '未知')
             echo "$disk: $scheduler (队列: $requests)"
           fi
         done
       register: scheduler_status
-      ignore_errors: yes
+      changed_when: false
+      failed_when: false
+
+    - name: 验证持久化服务已启用
+      ansible.builtin.command:
+        argv: [systemctl, is-enabled, "{{ item }}"]
+      loop: [disable-thp-stable, optimize-io-stable]
+      register: kernel_units_enabled
+      changed_when: false
 
     # 生成优化报告
     - name: 生成内核优化报告
@@ -527,59 +567,13 @@
         dest: "/root/mysql_kernel_optimization_stable_report_{{ inventory_hostname }}_{{ backup_timestamp }}.txt"
         mode: '0644'
 
-    - name: 显示优化完成信息
-      debug:
+    - name: 显示内核配置验证结果
+      ansible.builtin.debug:
         msg: |
-          ==========================================
-          MySQL内核优化完成 - 行业最佳实践版本
-          ==========================================
-          服务器: {{ inventory_hostname }}
-          优化级别: {{ optimization_level }}
-          脚本版本: {{ script_version }}
-          
-          基于以下权威来源:
-          ✓ Oracle MySQL 8.0 官方性能调优指南
-          ✓ Percona MySQL 性能最佳实践
-          ✓ MariaDB 企业级部署手册
-          ✓ AWS RDS / 阿里云 / 腾讯云生产环境验证
-          
-          ==========================================
-          关键参数验证 (动态调整):
-          ==========================================
-          连接队列: {{ mysql_kernel_params_stable['net.core.somaxconn'] }}
-          文件描述符: {{ mysql_kernel_params_stable['fs.file-max'] }}
-          内存交换: {{ mysql_kernel_params_stable['vm.swappiness'] }}
-          脏页比例: {{ mysql_kernel_params_stable['vm.dirty_ratio'] }}%
-          TCP拥塞控制: {{ mysql_kernel_params_stable['net.ipv4.tcp_congestion_control'] }}
-          {% if thp_status.stdout is defined %}
-          透明大页: {{ "✅ 已禁用" if "never" in thp_status.stdout else "⚠️ 未正确禁用" }}
-          {% endif %}
-          
-          ==========================================
-          配置文件位置:
-          ==========================================
-          内核参数: /etc/sysctl.d/99-mysql-stable-optimization.conf
-          系统限制: /etc/security/limits.conf
-          透明大页: /etc/systemd/system/disable-thp-stable.service
-          I/O优化: /etc/systemd/system/optimize-io-stable.service
-          备份配置: {{ backup_dir }}
-          优化报告: /root/mysql_kernel_optimization_stable_report_{{ inventory_hostname }}_{{ backup_timestamp }}.txt
-          
-          ==========================================
-          稳定性保证:
-          ==========================================
-          ✓ 参数值基于系统规格动态调整
-          ✓ 保守优化，避免激进设置
-          ✓ 兼容主流Linux发行版
-          ✓ 支持MySQL 5.7+ / MariaDB 10.3+ / Percona 5.7+
-          ✓ 广泛的生产环境验证
-          
-          建议重启服务器以确保所有优化生效！
-
-  handlers:
-    - name: 重新加载systemd
-      systemd:
-        daemon_reload: yes
-
-    - name: 应用sysctl参数
-      shell: sysctl -p /etc/sysctl.d/99-mysql-stable-optimization.conf
+          内核配置已应用并核对运行值：{{ sysctl_verify.results | length }} 项。
+          THP: {{ '已选中 never' if thp_status.rc == 0 and '[never]' in thp_status.stdout else '当前环境无可用 THP 接口' }}
+          持久化服务已确认启用：disable-thp-stable、optimize-io-stable。
+          sysctl 配置: /etc/sysctl.d/99-mysql-stable-optimization.conf
+          备份目录: {{ backup_dir }}
+          报告: /root/mysql_kernel_optimization_stable_report_{{ inventory_hostname }}_{{ backup_timestamp }}.txt
+          请在维护窗口重启后复核持久化状态；本次结果不代表性能容量验收。

@@ -66,3 +66,13 @@ ansible kernel_targets -i inventory/kernel.local.yml -b -m shell \
 - `sysctl --system` 会应用所有系统配置，THP/I/O 的运行时状态也需核对；必要时在维护窗口重启。
 
 若主机已有其他调优管理工具，先统一配置归属，避免两个工具反复覆盖。
+
+## 重复执行与结果判定
+
+受管 sysctl 参数统一写入 `/etc/sysctl.d/99-mysql-stable-optimization.conf`；旧
+`/etc/sysctl.conf` 中同名的受管项会在备份后移除，其他参数保留。每项运行值会与期望值
+核对，失败时不报告整体成功。报告列出期望值、实际值和逐项结果。
+
+每次执行都会确认 THP 与 I/O 持久化服务已启用；即使 unit 文件未变化，也能恢复被禁用的服务。
+THP 以输出中实际选中的 `[never]` 为准，而不是仅包含可选项 `never`。目标必须为 Linux。
+重启后复查服务启用状态及实际参数，不能用文件存在替代持久化验证。
