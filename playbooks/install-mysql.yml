@@ -430,6 +430,111 @@
         - ansible_os_family == 'RedHat'
         - ansible_selinux.status | default('disabled') == 'enabled'
 
+    - name: 验证 MySQL 文件句柄目标
+      ansible.builtin.assert:
+        that:
+          - mysql_open_files_limit | string is match('^[1-9][0-9]*$')
+          - mysql_open_files_limit | int > 0
+        fail_msg: "mysql_open_files_limit 必须是正整数。"
+
+    - name: 读取 MySQL 文件句柄内核上限
+      ansible.builtin.command:
+        argv: [sysctl, -n, "{{ item }}"]
+      loop: [fs.nr_open, fs.file-max]
+      register: mysql_kernel_file_limits
+      changed_when: false
+
+    - name: 要求内核支持 MySQL 文件句柄目标
+      ansible.builtin.assert:
+        that:
+          - item.stdout | int >= mysql_open_files_limit | int
+        fail_msg: "{{ item.item }} 小于 mysql_open_files_limit；请先调整主机内核上限。"
+      loop: "{{ mysql_kernel_file_limits.results }}"
+
+    - name: 创建 MySQL systemd 配置目录
+      ansible.builtin.file:
+        path: "/etc/systemd/system/{{ mysql_service_name }}.service.d"
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: 设置 MySQL systemd 文件句柄上限
+      ansible.builtin.copy:
+        dest: "/etc/systemd/system/{{ mysql_service_name }}.service.d/50-innodb-cluster-limits.conf"
+        content: |
+          [Service]
+          LimitNOFILE={{ mysql_open_files_limit | int }}
+        owner: root
+        group: root
+        mode: '0644'
+      register: mysql_systemd_limits_config
+      notify: restart mysql
+
+    - name: 加载 MySQL systemd 配置
+      ansible.builtin.systemd_service:
+        daemon_reload: true
+      changed_when: false
+
+    - name: 读取 systemd 解析后的 MySQL 文件句柄上限
+      ansible.builtin.command:
+        argv: [systemctl, show, "{{ mysql_service_name }}", -p, LimitNOFILE, --value]
+      register: mysql_systemd_nofile
+      changed_when: false
+
+    - name: 读取 systemd 解析后的 MySQL 文件句柄软限制
+      ansible.builtin.command:
+        argv: [systemctl, show, "{{ mysql_service_name }}", -p, LimitNOFILESoft, --value]
+      register: mysql_systemd_nofile_soft
+      changed_when: false
+
+    - name: 在重启前拒绝冲突的 systemd 文件句柄配置
+      ansible.builtin.assert:
+        that:
+          - mysql_systemd_nofile.stdout is match('^[1-9][0-9]*$')
+          - mysql_systemd_nofile.stdout | int >= mysql_open_files_limit | int
+          - mysql_systemd_nofile.stdout | int <= mysql_kernel_file_limits.results[0].stdout | int
+          - mysql_systemd_nofile_soft.stdout is match('^[1-9][0-9]*$')
+          - mysql_systemd_nofile_soft.stdout | int >= mysql_open_files_limit | int
+          - mysql_systemd_nofile_soft.stdout | int <= mysql_systemd_nofile.stdout | int
+        fail_msg: "systemd 的 LimitNOFILE 与目标或内核上限冲突，请检查该 MySQL 服务的其他 drop-in。"
+
+    - name: 读取配置应用前的 MySQL 主进程
+      ansible.builtin.command:
+        argv: [systemctl, show, "{{ mysql_service_name }}", -p, MainPID, --value]
+      register: mysql_pre_restart_pid
+      changed_when: false
+      failed_when: mysql_pre_restart_pid.rc != 0 or not (mysql_pre_restart_pid.stdout is match('^[0-9]+$'))
+
+    - name: 读取已有 MySQL 进程的文件句柄容量
+      ansible.builtin.slurp:
+        src: "/proc/{{ mysql_pre_restart_pid.stdout }}/limits"
+      register: mysql_pre_restart_limits
+      when: mysql_pre_restart_pid.stdout | int > 0
+
+    - name: 解析已有 MySQL 进程的文件句柄容量
+      ansible.builtin.set_fact:
+        mysql_running_nofile: >-
+          {{ mysql_pre_restart_limits.content | default('') | b64decode
+             | regex_findall('(?m)^Max open files\s+(\d+)\s+(\d+)') }}
+
+    - name: 要求已有 MySQL 进程限制可验证
+      ansible.builtin.assert:
+        that: mysql_running_nofile | length == 1
+        fail_msg: "无法读取已有 mysqld 进程的文件句柄容量。"
+      when: mysql_pre_restart_pid.stdout | int > 0
+
+    - name: 让已有进程收敛到文件句柄目标
+      ansible.builtin.debug:
+        msg: "已有 mysqld 进程限制与 systemd 配置不同，将在当前滚动批次内重启使配置生效。"
+      changed_when: true
+      when:
+        - mysql_pre_restart_pid.stdout | int > 0
+        - >-
+          mysql_running_nofile[0][0] | int != mysql_systemd_nofile_soft.stdout | int
+          or mysql_running_nofile[0][1] | int != mysql_systemd_nofile.stdout | int
+      notify: restart mysql
+
     - name: 配置MySQL配置文件
       template:
         src: ../roles/mysql-server/templates/my.cnf.j2
@@ -462,6 +567,30 @@
         host: "{{ ansible_default_ipv4.address }}"
         delay: 5
         timeout: 180
+
+    - name: 读取运行中的 MySQL 主进程
+      ansible.builtin.command:
+        argv: [systemctl, show, "{{ mysql_service_name }}", -p, MainPID, --value]
+      register: mysql_main_pid
+      changed_when: false
+      failed_when: mysql_main_pid.rc != 0 or not (mysql_main_pid.stdout is match('^[1-9][0-9]*$'))
+
+    - name: 读取 MySQL 进程实际资源限制
+      ansible.builtin.slurp:
+        src: "/proc/{{ mysql_main_pid.stdout }}/limits"
+      register: mysql_process_limits
+
+    - name: 核对 MySQL 实际文件句柄容量
+      ansible.builtin.assert:
+        that:
+          - mysql_actual_nofile | length == 1
+          - mysql_actual_nofile[0][0] | int == mysql_systemd_nofile_soft.stdout | int
+          - mysql_actual_nofile[0][1] | int == mysql_systemd_nofile.stdout | int
+        fail_msg: "mysqld 进程的实际文件句柄限制与 systemd 配置不一致。"
+      vars:
+        mysql_actual_nofile: >-
+          {{ mysql_process_limits.content | b64decode
+             | regex_findall('(?m)^Max open files\s+(\d+)\s+(\d+)') }}
 
     - name: 探测目标 root 密码是否已生效（RedHat）
       when: ansible_os_family == 'RedHat'
@@ -724,3 +853,4 @@
       systemd:
         name: "{{ mysql_service_name }}"
         state: restarted
+        daemon_reload: yes

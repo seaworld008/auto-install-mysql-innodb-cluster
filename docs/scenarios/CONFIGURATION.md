@@ -70,3 +70,14 @@ ansible mysql_router "${COMMON_ARGS[@]}" -b -m command \
 - 回退参数：恢复变更前的本地 settings，再通过相同入口逐台应用并检查状态。
 - `config_manager.sh --restore <备份文件名>` 只恢复备份里的档位，不覆盖当前其他配置。
 - 不修改运行集群的 UUID 来解决配置冲突，应把本地配置对齐到确认过的实际组身份。
+
+## MySQL 文件句柄容量
+
+`mysql_open_files_limit` 来自所选硬件档位，也可在 settings 中明确覆盖。部署会写入
+`/etc/systemd/system/mysqld.service.d/50-innodb-cluster-limits.conf`（Debian / Ubuntu 为
+`mysql.service.d`），与其他 MySQL 配置一起逐节点重启，并读取进程的实际 soft / hard
+限制确认容量。无需修改发行包自带的 service 文件。
+
+目标必须不大于 `fs.nr_open` / `fs.file-max`；保留其他管理员 drop-in，但若其解析结果
+与目标或内核上限冲突，会在重启前中止。不要只修改 my.cnf 的 `open_files_limit`，因为
+systemd 管理的服务还受 `LimitNOFILE` 约束。

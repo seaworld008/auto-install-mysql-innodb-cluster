@@ -124,6 +124,8 @@ VAULT_ARGS=(--vault-password-file ~/.config/ansible/mysql-cluster-vault-pass)
   已生效时跳过首次临时密码流程，无法安全探测或恢复时直接阻断。
 - Router 默认关闭跨客户端空闲后端连接复用（`mysql_router_max_idle_server_connections: 0`），
   应用使用有界连接池；连接与会话语义见 [应用接入指南](docs/runbooks/APPLICATION_CONNECTIONS.md)。
+- MySQL 文件句柄容量通过专用 systemd drop-in 应用；逐节点重启前检查内核和服务限制，
+  启动后核对进程实际容量，避免参数只写入文件却未生效。
 - HAProxy 只接入 Router，避免主从切换后静态 MySQL primary 路径失效。
 - HAProxy stats 默认仅监听 `127.0.0.1:8404`。
 - Keepalived 跟踪 HAProxy systemd 状态；连续检查失败后进入 `FAULT` 并释放 VIP。

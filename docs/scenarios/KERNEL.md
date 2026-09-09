@@ -79,8 +79,9 @@ THP 以输出中实际选中的 `[never]` 为准，而不是仅包含可选项 `
 
 通用 sysctl 与 PAM 参数分别由 `inventory/group_vars/all.yml` 中
 `mysql_kernel_params_stable`、`mysql_limits_stable` 管理。PAM limits 只影响登录会话，
-不会改变 systemd 管理的 mysqld 服务限制；服务应另行检查 `systemctl show mysqld -p LimitNOFILE`
-（Ubuntu 服务名为 `mysql`），并按该服务的容量需求配置 drop-in。
+不会改变 systemd 管理的 mysqld 服务限制。MySQL 安装及配置流程会按
+`mysql_open_files_limit` 管理专用 service drop-in 并验证实际容量，详见
+[文件句柄配置](CONFIGURATION.md#mysql-文件句柄容量)。
 
 I/O 脚本只处理可写的整块磁盘，跳过只读介质。它按内核支持情况选择调度器，默认队列深度为
 SSD 128、HDD 64，可用 `mysql_kernel_io_queue_depth_ssd` / `mysql_kernel_io_queue_depth_hdd`
