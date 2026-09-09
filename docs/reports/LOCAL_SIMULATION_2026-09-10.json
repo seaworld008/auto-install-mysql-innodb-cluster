@@ -3,7 +3,7 @@
   "date": "2026-09-10",
   "scope": "isolated functional deployment and recovery acceptance",
   "original_source_sha": "c96c6caf0cc319e49485f6ab85c5c957004cfd86",
-  "final_runtime_sha": "80930d67c44c1b50b565fab0281300ca13608f04",
+  "final_runtime_sha": "8c22679d045ad5eee967c4444fc3a1cdb6528693",
   "stages": [
     {
       "label": "dedicated-release-full",
@@ -452,6 +452,54 @@
       "args": [
         "--status"
       ]
+    },
+    {
+      "label": "credential-fresh",
+      "source_sha": "8c22679d045ad5eee967c4444fc3a1cdb6528693",
+      "source_digest": "129eadfab00539d3a551940730146ad1faac541d1a015a6719f04ed47b502612",
+      "args": [
+        "--mysql-only"
+      ],
+      "config_sha256": {
+        "hosts.local.yml": "583ea38e6136cd04c18d5dcf19857ea65334d94c9856eeba680a21889e3b1bbe",
+        "overrides.yml": "52ec044597c8716238d827f2f1350ce3d9fbf9209a8f62b44b74dabcdc053fd8"
+      },
+      "started_at": "2026-09-09T21:55:18.342871+00:00",
+      "returncode": 0,
+      "seconds": 441.02,
+      "result": "PASS"
+    },
+    {
+      "label": "credential-rotate",
+      "source_sha": "8c22679d045ad5eee967c4444fc3a1cdb6528693",
+      "source_digest": "129eadfab00539d3a551940730146ad1faac541d1a015a6719f04ed47b502612",
+      "args": [
+        "--mysql-only"
+      ],
+      "config_sha256": {
+        "hosts.local.yml": "583ea38e6136cd04c18d5dcf19857ea65334d94c9856eeba680a21889e3b1bbe",
+        "overrides.yml": "52ec044597c8716238d827f2f1350ce3d9fbf9209a8f62b44b74dabcdc053fd8"
+      },
+      "started_at": "2026-09-09T22:02:44.403104+00:00",
+      "returncode": 0,
+      "seconds": 152.76,
+      "result": "PASS"
+    },
+    {
+      "label": "credential-recreate",
+      "source_sha": "8c22679d045ad5eee967c4444fc3a1cdb6528693",
+      "source_digest": "129eadfab00539d3a551940730146ad1faac541d1a015a6719f04ed47b502612",
+      "args": [
+        "--mysql-only"
+      ],
+      "config_sha256": {
+        "hosts.local.yml": "583ea38e6136cd04c18d5dcf19857ea65334d94c9856eeba680a21889e3b1bbe",
+        "overrides.yml": "52ec044597c8716238d827f2f1350ce3d9fbf9209a8f62b44b74dabcdc053fd8"
+      },
+      "started_at": "2026-09-09T22:05:21.848641+00:00",
+      "returncode": 0,
+      "seconds": 155.09,
+      "result": "PASS"
     }
   ],
   "topologies": {
@@ -1140,7 +1188,7 @@
     ]
   },
   "static_validation": {
-    "unit_tests": 93,
+    "unit_tests": 94,
     "gate_commands": 48,
     "result": "PASS"
   },
@@ -1194,17 +1242,21 @@
   },
   "cleanup": {
     "status": "PASS",
-    "owned_vm_count_removed": 2,
+    "owned_vm_count_removed": 3,
     "removed_lab_roots": [
       "tmp/ha-validation-20260910",
-      "tmp/kernel-validation-20260910"
+      "tmp/kernel-validation-20260910",
+      "tmp/credential-regression-20260910"
     ],
     "virtual_disks_data_backups_images_credentials_and_cache_removed": true,
     "short_socket_metadata_removed": true,
     "lima_download_removed": true,
     "lab_allocated_gib_before_cleanup": 10.138,
     "preserved": "Tracked rebuild templates, probes, plans and sanitized report; pre-existing unrelated workspaces were retained.",
-    "colima_state_unchanged": true
+    "colima_state_unchanged": true,
+    "supplemental_lab_allocated_gib_before_cleanup": 6.443,
+    "raw_initial_evidence_with_synthetic_ledgers_removed": true,
+    "local_validation_download_cache_removed": true
   },
   "unverified_boundaries": [
     "native RHEL kernel",
@@ -1253,5 +1305,203 @@
       "reason": "Full bounded backup filesystem must fail",
       "source_sha": "f09bd65a5e9fd449fbfa380f068dacc98082559c"
     }
-  ]
+  ],
+  "credential_regression": {
+    "source": {
+      "source_sha": "8c22679d045ad5eee967c4444fc3a1cdb6528693",
+      "source_digest": "129eadfab00539d3a551940730146ad1faac541d1a015a6719f04ed47b502612"
+    },
+    "result": "PASS",
+    "stages": {
+      "credential-fresh": {
+        "label": "credential-fresh",
+        "source_sha": "8c22679d045ad5eee967c4444fc3a1cdb6528693",
+        "source_digest": "129eadfab00539d3a551940730146ad1faac541d1a015a6719f04ed47b502612",
+        "args": [
+          "--mysql-only"
+        ],
+        "config_sha256": {
+          "hosts.local.yml": "583ea38e6136cd04c18d5dcf19857ea65334d94c9856eeba680a21889e3b1bbe",
+          "overrides.yml": "52ec044597c8716238d827f2f1350ce3d9fbf9209a8f62b44b74dabcdc053fd8"
+        },
+        "started_at": "2026-09-09T21:55:18.342871+00:00",
+        "returncode": 0,
+        "seconds": 441.02,
+        "result": "PASS"
+      },
+      "credential-rotate": {
+        "label": "credential-rotate",
+        "source_sha": "8c22679d045ad5eee967c4444fc3a1cdb6528693",
+        "source_digest": "129eadfab00539d3a551940730146ad1faac541d1a015a6719f04ed47b502612",
+        "args": [
+          "--mysql-only"
+        ],
+        "config_sha256": {
+          "hosts.local.yml": "583ea38e6136cd04c18d5dcf19857ea65334d94c9856eeba680a21889e3b1bbe",
+          "overrides.yml": "52ec044597c8716238d827f2f1350ce3d9fbf9209a8f62b44b74dabcdc053fd8"
+        },
+        "started_at": "2026-09-09T22:02:44.403104+00:00",
+        "returncode": 0,
+        "seconds": 152.76,
+        "result": "PASS"
+      },
+      "credential-recreate": {
+        "label": "credential-recreate",
+        "source_sha": "8c22679d045ad5eee967c4444fc3a1cdb6528693",
+        "source_digest": "129eadfab00539d3a551940730146ad1faac541d1a015a6719f04ed47b502612",
+        "args": [
+          "--mysql-only"
+        ],
+        "config_sha256": {
+          "hosts.local.yml": "583ea38e6136cd04c18d5dcf19857ea65334d94c9856eeba680a21889e3b1bbe",
+          "overrides.yml": "52ec044597c8716238d827f2f1350ce3d9fbf9209a8f62b44b74dabcdc053fd8"
+        },
+        "started_at": "2026-09-09T22:05:21.848641+00:00",
+        "returncode": 0,
+        "seconds": 155.09,
+        "result": "PASS"
+      }
+    },
+    "before": {
+      "db1": {
+        "uuid_sha256": "d10a0b8307d76a88077216eb43e062027594cb00b5248396ce47ff6532234f9a",
+        "report_host": "172.30.88.11",
+        "hostname": "db1",
+        "role": "SECONDARY",
+        "online": 3,
+        "rows": 100,
+        "data_sha256": "b7ece0915d973f9f78d7a1ae8e1d552db2a4ceee27a4b565cb446a8df4d6ca8f",
+        "ddl_sha256": "e0960e8c98febb040b93ab95a9d6ffa9b7807b33382ba015600f245d548af287",
+        "admin_exists": 1,
+        "pid": "1498"
+      },
+      "db2": {
+        "uuid_sha256": "a3e0941657bcac289aef17a335cb2b3722c734a907a66d0924c88054961d9b09",
+        "report_host": "172.30.88.12",
+        "hostname": "db2",
+        "role": "PRIMARY",
+        "online": 3,
+        "rows": 100,
+        "data_sha256": "b7ece0915d973f9f78d7a1ae8e1d552db2a4ceee27a4b565cb446a8df4d6ca8f",
+        "ddl_sha256": "e0960e8c98febb040b93ab95a9d6ffa9b7807b33382ba015600f245d548af287",
+        "admin_exists": 1,
+        "pid": "2195"
+      },
+      "db3": {
+        "uuid_sha256": "c3f02cce8537de69a88f5dabf7f3b6c9b6e09427a2f1e6e70414b1a0c4b9c152",
+        "report_host": "172.30.88.13",
+        "hostname": "db3",
+        "role": "SECONDARY",
+        "online": 3,
+        "rows": 100,
+        "data_sha256": "b7ece0915d973f9f78d7a1ae8e1d552db2a4ceee27a4b565cb446a8df4d6ca8f",
+        "ddl_sha256": "e0960e8c98febb040b93ab95a9d6ffa9b7807b33382ba015600f245d548af287",
+        "admin_exists": 1,
+        "pid": "2186"
+      }
+    },
+    "rotation": {
+      "result": "PASS",
+      "new_password_all_nodes": true,
+      "old_password_rejected_all_nodes": true,
+      "identity_data_pid_unchanged": true
+    },
+    "admin_removed_all_nodes": true,
+    "recreation": {
+      "result": "PASS",
+      "account_all_nodes": true,
+      "identity_data_pid_unchanged": true
+    },
+    "after": {
+      "db1": {
+        "uuid_sha256": "d10a0b8307d76a88077216eb43e062027594cb00b5248396ce47ff6532234f9a",
+        "report_host": "172.30.88.11",
+        "hostname": "db1",
+        "role": "SECONDARY",
+        "online": 3,
+        "rows": 100,
+        "data_sha256": "b7ece0915d973f9f78d7a1ae8e1d552db2a4ceee27a4b565cb446a8df4d6ca8f",
+        "ddl_sha256": "e0960e8c98febb040b93ab95a9d6ffa9b7807b33382ba015600f245d548af287",
+        "admin_exists": 1,
+        "pid": "1498"
+      },
+      "db2": {
+        "uuid_sha256": "a3e0941657bcac289aef17a335cb2b3722c734a907a66d0924c88054961d9b09",
+        "report_host": "172.30.88.12",
+        "hostname": "db2",
+        "role": "PRIMARY",
+        "online": 3,
+        "rows": 100,
+        "data_sha256": "b7ece0915d973f9f78d7a1ae8e1d552db2a4ceee27a4b565cb446a8df4d6ca8f",
+        "ddl_sha256": "e0960e8c98febb040b93ab95a9d6ffa9b7807b33382ba015600f245d548af287",
+        "admin_exists": 1,
+        "pid": "2195"
+      },
+      "db3": {
+        "uuid_sha256": "c3f02cce8537de69a88f5dabf7f3b6c9b6e09427a2f1e6e70414b1a0c4b9c152",
+        "report_host": "172.30.88.13",
+        "hostname": "db3",
+        "role": "SECONDARY",
+        "online": 3,
+        "rows": 100,
+        "data_sha256": "b7ece0915d973f9f78d7a1ae8e1d552db2a4ceee27a4b565cb446a8df4d6ca8f",
+        "ddl_sha256": "e0960e8c98febb040b93ab95a9d6ffa9b7807b33382ba015600f245d548af287",
+        "admin_exists": 1,
+        "pid": "2186"
+      }
+    },
+    "installed_versions": {
+      "db1": [
+        "mysql-community-server-8.4.11-1.el9.x86_64",
+        "mysql-shell-8.4.10-1.el9.x86_64"
+      ],
+      "db2": [
+        "mysql-community-server-8.4.11-1.el9.x86_64",
+        "mysql-shell-8.4.10-1.el9.x86_64"
+      ],
+      "db3": [
+        "mysql-community-server-8.4.11-1.el9.x86_64",
+        "mysql-shell-8.4.10-1.el9.x86_64"
+      ]
+    },
+    "image_ids": [
+      {
+        "Id": "sha256:db2051003509c8f67f2fd5382d79ef0724febc1581e653b6e7dd6a40d0ab292b",
+        "Architecture": "amd64",
+        "Os": "linux"
+      },
+      {
+        "Id": "sha256:b0a96d4fe845e71ea69e1d0cbcc8ece719b7a0532482a9f015e25faffb2213fa",
+        "Architecture": "arm64",
+        "Os": "linux"
+      }
+    ],
+    "docker_version": "29.8.0",
+    "actual_limits": {
+      "db1": {
+        "Memory": 1610612736,
+        "NanoCpus": 1500000000
+      },
+      "db2": {
+        "Memory": 1610612736,
+        "NanoCpus": 1500000000
+      },
+      "db3": {
+        "Memory": 1610612736,
+        "NanoCpus": 1500000000
+      },
+      "controller": {
+        "Memory": 1073741824,
+        "NanoCpus": 1000000000
+      }
+    },
+    "resources": {
+      "samples": 68,
+      "container_memory_sum_peak_gib": 2.50138671875,
+      "container_cpu_sum_peak_cores": 2.5381,
+      "vm_used_from_available_peak_gib": 2.932994842529297,
+      "disk_allocated_at_export_bytes": 6711631872,
+      "oom_events_captured": 0
+    }
+  }
 }
