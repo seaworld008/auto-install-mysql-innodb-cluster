@@ -85,19 +85,17 @@ LIMACTL="$(command -v limactl)"
 ## 可复用业务探针
 
 初始化工具会生成单独的随机 `lab_app_password`，并把测试探针复制到 `config/probe/`，
-在 manifest 中记录每个脚本的摘要。探针属于测试工具，不负责安装软件或管理复制组。
+在 manifest 中记录每个脚本的摘要，`probe` / `verify-ledger` 在执行前后均核对摘要。
+脚本缺失、被修改或替换为符号链接时拒绝运行。探针属于测试工具，不负责安装软件或管理复制组。
 它只接受本地模拟网段和已声明主机，默认测试固定的三类入口。
 
 完整部署成功后执行一次初始化；已有 `ha_lab` 数据库时会拒绝覆盖：
 
 ```bash
-"$PYTHON" tests/lab/lab.py --root "$LAB_ROOT" --limactl "$LIMACTL" docker -- \
-  exec mysql-ha-lab-controller python /lab/config/probe/probe.py init
-"$PYTHON" tests/lab/lab.py --root "$LAB_ROOT" --limactl "$LIMACTL" docker -- \
-  exec mysql-ha-lab-controller python /lab/config/probe/probe.py ports --loops 50
-"$PYTHON" tests/lab/lab.py --root "$LAB_ROOT" --limactl "$LIMACTL" docker -- \
-  exec mysql-ha-lab-controller python /lab/config/probe/probe.py signature \
-  > "$LAB_ROOT/reports/data-baseline.json"
+"$PYTHON" tests/lab/lab.py --root "$LAB_ROOT" --limactl "$LIMACTL" probe init
+"$PYTHON" tests/lab/lab.py --root "$LAB_ROOT" --limactl "$LIMACTL" probe ports --loops 50
+(set -o noclobber; "$PYTHON" tests/lab/lab.py --root "$LAB_ROOT" --limactl "$LIMACTL" probe signature \
+  > "$LAB_ROOT/reports/data-baseline.json")
 ```
 
 探针生成 1000 条种子记录和 8 条类型样本，覆盖中文、二进制、JSON、精确小数、微秒时间与 NULL。
@@ -107,17 +105,16 @@ LIMACTL="$(command -v limactl)"
 在另一个终端持续写入，同时按测试表执行滚动变更或故障注入：
 
 ```bash
-"$PYTHON" tests/lab/lab.py --root "$LAB_ROOT" --limactl "$LIMACTL" docker -- \
-  exec mysql-ha-lab-controller python /lab/config/probe/probe.py writer \
+"$PYTHON" tests/lab/lab.py --root "$LAB_ROOT" --limactl "$LIMACTL" probe writer \
   --label writer-failover-01 --seconds 180
-"$PYTHON" tests/lab/lab.py --root "$LAB_ROOT" --limactl "$LIMACTL" docker -- \
-  exec mysql-ha-lab-controller python /lab/config/probe/verify_ledger.py
+"$PYTHON" tests/lab/lab.py --root "$LAB_ROOT" --limactl "$LIMACTL" verify-ledger --label writer-failover-01
 ```
 
 每次使用新的 `writer-` 标签；已有账本或停止标记时拒绝覆盖。写入约每 200 ms 发起一次，
 时长最多 3600 秒。可创建 `reports/<标签>.stop` 提前结束，等待进程退出再校验。
 校验器检查每条已确认写入的 ID 与内容，并单独报告未获确认但实际已提交的记录；
-没有账本、空账本或完全没有成功写入时，不报告通过。
+必须用 `--label` 指定本轮预期账本；缺失该文件时，旧账本不能替代本轮证据。
+没有账本、空账本或完全没有成功写入时，不报告通过。需要汇总全部既有账本时，显式使用 `--all`。
 切换到新建集群前先校验并归档旧账本，不能把旧集群的账本与新集群混合核对。
 
 业务探针默认使用隔离实验的连接方式，不能据此宣称生产证书链或主机名严格校验通过。

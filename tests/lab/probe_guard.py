@@ -33,3 +33,17 @@ def load_lab():
         if not isinstance(credentials.get(key), str) or len(credentials[key]) < 20:
             raise ValueError('Initialize a private lab with generated test credentials first')
     return config, credentials
+
+
+def select_ledgers(root, config, labels=None, all_ledgers=False):
+    if bool(labels) == bool(all_ledgers):
+        raise ValueError('Select expected labels or explicitly select all existing ledgers')
+    if labels:
+        for label in labels:
+            validate_target(config, label=label)
+        paths = [root / (label + '.jsonl') for label in labels]
+    else:
+        paths = sorted(root.glob('writer-*.jsonl'))
+    if not paths or any(not path.is_file() or path.is_symlink() for path in paths):
+        raise ValueError('Expected writer ledger is missing or is not a regular file')
+    return paths
