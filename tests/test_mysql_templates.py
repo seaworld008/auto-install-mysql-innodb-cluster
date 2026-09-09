@@ -59,6 +59,19 @@ class MySQLTemplateTests(unittest.TestCase):
                 ).strip()
                 self.assertEqual(expected, rendered)
 
+    def test_table_definition_cache_respects_mysql_minimum(self) -> None:
+        variables = yaml.safe_load(
+            (REPOSITORY_ROOT / "inventory/group_vars/all.yml").read_text()
+        )
+        calculation = self.environment.from_string(
+            variables["mysql_table_definition_cache"]
+        )
+        for opened, expected in [(256, 400), (800, 400), (4000, 2000)]:
+            with self.subTest(table_open_cache=opened):
+                self.assertEqual(
+                    int(calculation.render(mysql_table_open_cache=opened)), expected
+                )
+
     def test_group_replication_addresses_render_without_remote_facts(self) -> None:
         template_lines = (
             REPOSITORY_ROOT / "roles/mysql-server/templates/my.cnf.j2"

@@ -91,3 +91,6 @@ mysql_router_max_idle_server_connections + 1024` 计算，覆盖客户端、自�
 
 目标超出主机内核上限时会中止；调整连接上限后，经 `--install-routers` 或 `--apply-config`
 逐台应用。已有 unit 正确但进程仍使用旧限制时，重跑也会恢复；正常重跑不重启健康 Router。
+
+`mysql_table_definition_cache` 默认按表缓存容量的一半计算，但至少为 MySQL 接受的 400。
+因此低资源档位不会生成随后被服务端自动改写的 128，便于对照配置与运行值。

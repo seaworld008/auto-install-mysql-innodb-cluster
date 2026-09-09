@@ -169,3 +169,39 @@ x86_64 / systemd / cgroup / 严格 SSH 连通，以及 VIP 地址操作；再次
 所有生命周期操作都会校验 Lima 实际版本与 manifest 一致。缺失磁盘时拒绝恢复或启动，
 不会按旧元数据创建新磁盘。`init` 同时记录源码内容、权限和链接摘要；`deploy` 前再次验证，
 避免把已修改的测试副本结果归到旧提交。需要测试新补丁时，先提交，再使用新输出目录初始化。
+
+## 原生 Linux 内核专项夹具
+
+容器共享 VM 内核，不能用容器中的 sysctl/THP 结果代表独立主机调优。
+需要验证 `--kernel-optimize-only` 时，先停止上面的集群 VM，再创建独立原生 Linux VM。
+本轮使用的脱敏配置保存在 [native-kernel.yaml](../../tests/lab/native-kernel.yaml)：
+Ubuntu 24.04 ARM64、2 CPU、3 GiB、12 GiB 稀疏磁盘，没有安装 Docker。
+
+重建时沿用上文的外置磁盘原则：先把固定摘要的 Ubuntu 镜像下载至新实验目录，
+用 `qemu-img convert -f qcow2 -O raw` 转换，再用 `qemu-img resize -f raw ... 12G`
+设定上限。将模板的 `mounts[0].location` 替换为该实验目录；Lima 2.2.0 的实例元数据
+放在独立短路径目录，`mysql-ha/disk` 只链接到该外置 raw 文件。不要对原有集群磁盘缩容。
+此模板是独立 VM 夹具，不应直接覆盖已初始化的集群实验配置。
+
+启动后，从该专用 Lima 实例读取 SSH 端口、登录用户和 Ed25519 主机公钥，固定指纹，
+使用 SSH 连接的 inventory 执行 [内核专项命令](../scenarios/KERNEL.md)。
+`ansible_connection` 必须为 `ssh`，不能用 `local` 将 Linux 调优误跑到 Mac 控制端。
+内核操作不需要数据库凭据。控制端使用 Python 3.12+ 和仓库声明的 Ansible 依赖。
+
+验收分四步：
+
+1. 原生内核首次执行，逐项核对运行 sysctl、THP 和适用磁盘的 I/O 参数。
+2. 重复执行，比较受管 sysctl、PAM、unit 和脚本内容摘要。
+3. 人为禁用两个持久化 unit，并在该测试 VM 内改变 THP/I/O 参数；重跑后确认恢复。
+4. 完整停止再启动 VM，重新核对所有值，另用 `systemd-run --wait --collect /bin/true`
+   验证新 systemd 服务能够启动。保留未受管配置，不能通过删除系统配置消除冲突。
+
+模板显式设置 `ssh_deletekeys: false`，避免该专用 VM 冷启动时 cloud-init 重建主机密钥。
+仍必须比较固定指纹；出现变化先调查原因，不自动接受新指纹。
+若外置目录过长导致控制端 Unix socket 路径超限，只把 `TMPDIR` 和
+`ANSIBLE_SSH_CONTROL_PATH_DIR` 放入本次短路径元数据目录，下载、源码、磁盘与日志仍在外置盘。
+设置 `PYTHONDONTWRITEBYTECODE=1`，避免 Ansible 给封存源码写入 Python 字节码缓存。
+
+结束后与集群实验分别核对归属、删除 VM、外置 raw 磁盘及短路径元数据；
+本模板和脱敏验收报告可保留，不保留 SSH 私钥、原始日志、备份或测试数据库。
+原生 Ubuntu 的通过结果也不能替代 RHEL 内核与 SELinux enforcing 验收。

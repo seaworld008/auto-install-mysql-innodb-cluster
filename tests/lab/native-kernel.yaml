@@ -1,0 +1,46 @@
+minimumLimaVersion: 2.2.0
+vmType: vz
+arch: aarch64
+cpus: 2
+memory: 3GiB
+disk: 12GiB
+images:
+  - location: https://cloud-images.ubuntu.com/minimal/releases/noble/release-20260716/ubuntu-24.04-minimal-cloudimg-arm64.img
+    arch: aarch64
+    digest: sha256:7e938df669e3b1923595eeda97aa28569350c5283e05a835cc912a2486a54934
+mountType: virtiofs
+mounts:
+  - location: REPLACED_BY_PREPARE
+    mountPoint: /lab
+    writable: true
+ssh:
+  loadDotSSHPubKeys: false
+containerd:
+  system: false
+  user: false
+vmOpts:
+  vz:
+    rosetta:
+      enabled: true
+      binfmt: true
+    diskImageFormat: raw
+portForwards:
+  - guestPortRange:
+      - 1
+      - 65535
+    proto: tcp
+    ignore: true
+  - guestPortRange:
+      - 1
+      - 65535
+    proto: udp
+    ignore: true
+provision:
+  - mode: system
+    script: |
+      #!/bin/bash
+      set -euo pipefail
+      export DEBIAN_FRONTEND=noninteractive
+      apt-get update
+      apt-get install -y python3 sudo iproute2 kmod procps util-linux bash ca-certificates
+      printf '%s\n' 'ssh_deletekeys: false' > /etc/cloud/cloud.cfg.d/99-mysql-ha-lab-hostkeys.cfg

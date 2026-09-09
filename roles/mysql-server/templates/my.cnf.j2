@@ -27,7 +27,7 @@ back_log = {{ mysql_back_log }}
 thread_cache_size = {{ mysql_thread_cache_size }}
 thread_stack = {{ mysql_thread_stack }}
 table_open_cache = {{ mysql_table_open_cache }}
-table_definition_cache = {{ (mysql_table_open_cache * 0.5) | int }}
+table_definition_cache = {{ mysql_table_definition_cache }}
 table_open_cache_instances = {{ mysql_table_open_cache_instances }}
 # 文件句柄上限由同一部署流程写入 systemd LimitNOFILE。
 max_allowed_packet = {{ mysql_max_allowed_packet }}
