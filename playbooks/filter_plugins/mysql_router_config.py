@@ -17,6 +17,10 @@ def mysql_router_config(content, settings):
         ):
             if settings[key] not in allowed:
                 raise ValueError('Routing strategy is incompatible with destination role')
+        idle_limit = settings['max_idle_server_connections']
+        if (not str(idle_limit).isascii() or not str(idle_limit).isdigit()
+                or len(str(idle_limit)) > 10 or int(idle_limit) > 4294967296):
+            raise ValueError('Idle connection limit must be an integer in 0..4294967296')
         parser.read_string(content)
         required = ('routing:bootstrap_rw', 'routing:bootstrap_ro')
         if not all(parser.has_section(section) for section in required):
@@ -30,6 +34,7 @@ def mysql_router_config(content, settings):
             parser.add_section(split)
         defaults = {
             'max_total_connections': settings['max_total_connections'],
+            'max_idle_server_connections': int(idle_limit),
             'read_timeout': settings['metadata_read_timeout'],
             'connect_timeout': settings['metadata_connect_timeout'],
         }

@@ -31,7 +31,7 @@
 
 - **把多组件部署串起来**：从主机与参数检查开始，依次安装数据库、配置集群、部署路由与入口，最后检查整体状态。
 - **把应用入口与数据库角色分开**：应用通过 VIP 接入，Router 根据集群元数据选择后端，减少应用对固定主节点地址的依赖。
-- **把配置变更纳入日常运维**：硬件档位、连接数、超时和入口参数集中管理，修改后按节点应用。
+- **把配置变更纳入日常运维**：硬件档位、连接数、超时和服务文件句柄集中管理，修改后按节点应用，并核对实际生效值。
 - **把保护措施放进执行流程**：保留 Router 身份与 keyring，检查集群身份和缩容后的节点数量，遇到失败停止后续步骤。
 - **把操作方法交给整个团队**：提供中文优先的部署指南、操作手册、变量参考、本地模拟和恢复演练方案，便于交接和二次开发。
 
@@ -73,7 +73,7 @@ inventory 决定，并不固定为两台。先选方案，再按对应指南替�
 | Router 层 | 独立部署、bootstrap、受管配置更新、身份与 keyring 保留 | `--install-routers` |
 | 高可用入口 | HAProxy / Keepalived 可分别操作，也可组合部署 | `--install-haproxy` / `--install-keepalived` / `--configure-lb` |
 | 应用路由 | 明确 RW、明确 RO、可选自动读写分离三类入口 | VIP `3307` / `3308` / `3309` |
-| 配置调整 | 硬件档位切换、配置验证、按节点应用受管配置 | `config_manager.sh` / `--apply-config` |
+| 配置调整 | 硬件档位切换、连接与文件句柄预算、滚动应用及运行值校验 | `config_manager.sh` / `--apply-config` |
 | MySQL 扩缩容 | 加入新成员、指定新 primary 后移除原写节点、缩容健康校验 | `--scale-mysql-add` / `--scale-mysql-remove` |
 | 接入层调整 | 部署新增 Router/LB，按目标缩减并检查最小 HA 数量 | `--install-routers` / `--configure-lb` / `--shrink-router` / `--shrink-lb` |
 | 备份 | MySQL Shell 逻辑备份、Percona XtraBackup 物理备份 | `--backup` |

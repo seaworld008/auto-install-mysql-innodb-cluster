@@ -57,6 +57,14 @@
       - mysql-server
       - mysql-shell
   tasks:
+    - name: 验证 MySQL 通告地址格式
+      ansible.builtin.assert:
+        that:
+          - mysql_report_host is string
+          - mysql_report_host | length <= 253
+          - mysql_report_host == '' or mysql_report_host is match('^[A-Za-z0-9_.-]+\\Z')
+        fail_msg: "mysql_report_host 必须为空，或不含端口/空白的 IPv4 地址或 DNS 名称。"
+
     - name: 验证目标操作系统受支持
       assert:
         that:
@@ -221,6 +229,62 @@
       ansible.builtin.stat:
         path: "{{ mysql_datadir }}/mysql"
       register: mysql_target_system_database
+
+    - name: 检查已有集群元数据目录
+      ansible.builtin.stat:
+        path: "{{ item }}/mysql_innodb_cluster_metadata"
+      loop: "{{ [mysql_datadir, mysql_default_datadir] | unique | list }}"
+      register: mysql_metadata_directories
+
+    - name: 记录已有集群身份状态
+      ansible.builtin.set_fact:
+        mysql_has_cluster_metadata: "{{ mysql_metadata_directories.results | selectattr('stat.exists') | list | length > 0 }}"
+
+    - name: 检查已有 MySQL 本地 socket
+      ansible.builtin.stat:
+        path: "{{ mysql_socket_path }}"
+      register: mysql_existing_socket
+      when: mysql_has_cluster_metadata | bool
+
+    - name: 读取已有成员的通告地址
+      ansible.mysql.mysql_query:
+        # 集群管理员账号尚待收敛；使用安装阶段已有的 root 通道。
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+        login_unix_socket: "{{ mysql_socket_path if mysql_existing_socket.stat.issock | default(false) else mysql_default_socket_path }}"
+        config_file: ""
+        query: "SELECT @@GLOBAL.report_host AS report_host, @@GLOBAL.hostname AS hostname"
+      register: mysql_existing_report_address
+      changed_when: false
+      no_log: true
+      when: mysql_has_cluster_metadata | bool
+
+    - name: 拒绝在普通部署中改变已有成员通告地址
+      ansible.builtin.assert:
+        that:
+          - >-
+            mysql_report_host == '' or
+            mysql_report_host | lower ==
+            (mysql_existing_report_address.query_result[0][0].report_host or
+             mysql_existing_report_address.query_result[0][0].hostname) | lower
+        fail_msg: >-
+          mysql_report_host 与已有成员的实际通告地址不同。
+          普通部署不会迁移已注册的成员地址；请保留当前值，按独立维护方案处理地址变更。
+      when: mysql_has_cluster_metadata | bool
+
+    - name: 保留已有成员通告地址或采用新实例配置
+      ansible.builtin.set_fact:
+        mysql_effective_report_host: >-
+          {{ mysql_report_host if mysql_report_host | length > 0 else
+             ((mysql_existing_report_address.query_result[0][0].report_host or
+               mysql_existing_report_address.query_result[0][0].hostname)
+              if mysql_has_cluster_metadata | bool else ansible_facts.nodename) }}
+
+    - name: 验证最终通告地址不含配置控制字符
+      ansible.builtin.assert:
+        that:
+          - mysql_effective_report_host == '' or mysql_effective_report_host is match('^[A-Za-z0-9_.:-]+\\Z')
+        fail_msg: "已有通告地址包含不安全字符，拒绝写入 my.cnf。"
 
     - name: 检查 datadir 迁移中断标记
       ansible.builtin.stat:
@@ -430,6 +494,111 @@
         - ansible_os_family == 'RedHat'
         - ansible_selinux.status | default('disabled') == 'enabled'
 
+    - name: 验证 MySQL 文件句柄目标
+      ansible.builtin.assert:
+        that:
+          - mysql_open_files_limit | string is match('^[1-9][0-9]*$')
+          - mysql_open_files_limit | int > 0
+        fail_msg: "mysql_open_files_limit 必须是正整数。"
+
+    - name: 读取 MySQL 文件句柄内核上限
+      ansible.builtin.command:
+        argv: [cat, "/proc/sys/{{ item | replace('.', '/') }}"]
+      loop: [fs.nr_open, fs.file-max]
+      register: mysql_kernel_file_limits
+      changed_when: false
+
+    - name: 要求内核支持 MySQL 文件句柄目标
+      ansible.builtin.assert:
+        that:
+          - item.stdout | int >= mysql_open_files_limit | int
+        fail_msg: "{{ item.item }} 小于 mysql_open_files_limit；请先调整主机内核上限。"
+      loop: "{{ mysql_kernel_file_limits.results }}"
+
+    - name: 创建 MySQL systemd 配置目录
+      ansible.builtin.file:
+        path: "/etc/systemd/system/{{ mysql_service_name }}.service.d"
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: 设置 MySQL systemd 文件句柄上限
+      ansible.builtin.copy:
+        dest: "/etc/systemd/system/{{ mysql_service_name }}.service.d/50-innodb-cluster-limits.conf"
+        content: |
+          [Service]
+          LimitNOFILE={{ mysql_open_files_limit | int }}
+        owner: root
+        group: root
+        mode: '0644'
+      register: mysql_systemd_limits_config
+      notify: restart mysql
+
+    - name: 加载 MySQL systemd 配置
+      ansible.builtin.systemd_service:
+        daemon_reload: true
+      changed_when: false
+
+    - name: 读取 systemd 解析后的 MySQL 文件句柄上限
+      ansible.builtin.command:
+        argv: [systemctl, show, "{{ mysql_service_name }}", -p, LimitNOFILE, --value]
+      register: mysql_systemd_nofile
+      changed_when: false
+
+    - name: 读取 systemd 解析后的 MySQL 文件句柄软限制
+      ansible.builtin.command:
+        argv: [systemctl, show, "{{ mysql_service_name }}", -p, LimitNOFILESoft, --value]
+      register: mysql_systemd_nofile_soft
+      changed_when: false
+
+    - name: 在重启前拒绝冲突的 systemd 文件句柄配置
+      ansible.builtin.assert:
+        that:
+          - mysql_systemd_nofile.stdout is match('^[1-9][0-9]*$')
+          - mysql_systemd_nofile.stdout | int >= mysql_open_files_limit | int
+          - mysql_systemd_nofile.stdout | int <= mysql_kernel_file_limits.results[0].stdout | int
+          - mysql_systemd_nofile_soft.stdout is match('^[1-9][0-9]*$')
+          - mysql_systemd_nofile_soft.stdout | int >= mysql_open_files_limit | int
+          - mysql_systemd_nofile_soft.stdout | int <= mysql_systemd_nofile.stdout | int
+        fail_msg: "systemd 的 LimitNOFILE 与目标或内核上限冲突，请检查该 MySQL 服务的其他 drop-in。"
+
+    - name: 读取配置应用前的 MySQL 主进程
+      ansible.builtin.command:
+        argv: [systemctl, show, "{{ mysql_service_name }}", -p, MainPID, --value]
+      register: mysql_pre_restart_pid
+      changed_when: false
+      failed_when: mysql_pre_restart_pid.rc != 0 or not (mysql_pre_restart_pid.stdout is match('^[0-9]+$'))
+
+    - name: 读取已有 MySQL 进程的文件句柄容量
+      ansible.builtin.slurp:
+        src: "/proc/{{ mysql_pre_restart_pid.stdout }}/limits"
+      register: mysql_pre_restart_limits
+      when: mysql_pre_restart_pid.stdout | int > 0
+
+    - name: 解析已有 MySQL 进程的文件句柄容量
+      ansible.builtin.set_fact:
+        mysql_running_nofile: >-
+          {{ mysql_pre_restart_limits.content | default('') | b64decode
+             | regex_findall('(?m)^Max open files\s+(\d+)\s+(\d+)') }}
+
+    - name: 要求已有 MySQL 进程限制可验证
+      ansible.builtin.assert:
+        that: mysql_running_nofile | length == 1
+        fail_msg: "无法读取已有 mysqld 进程的文件句柄容量。"
+      when: mysql_pre_restart_pid.stdout | int > 0
+
+    - name: 让已有进程收敛到文件句柄目标
+      ansible.builtin.debug:
+        msg: "已有 mysqld 进程限制与 systemd 配置不同，将在当前滚动批次内重启使配置生效。"
+      changed_when: true
+      when:
+        - mysql_pre_restart_pid.stdout | int > 0
+        - >-
+          mysql_running_nofile[0][0] | int != mysql_systemd_nofile_soft.stdout | int
+          or mysql_running_nofile[0][1] | int != mysql_systemd_nofile.stdout | int
+      notify: restart mysql
+
     - name: 配置MySQL配置文件
       template:
         src: ../roles/mysql-server/templates/my.cnf.j2
@@ -462,6 +631,30 @@
         host: "{{ ansible_default_ipv4.address }}"
         delay: 5
         timeout: 180
+
+    - name: 读取运行中的 MySQL 主进程
+      ansible.builtin.command:
+        argv: [systemctl, show, "{{ mysql_service_name }}", -p, MainPID, --value]
+      register: mysql_main_pid
+      changed_when: false
+      failed_when: mysql_main_pid.rc != 0 or not (mysql_main_pid.stdout is match('^[1-9][0-9]*$'))
+
+    - name: 读取 MySQL 进程实际资源限制
+      ansible.builtin.slurp:
+        src: "/proc/{{ mysql_main_pid.stdout }}/limits"
+      register: mysql_process_limits
+
+    - name: 核对 MySQL 实际文件句柄容量
+      ansible.builtin.assert:
+        that:
+          - mysql_actual_nofile | length == 1
+          - mysql_actual_nofile[0][0] | int == mysql_systemd_nofile_soft.stdout | int
+          - mysql_actual_nofile[0][1] | int == mysql_systemd_nofile.stdout | int
+        fail_msg: "mysqld 进程的实际文件句柄限制与 systemd 配置不一致。"
+      vars:
+        mysql_actual_nofile: >-
+          {{ mysql_process_limits.content | b64decode
+             | regex_findall('(?m)^Max open files\s+(\d+)\s+(\d+)') }}
 
     - name: 探测目标 root 密码是否已生效（RedHat）
       when: ansible_os_family == 'RedHat'
@@ -683,8 +876,9 @@
 
     - name: 等待现有集群成员恢复 ONLINE
       ansible.mysql.mysql_query:
-        login_user: "{{ mysql_cluster_user }}"
-        login_password: "{{ mysql_cluster_password }}"
+        # 实际 primary 可能排在后面的滚动批次；账号尚未收敛时仍需验证成员健康。
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
         login_unix_socket: "{{ mysql_socket_path }}"
         config_file: ""
         query: |
@@ -724,3 +918,4 @@
       systemd:
         name: "{{ mysql_service_name }}"
         state: restarted
+        daemon_reload: yes

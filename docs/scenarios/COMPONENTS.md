@@ -22,6 +22,31 @@ inventory 可以先包含最终计划的全部节点，分层操作只连接当�
 两个新的单组件入口不会隐式优化内核，也不会调用另一组件的安装 playbook。
 目前它们对整个 `haproxy_lb` 组逐台收敛，不接受 `--limit`，避免跳过 HA 验证。
 
+## 按操作准备凭据
+
+在 [公共准备](COMMON.md#4-创建加密凭据) 的 Vault 文件中只填写当前操作需要的字段。
+SSH 私钥、严格主机指纹检查及依赖主机的读取权限仍须具备。
+
+| 操作 | Vault 所需字段 |
+| --- | --- |
+| 完整部署、完整配置更新 | `mysql_root_password`、`mysql_cluster_password`、`mysql_replication_password`、`keepalived_auth_pass` |
+| MySQL-only、MySQL 扩容 | 三项 MySQL 密码 |
+| Router-only、HAProxy-only、Router 缩容、MySQL 缩容 | `mysql_cluster_password` |
+| Keepalived-only、LB 配置、整个接入层部署、LB 缩容 | `mysql_cluster_password`、`keepalived_auth_pass` |
+| `--status`、`--test-connection`（任意 scope） | `mysql_cluster_password` |
+| 逻辑备份 | `mysql_cluster_password` |
+| XtraBackup | `mysql_cluster_password`、`mysql_root_password` |
+
+例如，只部署 Router 时，Vault 内只需一项：
+
+```yaml
+mysql_cluster_password: "CHANGE_ME_CLUSTER_PASSWORD"
+```
+
+`--check-prereq --scope mysql/full` 检查的是对应安装所需配置，仍要求安装密码；
+检查已有环境健康时使用 `--status` 或 `--test-connection`。
+只读检查仍需准确的拓扑、集群身份及 VIP 配置，不能把省略凭据当作省略依赖检查。
+
 ## 1. 只部署数据库
 
 ```bash

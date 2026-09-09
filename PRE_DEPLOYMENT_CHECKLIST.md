@@ -1,5 +1,8 @@
 # 部署前检查清单
 
+本清单面向全量部署。单组件操作的依赖与凭据范围见
+[组件部署指南](docs/scenarios/COMPONENTS.md)。
+
 ## 控制节点
 
 - [ ] 控制节点使用 Python 3.12+
@@ -31,6 +34,8 @@
 - [ ] `inventory/group_vars/all.yml` 的非敏感配置已确认，未写入真实密码
 - [ ] `inventory/vault.local.yml` 是有效 Vault 密文且未被 Git 跟踪，或已配置等价外部 Secret
 - [ ] `mysql_hardware_profile` 已确认
+- [ ] `mysql_open_files_limit` 不大于目标主机的 `fs.nr_open` / `fs.file-max`，MySQL 的其他 systemd drop-in 无冲突
+- [ ] 保留 Router 空闲池默认值 `mysql_router_max_idle_server_connections: 0`；如调整，已验证混合入口事务及会话隔离
 - [ ] 已按 `docs/reference/VARIABLE_REFERENCE.md` 复核关键变量
 - [ ] Vault / 外部 Secret 已覆盖三个 `CHANGE_ME_*` 业务密码占位符
 - [ ] `keepalived_auth_pass` 已通过 Vault / 外部 Secret 覆盖，非占位值且不超过 8 个字符
@@ -87,3 +92,9 @@ ansible-playbook -i inventory/hosts.local.yml playbooks/site.yml --syntax-check 
 [组件指南](docs/scenarios/COMPONENTS.md) 覆盖只部署 MySQL、Router、HAProxy、Keepalived；
 [内核专项](docs/scenarios/KERNEL.md) 可单独执行。只读状态检查使用 `--scope` 选择范围，
 默认 full 保留全部 HA 检查；该选项不能用于缩减完整部署范围。
+
+## 成员地址发现
+
+- [ ] 新集群已选定 `mysql_report_host`：可按主机使用 `{{ ansible_host }}` 通告固定 IPv4 地址。
+- [ ] 使用默认系统主机名或自定义 DNS 名称时，所有 MySQL 与 Router 节点都能解析并访问该地址。
+- [ ] 已有集群保留当前注册地址，不通过普通配置更新迁移成员地址。

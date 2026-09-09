@@ -13,7 +13,7 @@ import time
 
 import yaml
 
-from prepare import initialize, source_digest
+from prepare import TOPOLOGIES, initialize, source_digest
 
 
 def run(args, **kwargs):
@@ -173,10 +173,42 @@ class Lab:
             '-e', '@/lab/config/overrides.yml', '-e', '@/lab/secrets/runtime.yml',
             '--skip-kernel-optimization', *args)
 
+    def verify_probe_files(self):
+        expected = self.manifest.get('probe_sha256', {})
+        if set(expected) != {'probe.py', 'probe_guard.py', 'verify_ledger.py'}:
+            raise ValueError('This lab has no sealed probe set; initialize a new lab')
+        directory = self.root / 'config/probe'
+        if directory.is_symlink():
+            raise ValueError('Probe directory must not be a symlink')
+        for name, digest in expected.items():
+            path = directory / name
+            if path.is_symlink() or not path.is_file():
+                raise ValueError('Missing regular probe file: ' + name)
+            if hashlib.sha256(path.read_bytes()).hexdigest() != digest:
+                raise ValueError('Probe changed since initialization: ' + name)
+
+    def probe(self, args, verify_ledger=False):
+        self.verify_probe_files()
+        name = 'verify_ledger.py' if verify_ledger else 'probe.py'
+        result = self.docker('exec', 'mysql-ha-lab-controller', 'python',
+                             '/lab/config/probe/' + name, *args)
+        self.verify_probe_files()
+        return result
+
     def stop(self):
         if self.lima('list', 'mysql-ha', '--format', '{{.Status}}').strip() != 'Stopped':
             names = self.docker('ps', '--format', '{{.Names}}').splitlines()
-            names = [n for n in names if n.startswith('mysql-ha-lab-')]
+            project = yaml.safe_load((self.root / 'config/compose.yml').read_text())['name']
+            for name in names:
+                labels = json.loads(self.docker('inspect', '--format', '{{json .Config.Labels}}', name))
+                if not name.startswith('mysql-ha-lab-') or labels.get('com.docker.compose.project') != project:
+                    raise ValueError('Foreign container in dedicated VM; refusing to stop it: ' + name)
+            # The controller has no database to drain. Older saved fixtures used
+            # sleep as PID 1, which otherwise consumed the full database timeout.
+            controller = 'mysql-ha-lab-controller'
+            if controller in names:
+                print(self.docker('stop', '--timeout', '10', controller))
+                names.remove(controller)
             if names:
                 print(self.docker('stop', '--timeout', '90', *names))
             print(self.lima('stop', 'mysql-ha'))
@@ -189,11 +221,13 @@ def main():
     parser.add_argument('--root', type=Path, required=True)
     parser.add_argument('--limactl', default='limactl')
     parser.add_argument('--ref', default='HEAD', help='Committed source revision for init')
-    parser.add_argument('action', choices=['init', 'vm-create', 'start', 'hosts', 'deploy', 'docker', 'stop'])
+    parser.add_argument('--topology', choices=TOPOLOGIES, default='dedicated', help='Canonical topology for a new lab')
+    parser.add_argument('action', choices=['init', 'vm-create', 'start', 'hosts', 'deploy',
+                                         'probe', 'verify-ledger', 'docker', 'stop'])
     parser.add_argument('args', nargs=argparse.REMAINDER)
     args = parser.parse_args()
     if args.action == 'init':
-        initialize(args.root, args.ref)
+        initialize(args.root, args.ref, args.topology)
         return
     lab = Lab(args.root, args.limactl)
     extra = args.args[1:] if args.args[:1] == ['--'] else args.args
@@ -207,6 +241,8 @@ def main():
         print(lab.deploy(extra))
     elif args.action == 'docker':
         print(lab.docker(*extra))
+    elif args.action in ('probe', 'verify-ledger'):
+        print(lab.probe(extra, verify_ledger=args.action == 'verify-ledger'))
     else:
         lab.stop()
 

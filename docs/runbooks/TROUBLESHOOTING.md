@@ -162,13 +162,47 @@ mysql -u root -p -e "SELECT * FROM performance_schema.replication_group_members"
 
 ### 7. 恢复操作
 
-#### 重新启动整个集群：
-1. 停止所有MySQL服务
-2. 在主节点启动MySQL
-3. 重新引导集群：
-   ```bash
-   mysqlsh --uri clusteradmin@primary -e "dba.rebootClusterFromCompleteOutage()"
-   ```
+#### 完整停机后的受控恢复
+
+先确认所有原成员都可达、复制组均已停止，且没有另一分区继续接收写入。
+在每台原成员上启动 MySQL 服务（RHEL 为 `mysqld`，Debian / Ubuntu 为 `mysql`）；
+不能只启动一台，再跳过其他成员的状态检查。
+
+逐台用受保护的连接检查实例身份、GTID 与成员状态：
+
+```sql
+SELECT @@hostname, @@server_uuid, @@GLOBAL.gtid_executed;
+SELECT MEMBER_HOST, MEMBER_STATE, MEMBER_ROLE
+FROM performance_schema.replication_group_members;
+```
+
+在包含最新事务集合的成员上连接 MySQL Shell。替换账号、主机与后续集群名称，密码交互输入：
+
+```bash
+mysqlsh --no-defaults --js --uri clusteradmin@db1:3306 --password
+```
+
+先执行只读预演：
+
+```javascript
+dba.rebootClusterFromCompleteOutage('prodCluster', {dryRun: true});
+```
+
+若预演要求改用更新的成员，先核对并重新连接；成员不可达或事务集合存在分歧时停止处理。
+预演通过且确认恢复对象后，再执行：
+
+```javascript
+dba.rebootClusterFromCompleteOutage('prodCluster');
+```
+
+此流程不使用 `force`，也不自动强制恢复多数派。完成后使用
+[公共准备](../scenarios/COMMON.md) 中的同一组 inventory 与凭据参数验证：
+
+```bash
+"$DEPLOY" --status "${COMMON_ARGS[@]}"
+```
+
+恢复写入前，还需核对业务数据基线及已确认提交的写入；不能只以 Shell 退出码判定恢复成功。
 
 #### 重新加入故障节点：
 ```bash
@@ -201,4 +235,27 @@ mysqlsh --uri clusteradmin@primary -e "dba.getCluster().rejoinInstance('failed_n
 - 监控系统资源使用情况
 - 保持MySQL版本更新
 - 定期测试故障转移流程
-- 文档化所有配置更改 
+- 文档化所有配置更改
+
+### 多数派丢失后的停机等待
+
+在失去多数派且存在未完成事务时，`systemctl stop mysqld` 可能长时间停留在
+`deactivating/stop-sigterm`；发行包的 `TimeoutStopUSec` 也可能为 `infinity`。
+先检查指定节点的进程状态和错误日志：
+
+```bash
+# Debian/Ubuntu 的服务名通常为 mysql；按实际发行包调整。
+systemctl show mysqld -p ActiveState -p SubState -p MainPID -p TimeoutStopUSec
+journalctl -u mysqld --since '-10 minutes' --no-pager
+```
+
+只有在业务写入已停止、其他分区已隔离、明确走完整停机恢复路径，且普通停机无法完成时，
+才对已确认的单个故障服务执行强制终止：
+
+```bash
+systemctl kill --kill-whom=main --signal=SIGKILL mysqld
+```
+
+强制终止会触发后续崩溃恢复。保留原始日志、各成员 GTID 与已确认写入记录；
+进程结束后仍需按上面的完整停机流程检查所有节点、执行 dry-run，再恢复并验证数据。
+不要因为进程已退出就跳过 GTID 检查，也不要为消除等待而自动加入 `force`。

@@ -38,6 +38,7 @@ ${EDITOR:-vi} inventory/backup.local.yml
 修改完整本地文件里的 `method` 即可切换。物理备份如希望在本轮执行 prepare，设置
 `xtrabackup.prepare: true`；压缩输出会先解压再 prepare。准备阶段的内存由 `use_memory` 控制。
 备份节点由 `run_on_host_group` 选择；选择 mysql_secondary 会在该组所有成员执行，不是只选一台。
+执行组必须非空、属于 mysql_cluster，并复用原有主机名，不能用同地址别名重复执行。
 
 ## 选择目标
 
@@ -81,3 +82,8 @@ ansible mysql_primary "${COMMON_ARGS[@]}" -b -m command \
 - 不再使用时不再调用该入口，并将本地 enabled 设为 false。项目没有自动创建定时任务。
 
 不要在排障时关闭包签名校验，也不要用不匹配版本的 XtraBackup 强行 prepare。
+
+启用 `xtrabackup.prepare` 后，流程会核对 `xtrabackup_checkpoints` 的实际状态；若同时压缩，
+解压时删除本轮生成的压缩副本，避免以后再次解压覆盖已准备的数据页。最终产物为已准备的
+非压缩目录。希望存储压缩备份时保持 `prepare: false`，恢复时只对工作副本解压和 prepare。
+清单记录 `xtrabackup_state` 与保留的压缩文件数量，恢复步骤按检查点状态分支执行。

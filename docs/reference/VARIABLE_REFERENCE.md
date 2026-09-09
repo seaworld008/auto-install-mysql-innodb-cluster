@@ -304,7 +304,10 @@ rsync 强制 BatchMode、`StrictHostKeyChecking=yes` 和指定的
 `mysql_router_metadata_connect_timeout`、`mysql_router_metadata_read_timeout`、
 `mysql_router_routing_connect_timeout`、`mysql_router_client_connect_timeout`、
 `mysql_router_max_connect_errors`、`mysql_router_max_total_connections` 和
-`mysql_router_route_max_connections`。
+`mysql_router_route_max_connections` 和 `mysql_router_max_idle_server_connections`。
+后者默认 `0`，不跨客户端复用空闲后端连接；应用仍应使用有界连接池。
+`mysql_router_nofile_limit` 按连接预算自动计算并写入 systemd，配置应用前检查内核上限，
+启动后校验运行进程。
 
 已有 bootstrap 配置且 `mysql_router_rebootstrap: false` 时不会重复 bootstrap。
 受管端口、连接数、超时和策略会直接原子更新现有配置，保留 Router 身份和 keyring；
@@ -414,3 +417,10 @@ npx --yes markdownlint-cli2@0.23.2
 `preflight_require_keepalived`、`health_require_keepalived` 是检查流程内部控制，默认跟随 HAProxy
 范围启用。使用 CLI `--scope` 选择检查范围，不在生产配置中把完整 HA 检查永久关掉。
 `mysql_kernel_backup_root` 默认 `/var/backups/mysql-kernel`，用于内核专项修改前的配置备份。
+
+### 成员通告地址
+
+`mysql_report_host` 默认从可选本地输入 `mysql_report_host_override` 解析，缺省为空字符串。
+新集群可将 `mysql_report_host_override` 设为 `"{{ ansible_host }}"`，或为每台数据库
+指定稳定 DNS 名称；不含端口。已有成员默认保留实际值，禁止在普通部署中直接改变注册地址。
+它最终写入 MySQL 的 `report_host`，供 AdminAPI 与 Router 的成员发现使用。

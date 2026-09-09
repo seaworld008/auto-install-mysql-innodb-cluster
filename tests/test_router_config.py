@@ -48,6 +48,7 @@ class RouterConfigTests(unittest.TestCase):
     def setUp(self):
         self.settings = {
             "cluster_name": "prodCluster", "max_total_connections": 30000,
+            "max_idle_server_connections": 0,
             "metadata_read_timeout": 30, "metadata_connect_timeout": 5,
             "rw_port": 7000, "ro_port": 7001, "split_port": 7010,
             "admin_port": 8444, "rw_strategy": "first-available",
@@ -64,6 +65,9 @@ class RouterConfigTests(unittest.TestCase):
         self.assertEqual(parser["metadata_cache:bootstrap"]["user"], "fixture_router_identity")
         self.assertEqual(parser["DEFAULT"]["keyring_path"], "/var/lib/mysqlrouter/data/keyring")
         self.assertEqual(parser["DEFAULT"]["max_total_connections"], "30000")
+        self.assertEqual(parser["DEFAULT"]["max_idle_server_connections"], "0")
+        self.assertNotIn("connection_sharing", parser["routing:bootstrap_rw"])
+        self.assertNotIn("connection_sharing", parser["routing:bootstrap_ro"])
         self.assertEqual(parser["routing:bootstrap_ro"]["bind_port"], "7001")
         self.assertEqual(parser["routing:bootstrap_rw"]["destinations"],
                          "metadata-cache://prodCluster/?role=PRIMARY")
@@ -72,6 +76,18 @@ class RouterConfigTests(unittest.TestCase):
         self.assertFalse(parser.has_section("routing:read_write_split"))
         self.assertEqual(parser["http_server"]["port"], "8444")
         self.assertEqual(module.mysql_router_config(text, self.settings), text)
+
+    def test_idle_pool_limit_is_validated_and_converges_existing_bootstrap(self):
+        pooled = BOOTSTRAP.replace("max_total_connections=100", "max_total_connections=100\nmax_idle_server_connections=64")
+        text = module.mysql_router_config(pooled, self.settings)
+        self.assertIn("max_idle_server_connections=0", text)
+        self.assertEqual(module.mysql_router_config(text, self.settings), text)
+        self.settings["max_idle_server_connections"] = 4294967296
+        self.assertIn("max_idle_server_connections=4294967296", module.mysql_router_config(pooled, self.settings))
+        for invalid in (-1, True, "1.5", "unlimited", 4294967297, "9" * 5000):
+            self.settings["max_idle_server_connections"] = invalid
+            with self.subTest(value=invalid), self.assertRaises(AnsibleFilterError):
+                module.mysql_router_config(BOOTSTRAP, self.settings)
 
     def test_migrates_legacy_split_without_creating_second_listener(self):
         legacy = BOOTSTRAP.replace("[routing:bootstrap_rw_split]\nbind_port=6450\n", "")

@@ -238,6 +238,15 @@ show_connection_summary() {
 
 check_prerequisites() {
     local profile="${1:-full}"
+    local credential_scope="${2:-}"
+    local scale_limit="${3:-}"
+    local scale_context python_bin
+    if [[ -z "$credential_scope" ]]; then
+        case "$profile" in
+            router|haproxy) credential_scope=cluster ;;
+            *) credential_scope=install ;;
+        esac
+    fi
     local profile_args=()
     case "$profile" in
         full)
@@ -263,6 +272,10 @@ check_prerequisites() {
             exit 1
             ;;
     esac
+    python_bin="$(detect_python)"
+    scale_context="$("$python_bin" -c 'import json,sys; print(json.dumps({"preflight_scale_limit": sys.argv[1]}))' "$scale_limit")"
+    profile_args+=("--extra-vars" "$scale_context")
+    profile_args+=("--extra-vars" "preflight_credential_scope=$credential_scope preflight_read_only=false")
     log_step "执行前置检查"
     if (( ${#profile_args[@]} > 0 )); then
         run_playbook "${profile_args[@]}" playbooks/preflight-ha.yml
@@ -347,7 +360,7 @@ scale_mysql_add() {
         exit 1
     fi
     validate_single_host_limit "mysql_cluster" "$limit" "mysql_ha_min_nodes"
-    check_prerequisites "mysql"
+    check_prerequisites mysql install "$limit"
     apply_kernel_optimization "$limit"
     log_step "扩容 MySQL 节点: $limit"
     run_playbook playbooks/scale-mysql.yml --limit "$limit"
@@ -365,7 +378,7 @@ scale_mysql_remove() {
     if [[ -n "$new_primary" ]]; then
         extra_vars+=("mysql_shrink_new_primary=$new_primary")
     fi
-    check_prerequisites "mysql"
+    check_prerequisites mysql cluster
     log_step "缩容 MySQL 节点: $target"
     run_playbook playbooks/shrink-mysql.yml --extra-vars "${extra_vars[*]}"
     log_success "剩余 MySQL 成员已通过缩容 playbook 的完整健康复核"
@@ -391,13 +404,13 @@ shrink_lb() {
         exit 1
     fi
     validate_single_host_limit "haproxy_lb" "$limit" "haproxy_ha_min_nodes"
-    check_prerequisites
+    check_prerequisites full cluster
     log_step "缩容 HAProxy/Keepalived 节点: $limit"
     run_playbook playbooks/shrink-haproxy.yml --limit "$limit"
 }
 
 run_backup() {
-    check_prerequisites "mysql"
+    check_prerequisites mysql backup
     log_step "执行备份"
     run_playbook playbooks/backup.yml
 }
@@ -443,6 +456,7 @@ health_check() {
             return 1
             ;;
     esac
+    command+=("--extra-vars" "preflight_credential_scope=cluster preflight_read_only=true")
     "${command[@]}"
 }
 
@@ -488,7 +502,7 @@ production_ready_deploy() {
         run_playbook playbooks/install-keepalived.yml
     else
         log_step "执行全量部署"
-        run_playbook playbooks/site.yml --extra-vars "$PREFLIGHT_FULL"
+        run_playbook playbooks/site.yml --extra-vars "$PREFLIGHT_FULL preflight_credential_scope=install preflight_read_only=false"
     fi
 
     health_check
@@ -497,7 +511,7 @@ production_ready_deploy() {
 }
 
 full_deploy() {
-    check_prerequisites
+    check_prerequisites full cluster
     deploy_routers
     deploy_load_balancers
     health_check
@@ -667,13 +681,13 @@ main() {
             health_check haproxy
             ;;
         --install-keepalived)
-            check_prerequisites full
+            check_prerequisites full cluster
             health_check haproxy
             run_playbook playbooks/install-keepalived.yml
             health_check full
             ;;
         --configure-lb)
-            check_prerequisites
+            check_prerequisites full cluster
             deploy_load_balancers
             health_check
             ;;

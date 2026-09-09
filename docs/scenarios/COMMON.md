@@ -52,6 +52,8 @@ mysql_group_replication_group_name_override: "CHANGE_ME_UUID"
 mysql_hardware_profile: "optimized_8c32g"
 mysql_release_line: "8.4"
 mysql_cluster_name: "prodCluster"
+# 新集群用目标机实际地址通告成员，避免依赖系统主机名 DNS。
+mysql_report_host_override: "{{ ansible_host }}"
 YAML
 )
 python3 -c 'import uuid; print(uuid.uuid4())'
@@ -74,7 +76,9 @@ Keepalived 方案要求入口网络支持 VIP 漂移和 VRRP；公共云需先�
 ansible-vault create inventory/vault.local.yml
 ```
 
-在编辑器中填写以下字段，并替换全部占位值。数据库使用互不相同的强密码，VRRP 口令为
+以下字段用于全量部署；单独操作组件或只读检查时，按
+[组件凭据表](COMPONENTS.md#按操作准备凭据) 只保留所需字段。
+在编辑器中填写对应字段，并替换全部占位值。数据库使用互不相同的强密码，VRRP 口令为
 1–8 位字母、数字、下划线、点或横线：
 
 ```yaml

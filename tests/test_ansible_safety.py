@@ -86,8 +86,13 @@ class AnsibleSafetyTests(unittest.TestCase):
             with self.subTest(playbook=filename), tempfile.TemporaryDirectory() as temporary:
                 plays = yaml.safe_load((ROOT / "playbooks" / filename).read_text())
                 gate = plays[0]
-                # Execute the real first guard with deliberately invalid defaults.
-                gate["tasks"] = gate["tasks"][:1]
+                # Run the real invalid-input guard, independent of harmless
+                # context/schema checks added before credential validation.
+                if filename == "preflight-ha.yml":
+                    gate["tasks"] = [next(task for task in gate["tasks"]
+                                          if task["name"] == "检查集群管理密码")]
+                else:
+                    gate["tasks"] = gate["tasks"][:1]
                 later = {
                     "name": "Must never execute after rejected input",
                     "hosts": "probe",

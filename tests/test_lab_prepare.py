@@ -14,6 +14,37 @@ SPEC.loader.exec_module(prepare)
 
 
 class LabPrepareTests(unittest.TestCase):
+    def test_all_topology_fixtures_are_bounded_and_isolated(self):
+        expected = {'dedicated': 8, 'colocated': 4, 'mixed': 6, 'three-entry': 10}
+        for topology, count in expected.items():
+            with self.subTest(topology=topology):
+                source = yaml.safe_load((ROOT / 'examples/topologies' / (topology + '.yml')).read_text())
+                inventory, compose = prepare.build_topology(source, topology)
+                self.assertEqual(len(compose['services']), count)
+                self.assertLessEqual(sum(float(v['cpus']) for v in compose['services'].values()), 6)
+                self.assertLessEqual(sum(int(v['mem_limit'][:-1]) for v in compose['services'].values()), 11264)
+                self.assertTrue(compose['services']['controller']['init'])
+                self.assertEqual(inventory['all']['vars']['ansible_connection'], 'ssh')
+                for name, values in inventory['all']['hosts'].items():
+                    self.assertTrue(values['ansible_host'].startswith('172.30.88.'))
+                    self.assertEqual(compose['services'][name]['hostname'], name)
+                    self.assertNotIn('ports', compose['services'][name])
+                self.assertTrue(source['all']['hosts']['db1']['ansible_host'].startswith('192.0.2.'))
+                self.assertEqual(prepare.build_topology(source, topology), (inventory, compose))
+
+    def test_topology_cannot_target_external_or_undeclared_hosts(self):
+        source = yaml.safe_load((ROOT / 'examples/topologies/dedicated.yml').read_text())
+        source['all']['hosts']['db1']['ansible_host'] = '198.51.100.11'
+        with self.assertRaises(ValueError):
+            prepare.build_topology(source, 'dedicated')
+        source['all']['hosts']['db1']['ansible_host'] = '192.0.2.40'
+        with self.assertRaises(ValueError):
+            prepare.build_topology(source, 'dedicated')
+        source['all']['hosts']['db1']['ansible_host'] = '192.0.2.11'
+        source['all']['children']['mysql_router']['hosts']['outside'] = {}
+        with self.assertRaises(ValueError):
+            prepare.build_topology(source, 'dedicated')
+
     def test_generated_lab_is_private_bounded_and_uses_canonical_source(self):
         (ROOT / 'tmp').mkdir(exist_ok=True)
         with tempfile.TemporaryDirectory(dir=ROOT / 'tmp') as directory:
@@ -31,6 +62,7 @@ class LabPrepareTests(unittest.TestCase):
             self.assertEqual((root / 'source/requirements.txt').read_bytes(),
                              (root / 'config/controller-image/requirements.txt').read_bytes())
             credentials = yaml.safe_load((root / 'secrets/runtime.yml').read_text())
+            self.assertGreaterEqual(len(credentials['lab_app_password']), 20)
             for name in ('config/compose.yml', 'config/hosts.local.yml', 'config/overrides.yml', 'manifest.json'):
                 for password in credentials.values():
                     self.assertNotIn(password, (root / name).read_text())
@@ -40,12 +72,48 @@ class LabPrepareTests(unittest.TestCase):
             self.assertEqual(before, (root / 'secrets/runtime.yml').read_bytes())
             manifest = json.loads((root / 'manifest.json').read_text())
             self.assertRegex(manifest['source_sha'], r'^[a-f0-9]{40}$')
+            self.assertEqual(set(manifest['probe_sha256']),
+                             {'probe.py', 'probe_guard.py', 'verify_ledger.py'})
 
     def test_output_outside_ignored_workspace_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaises(ValueError):
                 prepare.initialize(Path(directory) / 'lab', 'HEAD')
             self.assertFalse((Path(directory) / 'lab').exists())
+
+    def test_stop_checks_ownership_before_stopping_anything(self):
+        import sys
+        from unittest.mock import Mock
+        sys.path.insert(0, str(ROOT / 'tests/lab'))
+        try:
+            from lab import Lab
+        finally:
+            sys.path.pop(0)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'config').mkdir()
+            (root / 'config/compose.yml').write_text('name: mysql-ha-lab\n')
+            lab = Lab.__new__(Lab)
+            lab.root = root
+            lab.lima = Mock(return_value='Running\n')
+            lab.save_metadata = Mock()
+            def docker(*args):
+                if args[0] == 'ps':
+                    return 'mysql-ha-lab-controller\nmysql-ha-lab-db1\n'
+                if args[0] == 'inspect':
+                    return '{"com.docker.compose.project":"mysql-ha-lab"}'
+                return ''
+            lab.docker = Mock(side_effect=docker)
+            lab.stop()
+            stops = [call.args for call in lab.docker.call_args_list if call.args[0] == 'stop']
+            self.assertEqual(stops, [('stop', '--timeout', '10', 'mysql-ha-lab-controller'),
+                                    ('stop', '--timeout', '90', 'mysql-ha-lab-db1')])
+            lab.docker = Mock(side_effect=lambda *args: 'another-project\n' if args[0] == 'ps' else '{}')
+            lab.lima.reset_mock()
+            with self.assertRaises(ValueError):
+                lab.stop()
+            self.assertFalse(any(call.args[0] == 'stop' for call in lab.docker.call_args_list))
+            self.assertFalse(any(call.args[0] == 'stop' for call in lab.lima.call_args_list))
 
     def test_snapshot_copy_failure_preserves_last_complete_metadata(self):
         import sys

@@ -73,17 +73,33 @@ sudo mkdir -m 700 "$WORK"
 sudo cp -a "$BACKUP/." "$WORK/"
 ```
 
-如备份启用了压缩，先执行解压；未压缩时跳过这一步：
+先读取工作副本的实际检查点，而不是只根据最初的压缩开关决定操作。工具版本必须匹配备份来源：
 
 ```bash
-sudo xtrabackup --decompress --parallel=2 --target-dir="$WORK"
+STATE="$(sudo awk -F= '$1 ~ /^backup_type[[:space:]]*$/ {gsub(/[[:space:]]/, "", $2); print $2}' "$WORK/xtrabackup_checkpoints")"
+case "$STATE" in
+  full-prepared)
+    echo '已完成 prepare，直接进入 copy-back'
+    ;;
+  full-backuped)
+    if sudo find "$WORK" -type f \( -name '*.zst' -o -name '*.lz4' -o -name '*.qp' \) -print -quit | grep -q .; then
+      sudo xtrabackup --decompress --remove-original --parallel=2 --target-dir="$WORK"
+    fi
+    sudo xtrabackup --prepare --use-memory=1G --target-dir="$WORK"
+    ;;
+  *)
+    echo "未识别或不完整的备份状态：$STATE" >&2
+    exit 1
+    ;;
+esac
+sudo grep -Eq '^backup_type[[:space:]]*=[[:space:]]*full-prepared[[:space:]]*$' "$WORK/xtrabackup_checkpoints"
 ```
 
-然后 prepare。工具版本必须匹配备份来源：
-
-```bash
-sudo xtrabackup --prepare --use-memory=1G --target-dir="$WORK"
-```
+只在 WORK 副本操作。已 prepared 的旧备份可能同时保留 `.zst` 原件；不要再次解压覆盖已准备的
+数据页。压缩原件不会被 `--copy-back` 复制到 datadir，参见
+[Percona 解压与准备说明](https://docs.percona.com/percona-xtrabackup/8.4/prepare-compressed-backup.html)。
+若解压中断，保留失败日志，从原件创建新的 WORK 副本再处理。
+低资源实验可将 `--use-memory=1G` 降为 `128M`，并减少并行度，生产值按恢复主机资源选择。
 
 确认成功后停止**目标**实例，保留它原来的数据目录，再 copy-back：
 

@@ -6,6 +6,10 @@
 # Basic Settings
 user = {{ mysql_user }}
 port = {{ mysql_port }}
+{% set report_host = mysql_effective_report_host | default(mysql_report_host | default('')) %}
+{% if report_host | length > 0 %}
+report_host = {{ report_host }}
+{% endif %}
 mysqlx_port = {{ mysql_admin_port }}
 server_id = {{ mysql_server_id }}
 datadir = {{ mysql_datadir }}
@@ -27,9 +31,9 @@ back_log = {{ mysql_back_log }}
 thread_cache_size = {{ mysql_thread_cache_size }}
 thread_stack = {{ mysql_thread_stack }}
 table_open_cache = {{ mysql_table_open_cache }}
-table_definition_cache = {{ (mysql_table_open_cache * 0.5) | int }}
+table_definition_cache = {{ mysql_table_definition_cache }}
 table_open_cache_instances = {{ mysql_table_open_cache_instances }}
-open_files_limit = {{ mysql_open_files_limit }}
+# 文件句柄上限由同一部署流程写入 systemd LimitNOFILE。
 max_allowed_packet = {{ mysql_max_allowed_packet }}
 net_buffer_length = 32768                                  # 网络缓冲区大小
 thread_handling = one-thread-per-connection                # 一线程一连接模式

@@ -122,6 +122,11 @@ VAULT_ARGS=(--vault-password-file ~/.config/ansible/mysql-cluster-vault-pass)
   `restorecon`。
 - RedHat 重跑先使用 0600 临时 option file 和无副作用查询探测目标 root 密码；
   已生效时跳过首次临时密码流程，无法安全探测或恢复时直接阻断。
+- Router 按客户端与后端连接预算配置 systemd 文件句柄限制，启动后验证实际 soft / hard 值。
+- Router 默认关闭跨客户端空闲后端连接复用（`mysql_router_max_idle_server_connections: 0`），
+  应用使用有界连接池；连接与会话语义见 [应用接入指南](docs/runbooks/APPLICATION_CONNECTIONS.md)。
+- MySQL 文件句柄容量通过专用 systemd drop-in 应用；逐节点重启前检查内核和服务限制，
+  启动后核对进程实际容量，避免参数只写入文件却未生效。
 - HAProxy 只接入 Router，避免主从切换后静态 MySQL primary 路径失效。
 - HAProxy stats 默认仅监听 `127.0.0.1:8404`。
 - Keepalived 跟踪 HAProxy systemd 状态；连续检查失败后进入 `FAULT` 并释放 VIP。
@@ -152,6 +157,8 @@ fail-closed 运行时健康检查。`--production-ready`、`--apply-config`、My
 - Keepalived VIP 恰好出现在一个 `haproxy_lb` 节点上，未绑定或双重绑定都失败
 
 健康检查失败会返回非零，不应通过忽略退出码继续发布。
+只读健康检查只使用集群管理密码；组件安装按操作校验所需密码，详见
+[凭据范围表](docs/scenarios/COMPONENTS.md#按操作准备凭据)。
 
 MySQL 缩容因为旧 inventory 在操作完成前仍包含已摘除节点，先在缩容 playbook 内
 验证剩余成员；随后必须从 inventory 删除目标，再执行 `--status` 全栈组合检查。
@@ -219,3 +226,10 @@ CI 还覆盖全部 playbook syntax-check、Python 3.12 / 3.13、固定 SHA 的 A
 [组件指南](docs/scenarios/COMPONENTS.md) 覆盖只部署 MySQL、Router、HAProxy、Keepalived；
 [内核专项](docs/scenarios/KERNEL.md) 可单独执行。只读状态检查使用 `--scope` 选择范围，
 默认 full 保留全部 HA 检查；该选项不能用于缩减完整部署范围。
+
+### 数据库通告地址
+
+新集群可在本地覆盖文件设置 `mysql_report_host_override: "{{ ansible_host }}"`，按 inventory
+中的 IPv4 地址注册成员。默认系统主机名或自定义 DNS 名称则必须从所有数据库和 Router
+主机解析。已有成员的实际地址会保留，普通部署拒绝将其改为另一个地址。
+详细配置见 [成员地址与 DNS](docs/scenarios/CONFIGURATION.md#数据库通告地址与-dns)。

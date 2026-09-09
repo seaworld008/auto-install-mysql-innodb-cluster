@@ -83,7 +83,7 @@ keepalived_auth_pass: "CHANGE_ME"
 - `docs/reference/VARIABLE_REFERENCE.md`
 - `docs/reference/ARCHITECTURE_AND_EVIDENCE.md`
 
-事务型应用优先选择 `3307`。证书与连接池配置见 [应用接入指南](docs/runbooks/APPLICATION_CONNECTIONS.md)。
+事务型应用优先选择 `3307`，并使用有界应用连接池。证书与连接池配置见 [应用接入指南](docs/runbooks/APPLICATION_CONNECTIONS.md)。
 
 ## 其他拓扑与组件操作
 
@@ -91,3 +91,9 @@ keepalived_auth_pass: "CHANGE_ME"
 [组件指南](docs/scenarios/COMPONENTS.md) 覆盖只部署 MySQL、Router、HAProxy、Keepalived；
 [内核专项](docs/scenarios/KERNEL.md) 可单独执行。只读状态检查使用 `--scope` 选择范围，
 默认 full 保留全部 HA 检查；该选项不能用于缩减完整部署范围。
+
+新生成的 inventory 使用每台主机的 `ansible_host` 作为 `mysql_report_host`，
+使新集群可以按 IPv4 地址发现成员。手动维护 inventory 时，按
+[通告地址说明](docs/scenarios/CONFIGURATION.md#数据库通告地址与-dns) 配置；
+使用系统主机名时必须提前做好各节点之间的 DNS/hosts 解析。
+已有集群的注册地址应保持不变。

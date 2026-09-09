@@ -1,0 +1,56 @@
+#!/bin/bash
+# Managed by the kernel playbook. --check never changes sysfs.
+set -euo pipefail
+mode=${1:-apply}
+if [[ "$mode" != apply && "$mode" != --check ]]; then
+    echo "Usage: $0 [--check]" >&2
+    exit 2
+fi
+devices=$(lsblk -dn -o NAME,TYPE,RO)
+count=0
+while read -r disk type readonly; do
+    [[ "$type" == disk && "$readonly" == 0 && "$disk" =~ ^(sd|nvme|xvd|vd)[a-zA-Z0-9]+$ ]] || continue
+    queue="/sys/block/$disk/queue"
+    available=$(cat "$queue/scheduler")
+    rotational=$(cat "$queue/rotational")
+    if [[ "$rotational" == 0 ]]; then
+        candidates=(mq-deadline none noop)
+        depth={{ mysql_kernel_io_queue_depth_ssd | int }}
+    else
+        candidates=(mq-deadline deadline none)
+        depth={{ mysql_kernel_io_queue_depth_hdd | int }}
+    fi
+    choices=" ${available//[\[\]]/} "
+    desired=
+    for candidate in "${candidates[@]}"; do
+        if [[ "$choices" == *" $candidate "* ]]; then
+            desired=$candidate
+            break
+        fi
+    done
+    if [[ -z "$desired" ]]; then
+        echo "FAIL: $disk has no supported scheduler: $available" >&2
+        exit 1
+    fi
+    if [[ "$mode" == apply ]]; then
+        if [[ "$available" != *"[$desired]"* ]]; then
+            printf '%s\n' "$desired" > "$queue/scheduler"
+            echo "CHANGED: $disk scheduler=$desired"
+        fi
+        if [[ "$(cat "$queue/nr_requests")" != "$depth" ]]; then
+            printf '%s\n' "$depth" > "$queue/nr_requests"
+            echo "CHANGED: $disk nr_requests=$depth"
+        fi
+    fi
+    actual=$(cat "$queue/scheduler")
+    actual_depth=$(cat "$queue/nr_requests")
+    if [[ "$actual" != *"[$desired]"* || "$actual_depth" != "$depth" ]]; then
+        echo "FAIL: $disk expected=$desired/$depth actual=$actual/$actual_depth" >&2
+        exit 1
+    fi
+    echo "PASS: $disk scheduler=$desired nr_requests=$depth"
+    count=$((count + 1))
+done <<< "$devices"
+if [[ "$count" == 0 ]]; then
+    echo "NOT_APPLICABLE: no supported writable block devices"
+fi

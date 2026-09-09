@@ -31,6 +31,7 @@
     mysql_router_managed_settings:
       cluster_name: "{{ mysql_cluster_name }}"
       max_total_connections: "{{ mysql_router_max_total_connections }}"
+      max_idle_server_connections: "{{ mysql_router_max_idle_server_connections }}"
       metadata_read_timeout: "{{ mysql_router_metadata_read_timeout }}"
       metadata_connect_timeout: "{{ mysql_router_metadata_connect_timeout }}"
       rw_port: "{{ mysql_router_port }}"
@@ -58,6 +59,32 @@
             (ansible_distribution == 'Debian' and ansible_distribution_release in mysql_supported_debian_releases)
         fail_msg: "目标系统或 MySQL 发行线不在支持配置列表中，请核对 mysql_supported_*；真实环境兼容性须另行验收。"
         success_msg: "目标操作系统在支持配置列表内"
+
+    - name: 验证 Router 文件句柄目标
+      ansible.builtin.assert:
+        that:
+          - mysql_router_nofile_limit | string is match('^[1-9][0-9]*$')
+          - mysql_router_nofile_limit | int > 0
+          - mysql_router_max_total_connections | string is match('^[1-9][0-9]*$')
+          - mysql_router_max_total_connections | int > 0
+          - >-
+            mysql_router_nofile_limit | int >=
+            3 * (mysql_router_max_total_connections | int) + (mysql_router_max_idle_server_connections | int) + 1024
+        fail_msg: "mysql_router_nofile_limit 必须是正整数。"
+
+    - name: 读取 Router 文件句柄内核上限
+      ansible.builtin.command:
+        argv: [cat, "/proc/sys/{{ item | replace('.', '/') }}"]
+      loop: [fs.nr_open, fs.file-max]
+      register: mysqlrouter_kernel_file_limits
+      changed_when: false
+
+    - name: 要求内核支持 Router 文件句柄目标
+      ansible.builtin.assert:
+        that:
+          - item.stdout | int >= mysql_router_nofile_limit | int
+        fail_msg: "{{ item.item }} 小于 mysql_router_nofile_limit；请先调整主机内核上限。"
+      loop: "{{ mysqlrouter_kernel_file_limits.results }}"
 
     - name: 检查已有 RPM 包以保留 curl 提供者
       ansible.builtin.package_facts:
@@ -180,6 +207,7 @@
           - "--name={{ inventory_hostname }}"
           - "--conf-base-port={{ mysql_router_port }}"
           - --conf-use-sockets
+          - "--conf-set-option=DEFAULT.max_idle_server_connections={{ mysql_router_max_idle_server_connections }}"
           - "--conf-set-option=DEFAULT.max_total_connections={{ mysql_router_max_total_connections }}"
           - "--conf-set-option=DEFAULT.read_timeout={{ mysql_router_metadata_read_timeout }}"
           - "--conf-set-option=DEFAULT.connect_timeout={{ mysql_router_metadata_connect_timeout }}"
@@ -233,7 +261,67 @@
         owner: root
         group: root
         mode: '0644'
-      notify: reload systemd
+      register: mysqlrouter_service_update
+
+    - name: 加载 Router systemd 配置
+      ansible.builtin.systemd_service:
+        daemon_reload: true
+      changed_when: false
+
+    - name: 读取 systemd 解析后的 Router 文件句柄上限
+      ansible.builtin.command:
+        argv: [systemctl, show, "{{ mysql_router_service_name }}", -p, LimitNOFILE, --value]
+      register: mysqlrouter_systemd_nofile
+      changed_when: false
+
+    - name: 读取 systemd 解析后的 Router 文件句柄软限制
+      ansible.builtin.command:
+        argv: [systemctl, show, "{{ mysql_router_service_name }}", -p, LimitNOFILESoft, --value]
+      register: mysqlrouter_systemd_nofile_soft
+      changed_when: false
+
+    - name: 在重启前拒绝冲突的 systemd 文件句柄配置
+      ansible.builtin.assert:
+        that:
+          - mysqlrouter_systemd_nofile.stdout is match('^[1-9][0-9]*$')
+          - mysqlrouter_systemd_nofile.stdout | int >= mysql_router_nofile_limit | int
+          - mysqlrouter_systemd_nofile.stdout | int <= mysqlrouter_kernel_file_limits.results[0].stdout | int
+          - mysqlrouter_systemd_nofile_soft.stdout is match('^[1-9][0-9]*$')
+          - mysqlrouter_systemd_nofile_soft.stdout | int >= mysql_router_nofile_limit | int
+          - mysqlrouter_systemd_nofile_soft.stdout | int <= mysqlrouter_systemd_nofile.stdout | int
+        fail_msg: "systemd 的 LimitNOFILE 与目标或内核上限冲突，请检查该 Router 服务的其他 drop-in。"
+
+    - name: 读取配置应用前的 Router 主进程
+      ansible.builtin.command:
+        argv: [systemctl, show, "{{ mysql_router_service_name }}", -p, MainPID, --value]
+      register: mysqlrouter_pre_restart_pid
+      changed_when: false
+      failed_when: mysqlrouter_pre_restart_pid.rc != 0 or not (mysqlrouter_pre_restart_pid.stdout is match('^[0-9]+$'))
+
+    - name: 读取已有 Router 进程的文件句柄容量
+      ansible.builtin.slurp:
+        src: "/proc/{{ mysqlrouter_pre_restart_pid.stdout }}/limits"
+      register: mysqlrouter_pre_restart_limits
+      when: mysqlrouter_pre_restart_pid.stdout | int > 0
+
+    - name: 解析已有 Router 进程的文件句柄容量
+      ansible.builtin.set_fact:
+        mysqlrouter_running_nofile: >-
+          {{ mysqlrouter_pre_restart_limits.content | default('') | b64decode
+             | regex_findall('(?m)^Max open files\s+(\d+)\s+(\d+)') }}
+
+    - name: 要求已有 Router 进程限制可验证
+      ansible.builtin.assert:
+        that: mysqlrouter_running_nofile | length == 1
+        fail_msg: "无法读取已有 mysqlrouter 进程的文件句柄容量。"
+      when: mysqlrouter_pre_restart_pid.stdout | int > 0
+
+    - name: 计算 Router 重启需求
+      ansible.builtin.set_fact:
+        mysqlrouter_needs_restart: >-
+          {{ mysqlrouter_pre_restart_pid.stdout | int > 0 and
+             (mysqlrouter_running_nofile[0][0] | int != mysqlrouter_systemd_nofile_soft.stdout | int
+              or mysqlrouter_running_nofile[0][1] | int != mysqlrouter_systemd_nofile.stdout | int) }}
 
     - name: 收集系统服务状态（RedHat）
       ansible.builtin.service_facts:
@@ -258,7 +346,7 @@
     - name: 启动并启用MySQL Router服务
       systemd:
         name: "{{ mysql_router_service_name }}"
-        state: "{{ 'restarted' if router_bootstrap is changed or mysqlrouter_config_update is changed else 'started' }}"
+        state: "{{ 'restarted' if router_bootstrap is changed or mysqlrouter_config_update is changed or mysqlrouter_service_update is changed or mysqlrouter_needs_restart | bool else 'started' }}"
         enabled: yes
         daemon_reload: yes
 
@@ -268,6 +356,30 @@
         host: "{{ ansible_default_ipv4.address }}"
         delay: 5
         timeout: 60
+
+    - name: 读取运行中的 Router 主进程
+      ansible.builtin.command:
+        argv: [systemctl, show, "{{ mysql_router_service_name }}", -p, MainPID, --value]
+      register: mysqlrouter_main_pid
+      changed_when: false
+      failed_when: mysqlrouter_main_pid.rc != 0 or not (mysqlrouter_main_pid.stdout is match('^[1-9][0-9]*$'))
+
+    - name: 读取 Router 进程实际资源限制
+      ansible.builtin.slurp:
+        src: "/proc/{{ mysqlrouter_main_pid.stdout }}/limits"
+      register: mysqlrouter_process_limits
+
+    - name: 核对 Router 实际文件句柄容量
+      ansible.builtin.assert:
+        that:
+          - mysqlrouter_actual_nofile | length == 1
+          - mysqlrouter_actual_nofile[0][0] | int == mysqlrouter_systemd_nofile_soft.stdout | int
+          - mysqlrouter_actual_nofile[0][1] | int == mysqlrouter_systemd_nofile.stdout | int
+        fail_msg: "mysqlrouter 进程的实际文件句柄限制与 systemd 配置不一致。"
+      vars:
+        mysqlrouter_actual_nofile: >-
+          {{ mysqlrouter_process_limits.content | b64decode
+             | regex_findall('(?m)^Max open files\s+(\d+)\s+(\d+)') }}
 
     - name: 测试 MySQL Router 读写端口
       ansible.builtin.command:
@@ -344,8 +456,3 @@
 
           Router状态检查:
           systemctl status {{ mysql_router_service_name }}
-
-  handlers:
-    - name: reload systemd
-      systemd:
-        daemon_reload: yes

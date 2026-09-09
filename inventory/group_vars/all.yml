@@ -31,6 +31,9 @@ mysql_cluster_recovery_method: "clone"
 mysql_group_replication_ip_allowlist: "127.0.0.1/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
 
 mysql_port: 3306
+# 新集群可在本地 inventory/settings 中设为 "{{ ansible_host }}"，避免依赖系统主机名解析。
+# 留空时新实例使用系统主机名，已有成员保留实际地址；普通部署不迁移注册地址。
+mysql_report_host: "{{ mysql_report_host_override | default('') }}"
 mysql_admin_port: 33062
 mysql_group_replication_port: 33061
 
@@ -152,6 +155,7 @@ mysql_innodb_redo_log_capacity: "{{ mysql_config_profiles[mysql_hardware_profile
 mysql_max_connections: "{{ mysql_config_profiles[mysql_hardware_profile].max_connections }}"
 mysql_thread_cache_size: "{{ mysql_config_profiles[mysql_hardware_profile].thread_cache_size }}"
 mysql_table_open_cache: "{{ mysql_config_profiles[mysql_hardware_profile].table_open_cache }}"
+mysql_table_definition_cache: "{{ [400, (mysql_table_open_cache | int / 2) | int] | max }}"
 mysql_sort_buffer_size: "{{ mysql_config_profiles[mysql_hardware_profile].sort_buffer_size }}"
 mysql_read_buffer_size: "{{ mysql_config_profiles[mysql_hardware_profile].read_buffer_size }}"
 mysql_read_rnd_buffer_size: "{{ mysql_config_profiles[mysql_hardware_profile].read_rnd_buffer_size }}"
@@ -167,6 +171,7 @@ mysql_innodb_thread_concurrency: "{{ mysql_config_profiles[mysql_hardware_profil
 mysql_back_log: "{{ mysql_config_profiles[mysql_hardware_profile].back_log }}"
 mysql_thread_stack: "{{ mysql_config_profiles[mysql_hardware_profile].thread_stack }}"
 mysql_table_open_cache_instances: "{{ mysql_config_profiles[mysql_hardware_profile].table_open_cache_instances }}"
+# FD capacity is applied through the MySQL systemd drop-in and verified on the running process.
 mysql_open_files_limit: "{{ mysql_config_profiles[mysql_hardware_profile].open_files_limit }}"
 mysql_join_buffer_size: "{{ mysql_config_profiles[mysql_hardware_profile].join_buffer_size }}"
 mysql_max_allowed_packet: "{{ mysql_config_profiles[mysql_hardware_profile].max_allowed_packet }}"
@@ -178,6 +183,79 @@ mysql_net_write_timeout: "{{ mysql_config_profiles[mysql_hardware_profile].net_w
 
 # 内核配置备份与 sysctl 源目录分离，避免递归复制自身
 mysql_kernel_backup_root: "/var/backups/mysql-kernel"
+mysql_kernel_io_queue_depth_ssd: 128
+mysql_kernel_io_queue_depth_hdd: 64
+
+# 内核优化参数 - 行业最佳实践
+mysql_kernel_params_stable:
+  # 网络参数优化 - 稳定且保守的配置
+  "net.core.somaxconn": "{{ conn_queue_size }}"
+  "net.core.netdev_max_backlog": 5000
+  "net.ipv4.tcp_max_syn_backlog": "{{ (conn_queue_size | int / 2) | round | int }}"
+  "net.ipv4.tcp_tw_reuse": 1
+  "net.ipv4.tcp_fin_timeout": 15
+  "net.ipv4.tcp_keepalive_time": 1800
+  "net.ipv4.tcp_keepalive_intvl": 30
+  "net.ipv4.tcp_keepalive_probes": 3
+  "net.ipv4.ip_local_port_range": "1024 65535"
+  "net.ipv4.tcp_rmem": "4096 65536 4194304"
+  "net.ipv4.tcp_wmem": "4096 65536 4194304"
+  "net.core.rmem_max": 4194304
+  "net.core.wmem_max": 4194304
+  "net.core.rmem_default": 65536
+  "net.core.wmem_default": 65536
+  "net.core.default_qdisc": "fq"
+  "net.ipv4.tcp_congestion_control": "bbr"
+  "net.ipv4.tcp_slow_start_after_idle": 0
+  "net.ipv4.tcp_window_scaling": 1
+  "net.ipv4.tcp_timestamps": 1
+  "net.ipv4.tcp_sack": 1
+
+  # 内存管理优化 - MySQL官方最佳实践
+  "vm.swappiness": 0
+  "vm.dirty_ratio": 10
+  "vm.dirty_background_ratio": 3
+  "vm.dirty_expire_centisecs": 3000
+  "vm.dirty_writeback_centisecs": 500
+  "vm.overcommit_memory": 0
+  "vm.overcommit_ratio": 50
+  "vm.nr_hugepages": 0
+
+  # 文件系统优化 - 基于负载测试的参数
+  "fs.file-max": "{{ [file_max | int, 1048576] | max }}"
+  "fs.nr_open": "{{ [file_max | int, 1048576] | max }}"
+  "fs.inotify.max_user_watches": 65536
+  "fs.inotify.max_user_instances": 128
+
+  # 内核调度优化 - 数据库工作负载优化
+  "kernel.sched_autogroup_enabled": 0
+  "kernel.sem": "250 32000 100 128"
+  "kernel.shmmax": "{{ shmmax_bytes }}"
+  "kernel.shmall": "{{ (shmmax_bytes | int / 4096) | round | int }}"
+
+  # 安全和稳定性参数 - 生产环境标准
+  "kernel.panic": 30
+  "kernel.panic_on_oops": 1
+  "kernel.core_uses_pid": 1
+  "kernel.randomize_va_space": 2
+
+# 系统资源限制 - 动态调整
+mysql_limits_stable:
+  - { domain: 'mysql', type: 'soft', item: 'nofile', value: "{{ nofile_limit }}" }
+  - { domain: 'mysql', type: 'hard', item: 'nofile', value: "{{ nofile_limit }}" }
+  - { domain: 'mysql', type: 'soft', item: 'nproc', value: "{{ nproc_limit }}" }
+  - { domain: 'mysql', type: 'hard', item: 'nproc', value: "{{ nproc_limit }}" }
+  - { domain: 'mysql', type: 'soft', item: 'stack', value: 8192 }
+  - { domain: 'mysql', type: 'hard', item: 'stack', value: 8192 }
+  - { domain: 'mysql', type: 'soft', item: 'core', value: 'unlimited' }
+  - { domain: 'mysql', type: 'hard', item: 'core', value: 'unlimited' }
+  - { domain: 'root', type: 'soft', item: 'nofile', value: "{{ nofile_limit }}" }
+  - { domain: 'root', type: 'hard', item: 'nofile', value: "{{ nofile_limit }}" }
+  - { domain: '*', type: 'soft', item: 'nofile', value: "{{ (nofile_limit | int / 2) | round | int }}" }
+  - { domain: '*', type: 'hard', item: 'nofile', value: "{{ (nofile_limit | int / 2) | round | int }}" }
+  - { domain: '*', type: 'soft', item: 'nproc', value: "{{ (nproc_limit | int / 2) | round | int }}" }
+  - { domain: '*', type: 'hard', item: 'nproc', value: "{{ (nproc_limit | int / 2) | round | int }}" }
+
 
 # 系统配置
 mysql_user: "mysql"
@@ -301,7 +379,11 @@ mysql_router_metadata_read_timeout: "{{ mysql_router_4c8g_optimized.metadata_rea
 mysql_router_routing_connect_timeout: "{{ mysql_router_4c8g_optimized.routing_connect_timeout }}"
 mysql_router_client_connect_timeout: "{{ mysql_router_4c8g_optimized.client_connect_timeout }}"
 mysql_router_max_connect_errors: "{{ mysql_router_4c8g_optimized.max_connect_errors }}"
+# 保留固定端口会话语义；默认不跨客户端复用后端空闲连接。
+mysql_router_max_idle_server_connections: 0
 mysql_router_max_total_connections: "{{ mysql_router_4c8g_optimized.max_total_connections }}"
+# One frontend plus private RW/RO backends per client, idle pool, and descriptor reserve.
+mysql_router_nofile_limit: "{{ 3 * (mysql_router_max_total_connections | int) + (mysql_router_max_idle_server_connections | int) + 1024 }}"
 mysql_router_route_max_connections: "{{ mysql_router_4c8g_optimized.route_max_connections }}"
 
 # 架构检测
