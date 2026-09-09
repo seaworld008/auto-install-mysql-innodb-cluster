@@ -157,6 +157,8 @@ fail-closed 运行时健康检查。`--production-ready`、`--apply-config`、My
 - Keepalived VIP 恰好出现在一个 `haproxy_lb` 节点上，未绑定或双重绑定都失败
 
 健康检查失败会返回非零，不应通过忽略退出码继续发布。
+只读健康检查只使用集群管理密码；组件安装按操作校验所需密码，详见
+[凭据范围表](docs/scenarios/COMPONENTS.md#按操作准备凭据)。
 
 MySQL 缩容因为旧 inventory 在操作完成前仍包含已摘除节点，先在缩容 playbook 内
 验证剩余成员；随后必须从 inventory 删除目标，再执行 `--status` 全栈组合检查。

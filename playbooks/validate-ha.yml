@@ -1,3 +1,6 @@
 ---
 - import_playbook: preflight-ha.yml
+  vars:
+    preflight_credential_scope: cluster
+    preflight_read_only: true
 - import_playbook: health-check-ha.yml

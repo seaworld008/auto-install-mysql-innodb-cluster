@@ -7,6 +7,8 @@
     mysql_nodes_count: "{{ groups['mysql_cluster'] | default([]) | length }}"
     router_nodes_count: "{{ groups['mysql_router'] | default([]) | length }}"
     haproxy_nodes_count: "{{ groups['haproxy_lb'] | default([]) | length }}"
+    preflight_credential_scope: install
+    preflight_read_only: false
     preflight_require_router: true
     preflight_require_haproxy: true
     preflight_require_keepalived: "{{ preflight_require_haproxy | bool }}"
@@ -26,17 +28,42 @@
       }}
     credential_placeholder_pattern: "(?i)^(?:$|change[ _-]?me.*|replace.*|encrypt(?:ed)?.*|your[ _-]?password.*|.*_password_[0-9]+)$"
   tasks:
-    - name: 检查 MySQL 业务密码是否已配置
-      assert:
+    - name: 验证凭据检查范围
+      ansible.builtin.assert:
+        that: preflight_credential_scope in ['install', 'cluster', 'backup']
+        fail_msg: "未知的凭据检查范围。"
+
+    - name: 检查集群管理密码
+      ansible.builtin.assert:
+        that:
+          - mysql_cluster_password is defined
+          - mysql_cluster_password is string
+          - not ((mysql_cluster_password | string | trim) is match(credential_placeholder_pattern))
+        fail_msg: "请通过 Vault 或外部 Secret 提供有效的 mysql_cluster_password。"
+
+    - name: 检查 MySQL 安装或物理备份的 root 密码
+      ansible.builtin.assert:
         that:
           - mysql_root_password is defined
-          - mysql_cluster_password is defined
-          - mysql_replication_password is defined
+          - mysql_root_password is string
           - not ((mysql_root_password | string | trim) is match(credential_placeholder_pattern))
-          - not ((mysql_cluster_password | string | trim) is match(credential_placeholder_pattern))
+        fail_msg: "MySQL 安装或 XtraBackup 需要有效的 mysql_root_password。"
+      when:
+        - not (preflight_read_only | bool)
+        - >-
+          preflight_credential_scope == 'install'
+          or (preflight_credential_scope == 'backup' and backup_config.method == 'xtrabackup')
+
+    - name: 检查 MySQL 安装的复制密码
+      ansible.builtin.assert:
+        that:
+          - mysql_replication_password is defined
+          - mysql_replication_password is string
           - not ((mysql_replication_password | string | trim) is match(credential_placeholder_pattern))
-        fail_msg: "MySQL 密码未正确配置。允许明文，但不能留空，也不能使用 CHANGE_ME/your_password 这类占位值。"
-        success_msg: "MySQL 密码已配置（支持明文）"
+        fail_msg: "MySQL 安装需要有效的 mysql_replication_password。"
+      when:
+        - not (preflight_read_only | bool)
+        - preflight_credential_scope == 'install'
 
     - name: 检查 Inventory 中 SSH 密码是否仍为示例值
       assert:
@@ -172,11 +199,20 @@
         fail_msg: "HAProxy 必须接入 Router 层。"
       when: preflight_require_haproxy | bool
 
+    - name: 检查 Keepalived 配置所需的认证口令
+      ansible.builtin.assert:
+        that:
+          - keepalived_auth_pass is string
+          - (keepalived_auth_pass | string) is match('^[A-Za-z0-9_.-]{1,8}$')
+          - not ((keepalived_auth_pass | string | trim) is match(credential_placeholder_pattern))
+        fail_msg: "keepalived_auth_pass 必须替换占位值且不超过 8 个字符。"
+      when:
+        - preflight_require_keepalived | bool
+        - not (preflight_read_only | bool)
+
     - name: 检查入口层关键变量
       assert:
         that:
-          - (keepalived_auth_pass | string) is match('^[A-Za-z0-9_.-]{1,8}$')
-          - not ((keepalived_auth_pass | string | trim) is match(credential_placeholder_pattern))
           - >-
             keepalived_vip is match(
               '^(?:(?:25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})\\.){3}'
@@ -187,7 +223,6 @@
           - keepalived_vip is not match('^(192\\.0\\.2|198\\.51\\.100|203\\.0\\.113)\\.')
         fail_msg: >-
           入口层变量不安全或不受支持。HAProxy 必须接入 Router；
-          keepalived_auth_pass 必须替换占位值且不超过 8 个字符；
           Keepalived VIP 必须是已按环境确认的非示例 IPv4 地址。
         success_msg: "入口层关键变量检查通过"
       when: preflight_require_keepalived | bool
