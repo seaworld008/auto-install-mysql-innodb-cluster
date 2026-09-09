@@ -122,6 +122,7 @@ VAULT_ARGS=(--vault-password-file ~/.config/ansible/mysql-cluster-vault-pass)
   `restorecon`。
 - RedHat 重跑先使用 0600 临时 option file 和无副作用查询探测目标 root 密码；
   已生效时跳过首次临时密码流程，无法安全探测或恢复时直接阻断。
+- Router 按客户端与后端连接预算配置 systemd 文件句柄限制，启动后验证实际 soft / hard 值。
 - Router 默认关闭跨客户端空闲后端连接复用（`mysql_router_max_idle_server_connections: 0`），
   应用使用有界连接池；连接与会话语义见 [应用接入指南](docs/runbooks/APPLICATION_CONNECTIONS.md)。
 - MySQL 文件句柄容量通过专用 systemd drop-in 应用；逐节点重启前检查内核和服务限制，

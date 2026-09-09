@@ -378,6 +378,8 @@ mysql_router_max_connect_errors: "{{ mysql_router_4c8g_optimized.max_connect_err
 # 保留固定端口会话语义；默认不跨客户端复用后端空闲连接。
 mysql_router_max_idle_server_connections: 0
 mysql_router_max_total_connections: "{{ mysql_router_4c8g_optimized.max_total_connections }}"
+# One frontend plus private RW/RO backends per client, idle pool, and descriptor reserve.
+mysql_router_nofile_limit: "{{ 3 * (mysql_router_max_total_connections | int) + (mysql_router_max_idle_server_connections | int) + 1024 }}"
 mysql_router_route_max_connections: "{{ mysql_router_4c8g_optimized.route_max_connections }}"
 
 # 架构检测

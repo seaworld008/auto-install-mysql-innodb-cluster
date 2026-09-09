@@ -81,3 +81,13 @@ ansible mysql_router "${COMMON_ARGS[@]}" -b -m command \
 目标必须不大于 `fs.nr_open` / `fs.file-max`；保留其他管理员 drop-in，但若其解析结果
 与目标或内核上限冲突，会在重启前中止。不要只修改 my.cnf 的 `open_files_limit`，因为
 systemd 管理的服务还受 `LimitNOFILE` 约束。
+
+## Router 文件句柄容量
+
+`mysql_router_nofile_limit` 默认按 `3 × mysql_router_max_total_connections +
+mysql_router_max_idle_server_connections + 1024` 计算，覆盖客户端、自动分流会话的读写后端、
+空闲池与管理开销。它写入 Router 的 systemd unit，避免连接数配置先碰到操作系统默认的
+1024 soft limit。该预算是资源上限配置，不是连接容量压测结论。
+
+目标超出主机内核上限时会中止；调整连接上限后，经 `--install-routers` 或 `--apply-config`
+逐台应用。已有 unit 正确但进程仍使用旧限制时，重跑也会恢复；正常重跑不重启健康 Router。
