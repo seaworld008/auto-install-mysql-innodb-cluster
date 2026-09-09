@@ -13,7 +13,7 @@ import time
 
 import yaml
 
-from prepare import initialize
+from prepare import initialize, source_digest
 
 
 def run(args, **kwargs):
@@ -31,9 +31,15 @@ class Lab:
         if self.manifest.get('owner') != 'mysql-ha-lab-v1' or self.manifest['root'] != str(self.root):
             raise ValueError('Lab ownership marker does not match this directory')
         self.limactl = limactl
+        actual_version = output([limactl, '--version']).strip().split()[-1]
+        if actual_version != self.manifest['lima_version']:
+            raise ValueError('Lima version differs from this lab manifest')
         self.env = dict(os.environ, TMPDIR=str(self.root / 'tmp'),
                         DOCKER_CONFIG=str(self.root / 'config/docker'), LIMA_WORKDIR='/lab')
         if 'metadata' in self.manifest:
+            disk = self.root / 'runtime/disk'
+            if disk.is_symlink() or not disk.is_file():
+                raise ValueError('Missing regular lab disk; refusing to recreate it')
             metadata = Path(self.manifest['metadata'])
             if not metadata.exists():
                 snapshot = self.root / 'runtime/metadata'
@@ -103,7 +109,10 @@ class Lab:
         if not (staged / 'mysql-ha/lima.yaml').is_file():
             raise ValueError('Snapshot has no instance configuration')
         disk = staged / 'mysql-ha/disk'
-        if not disk.is_symlink() or disk.resolve() != self.root / 'runtime/disk':
+        canonical_disk = self.root / 'runtime/disk'
+        if canonical_disk.is_symlink() or not canonical_disk.is_file():
+            raise ValueError('Snapshot requires an existing regular lab disk')
+        if not disk.is_symlink() or disk.resolve(strict=True) != canonical_disk:
             raise ValueError('Snapshot disk does not point to this lab')
         destination, previous = runtime / 'metadata', runtime / 'metadata-previous'
         # The last complete snapshot survives every failure before promotion.
@@ -156,6 +165,8 @@ class Lab:
         (self.root / 'reports/docker-version.json').write_text(self.docker('version', '--format', '{{json .}}'))
 
     def deploy(self, args):
+        if source_digest(self.root / 'source') != self.manifest.get('source_digest'):
+            raise ValueError('Source snapshot changed; initialize a new lab from the desired commit')
         # Inherit the existing operator CLI and its failures; no alternate SQL deployment.
         return self.docker('exec', '-i', 'mysql-ha-lab-controller', 'bash', 'scripts/deploy_dedicated_routers.sh',
             '-i', '/lab/config/hosts.local.yml', '-e', '@inventory/group_vars/all.yml',

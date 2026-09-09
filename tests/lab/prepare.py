@@ -5,6 +5,8 @@ import json
 import secrets
 import shutil
 import subprocess
+import os
+import stat
 import uuid
 
 import yaml
@@ -99,6 +101,7 @@ def initialize(root: Path, ref: str) -> None:
     (root / 'manifest.json').write_text(json.dumps({
         'owner': 'mysql-ha-lab-v1', 'root': str(root), 'source_sha': sha,
         'lima_version': '2.2.0', 'engine_version': '29.8.0',
+        'source_digest': source_digest(root / 'source'),
         'template_sha256': hashlib.sha256((TEMPLATES / 'lima.yaml').read_bytes()).hexdigest(),
     }, indent=2) + '\n')
     print('Generated private lab for source ' + sha)
@@ -106,3 +109,21 @@ def initialize(root: Path, ref: str) -> None:
 
 def write_yaml(path: Path, value: dict) -> None:
     path.write_text(yaml.safe_dump(value, sort_keys=False), encoding='utf-8')
+
+
+def source_digest(source: Path) -> str:
+    """Bind content, relative paths, link targets and modes without following links."""
+    digest = hashlib.sha256()
+    for path in sorted(source.rglob('*')):
+        info = path.lstat()
+        record = [path.relative_to(source).as_posix(), stat.S_IMODE(info.st_mode)]
+        if path.is_symlink():
+            record += ['link', os.readlink(path)]
+        elif path.is_file():
+            record += ['file', hashlib.sha256(path.read_bytes()).hexdigest()]
+        elif path.is_dir():
+            record += ['directory']
+        else:
+            raise ValueError('Unsupported file in source snapshot')
+        digest.update((json.dumps(record) + '\n').encode())
+    return digest.hexdigest()

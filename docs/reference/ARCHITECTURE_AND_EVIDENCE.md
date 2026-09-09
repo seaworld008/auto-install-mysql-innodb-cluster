@@ -55,7 +55,7 @@ flowchart TD
 
 | 层级 | 端口 | 类型 | 用途 |
 | --- | --- | --- | --- |
-| HAProxy VIP | `3309` | 自动读写分离 | 推荐应用默认入口 |
+| HAProxy VIP | `3309` | 自动读写分离 | 按驱动与事务行为验证后使用 |
 | HAProxy VIP | `3307` | 强制读写 | DDL、写入任务、运维写入口 |
 | HAProxy VIP | `3308` | 强制只读 | 报表、查询、只读任务 |
 | MySQL Router | `6450` | 自动读写分离 | 绕过 HAProxy 直连 Router |

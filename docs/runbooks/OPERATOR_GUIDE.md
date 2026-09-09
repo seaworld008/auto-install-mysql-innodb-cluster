@@ -327,7 +327,7 @@ scale_policy:
 ## 7. 入口层
 
 - HAProxy 只连接 Router 的 RW、RO 和 R/W Split 端口。
-- 应用默认使用 VIP `3309`；显式 RW / RO 为 `3307 / 3308`。
+- 事务型应用优先使用 VIP `3307`；只读访问使用 `3308`，自动分离 `3309` 需先完成应用兼容性验证。
 - stats 默认只监听 `127.0.0.1:8404`，如需远程查看请使用 SSH tunnel 或受控
   监控代理。
 - Keepalived 使用 `/usr/bin/systemctl is-active --quiet haproxy`，
@@ -386,24 +386,20 @@ scale_policy:
 
 记录模板在 `docs/templates/`。如果没有执行，应准确写“真实环境验证仍待完成”。
 
-## v0.3.1 部署修复与升级注意事项
+## 配置与集群身份
 
-- 首次安装不再依赖其他 MySQL 节点尚未采集的 facts；Group Replication 使用
-  `ansible_host`，未定义时使用 inventory 主机名。该地址必须能被所有集群节点直接访问；
-  SSH NAT / 跳板地址不能作为数据库节点地址，需为节点使用可互通的 inventory 地址。
-- Ubuntu 24.04/25.04/25.10 与 Debian 13 使用 `libaio1t64`，旧发行版使用 `libaio1`。
-- 任一节点失败即中止后续部署批次与操作；MySQL 滚动批次固定要求一台。
-- `mysql_primary` 必须有一个管理节点，`mysql_secondary` 覆盖其余集群成员。
-- 已有 Router 的端口、连接数、超时与路由策略由 `--apply-config` 原子更新；
-  保留 Router 身份和 keyring，有变化才重启，并按节点完成连接验证。
-  自动读写分离统一到 `routing:bootstrap_rw_split`，清除历史重复路由。
-- `--limit` 仅支持 MySQL 扩容、Router/LB 缩容和内核优化；其他操作传入该参数会在
-  执行前报错，避免静默变成全组操作。全组配置更新使用 `--apply-config`。
-- 当前配置中未被消费的 Router 线程、内存、连接池和 metadata 缓存字段已移除。
+节点的 inventory 地址必须在集群间直接可达，SSH 跳板地址不能代替复制地址。
+`mysql_primary` 指定一个管理连接节点，`mysql_secondary` 覆盖其余成员；实际写节点由集群选举决定。
 
-升级前保存受保护的现有配置，在维护窗口执行 `--check-prereq`、`--apply-config` 和
-`--status`。自定义 Router 路由名称不属于本仓库 bootstrap 结构，会被明确拒绝；
-先人工核对迁移，不能通过清空 keyring 或自动强制 bootstrap 绕过。
+新建集群将 `mysql_group_replication_group_name_override` 传给 AdminAPI 的 `groupName`。
+已部署集群升级前，使用受保护的 MySQL 连接读取 `SELECT @@GLOBAL.group_replication_group_name;`，
+将本地 override 对齐到实际 UUID。不要为了匹配配置而修改正在运行的组身份。
+配置流程与状态检查会拒绝组 UUID 不一致的成员。
 
-静态及本地回归测试不替代真实环境验收。首次部署、重复执行、故障切换、扩缩容、
-备份恢复和容量测试仍需在隔离 staging 执行并留存记录。
+完整部署负责安装依赖与账号收敛，`--apply-config` 仅负责配置更新；管理/复制账号只在独立
+实例或当前 primary 变更，secondary 通过复制收敛。自定义 `backup_config` 必须保留
+`percona_release` 公钥 URL、摘要与指纹字段。
+
+Router 更新保留身份与 keyring，只在受管配置变化时重启；自定义路由名称需事先核对迁移。
+故障后先检查成员与 GTID，再按受控恢复流程处理，不能自动强制恢复多数派。
+更多应用层配置见 [应用接入指南](APPLICATION_CONNECTIONS.md)。

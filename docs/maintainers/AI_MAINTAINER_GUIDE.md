@@ -233,3 +233,17 @@ done
 这些结论。没有执行时，准确写：
 
 > 静态验证和 Ansible syntax / inventory 校验已通过；真实 staging 验证仍待完成。
+
+## 资料与证据索引
+
+README 和文档首页专注使用者路径；版本说明进入 CHANGELOG，用户需要的兼容条件进入
+runbook。调试过程和演练结果不追加到产品首页，也不能用文档清理代替修复或验收。
+
+- [本地模拟方案](../runbooks/LOCAL_SIMULATION.md)
+- [历史模拟报告](../reports/LOCAL_SIMULATION_2026-09-08.md)
+- [架构与证据记录](../reference/ARCHITECTURE_AND_EVIDENCE.md)
+- [容量分析](../reports/HARDWARE_CAPACITY_ANALYSIS.md)
+- [Staging 模板](../templates/staging-validation-record.md)
+- [故障演练模板](../templates/failover-drill-record.md)
+- [隔离恢复模板](../templates/restore-drill-record.md)
+- [发布检查](RELEASE_CHECKLIST_ZH.md)

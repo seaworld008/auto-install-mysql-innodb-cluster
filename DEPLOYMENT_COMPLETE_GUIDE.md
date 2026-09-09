@@ -206,38 +206,9 @@ CI 还覆盖全部 playbook syntax-check、Python 3.12 / 3.13、固定 SHA 的 A
 - 架构与证据：`docs/reference/ARCHITECTURE_AND_EVIDENCE.md`
 - 发布清单：`docs/maintainers/RELEASE_CHECKLIST_ZH.md`
 
-## v0.3.1 部署修复与升级注意事项
+## 配置归属与应用接入
 
-- 首次安装不再依赖其他 MySQL 节点尚未采集的 facts；Group Replication 使用
-  `ansible_host`，未定义时使用 inventory 主机名。该地址必须能被所有集群节点直接访问；
-  SSH NAT / 跳板地址不能作为数据库节点地址，需为节点使用可互通的 inventory 地址。
-- Ubuntu 24.04/25.04/25.10 与 Debian 13 使用 `libaio1t64`，旧发行版使用 `libaio1`。
-- 任一节点失败即中止后续部署批次与操作；MySQL 滚动批次固定要求一台。
-- `mysql_primary` 必须有一个管理节点，`mysql_secondary` 覆盖其余集群成员。
-- 已有 Router 的端口、连接数、超时与路由策略由 `--apply-config` 原子更新；
-  保留 Router 身份和 keyring，有变化才重启，并按节点完成连接验证。
-  自动读写分离统一到 `routing:bootstrap_rw_split`，清除历史重复路由。
-- `--limit` 仅支持 MySQL 扩容、Router/LB 缩容和内核优化；其他操作传入该参数会在
-  执行前报错，避免静默变成全组操作。全组配置更新使用 `--apply-config`。
-- 当前配置中未被消费的 Router 线程、内存、连接池和 metadata 缓存字段已移除。
-
-升级前保存受保护的现有配置，在维护窗口执行 `--check-prereq`、`--apply-config` 和
-`--status`。自定义 Router 路由名称不属于本仓库 bootstrap 结构，会被明确拒绝；
-先人工核对迁移，不能通过清空 keyring 或自动强制 bootstrap 绕过。
-
-静态及本地回归测试不替代真实环境验收。首次部署、重复执行、故障切换、扩缩容、
-备份恢复和容量测试仍需在隔离 staging 执行并留存记录。
-
-## v0.4.0 模拟验证与运行修复
-
-本版集成 Rocky/MySQL 8.4 实测的包冲突、caching_sha2 账号、secondary 重复授权、
-mysqlsh 认证、Router bootstrap、Keepalived 脚本安全和 Percona RPM 公钥修复。
-管理账号在独立实例或当前在线 primary 收敛，secondary 依赖复制；不关闭只读保护。
-升级时应在 staging 运行完整部署与重复执行；`--apply-config` 不承担包安装与账号迁移。
-
-外置盘本地模拟使用独立 Lima VM（6 CPU / 12 GiB），配置生成、重建、测试顺序与
-定向清理见 [本机模拟方案](docs/runbooks/LOCAL_SIMULATION.md)。低资源档位
-`simulation_minimal` 仅用于模拟；50 总连接对应 45 用户连接，生产默认规格保持原值。
-
-[实测报告](docs/reports/LOCAL_SIMULATION_2026-09-08.md)记录了通过及未通过项。
-混合端口事务路由、严格 TLS 和组 UUID 配置归属仍待解决，不能据此声明已完成生产验收。
+新集群的组 UUID 显式传给 AdminAPI；已有集群升级前，应以查询得到的实际组 UUID
+校正本地 override。组身份不一致会阻断状态检查，不会自动更改健康集群的 UUID。
+完整部署承担依赖安装与账号收敛，`--apply-config` 仅用于受管配置更新。
+应用端口、TLS 和重试行为见 [应用接入指南](docs/runbooks/APPLICATION_CONNECTIONS.md)。

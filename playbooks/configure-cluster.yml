@@ -30,11 +30,23 @@
               "SELECT COUNT(*) FROM performance_schema.replication_group_members WHERE MEMBER_ID = @@server_uuid"
             ).fetchOne();
             print('ANSIBLE_MEMBER=' + row[0]);
+            var group = session.runSql('SELECT @@GLOBAL.group_replication_group_name').fetchOne()[0];
+            print('ANSIBLE_GROUP_MATCH=' + (group.toLowerCase() === '{{ mysql_group_replication_group_name | lower }}' ? '1' : '0'));
         stdin: "{{ mysql_cluster_password }}\n"
         stdin_add_newline: false
       register: mysql_cluster_membership
       changed_when: false
       no_log: true
+
+    - name: 校验既有成员的组 UUID 与配置一致
+      ansible.builtin.assert:
+        that:
+          - "'ANSIBLE_GROUP_MATCH=1' in mysql_cluster_membership.stdout"
+        fail_msg: >-
+          既有成员的 Group Replication UUID 与配置不一致。请核对实际组 UUID，
+          将本地 mysql_group_replication_group_name_override 对齐到该值后重试；
+          不要修改运行中集群的身份。
+      when: "'ANSIBLE_MEMBER=1' in mysql_cluster_membership.stdout"
 
     - name: 检查 standalone 实例配置
       ansible.builtin.command:
@@ -124,7 +136,7 @@
             shell.options.useWizards = false;
             dba.createCluster(
               '{{ mysql_cluster_name }}',
-              {gtidSetIsComplete: true}
+              {gtidSetIsComplete: true, groupName: '{{ mysql_group_replication_group_name }}'}
             );
         stdin: "{{ mysql_cluster_password }}\n"
         stdin_add_newline: false

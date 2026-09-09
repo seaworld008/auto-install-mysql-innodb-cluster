@@ -19,6 +19,7 @@ mysql_replication_password: "CHANGE_ME_REPLICATION_PASSWORD"
 
 # MySQL集群配置
 mysql_cluster_name: "prodCluster"
+# 创建集群时传给 AdminAPI groupName；已部署集群必须与实际组 UUID 一致。
 mysql_group_replication_group_name: >-
   {{
     mysql_group_replication_group_name_override
