@@ -61,6 +61,10 @@ require_supported_control_python() {
     fi
 }
 
+# 检查范围由入口决定，后置 extra vars 防止本地配置意外关闭完整 HA 门。
+PREFLIGHT_FULL="preflight_require_router=true preflight_require_haproxy=true preflight_require_keepalived=true"
+HEALTH_FULL="$PREFLIGHT_FULL health_require_router=true health_require_haproxy=true health_require_keepalived=true"
+
 show_help() {
     cat << EOF
 MySQL InnoDB Cluster 生产部署入口
@@ -73,6 +77,8 @@ MySQL InnoDB Cluster 生产部署入口
     --mysql-only            仅安装 MySQL 并配置 InnoDB Cluster
     --install-routers       仅安装/重配 Router
     --configure-lb          仅安装/重配 HAProxy + Keepalived
+    --install-haproxy       仅安装/重配 HAProxy（要求 MySQL + Router 已健康）
+    --install-keepalived    仅安装/重配 Keepalived（要求 HAProxy 及上游已健康）
     --apply-config          按当前主配置滚动应用到现有节点
     --kernel-optimize-only  仅执行内核优化（可配合 --limit）
     --scale-mysql-add       扩容 MySQL 节点（需配合 --limit）
@@ -87,6 +93,7 @@ MySQL InnoDB Cluster 生产部署入口
     --rollback              停止入口层服务（不删除数据库数据）
     -i, --inventory <file>  指定 inventory 文件
     --skip-kernel-optimization  跳过内核优化（默认不跳过）
+    --scope <name>          只读检查范围：full（默认）/ mysql / router / haproxy
     --limit <group|host>    仅用于扩容、入口缩容或内核优化
     --target <host>         指定缩容目标主机
     --new-primary <host>    缩容当前主节点前先切换到新主节点
@@ -97,7 +104,7 @@ MySQL InnoDB Cluster 生产部署入口
     -h, --help              显示帮助
 
 说明:
-    - 推荐应用默认入口是 HAProxy VIP: 3309(自动读写分离)
+    - 事务型应用优先使用 HAProxy VIP: 3307；3309 自动读写分离需先验证兼容性
     - HAProxy VIP 也保留 3307(强制读写) / 3308(强制只读)
     - 直连 Router 端口为 6450(自动读写分离) / 6446(强制读写) / 6447(强制只读)
     - MySQL/Router/HAProxy 的真实配置以 inventory/group_vars/all.yml 和目标 inventory 为准
@@ -203,6 +210,11 @@ else:
 }
 
 show_connection_summary() {
+    local profile="${1:-full}"
+    if [[ "$profile" == "mysql" ]]; then
+        echo "MySQL 层检查通过；直连 inventory 中数据库节点，不输出尚未启用的入口。"
+        return 0
+    fi
     local vip rw_port ro_port rwsplit_port router_rw router_ro router_rwsplit
     load_inventory_json
     vip="$(read_var_from_inventory keepalived_vip)"
@@ -215,8 +227,12 @@ show_connection_summary() {
 
     echo
     echo "连接信息:"
-    echo "  HAProxy VIP（推荐默认）: ${vip}:${rwsplit_port} (R/W Split)"
-    echo "  HAProxy VIP（强制）: ${vip}:${rw_port} (RW) / ${vip}:${ro_port} (RO)"
+    if [[ "$profile" == "full" ]]; then
+        echo "  HAProxy VIP（事务优先）: ${vip}:${rw_port} (RW)"
+        echo "  HAProxy VIP: ${vip}:${ro_port} (RO) / ${vip}:${rwsplit_port} (R/W Split，先验证兼容性)"
+    elif [[ "$profile" == "haproxy" ]]; then
+        echo "  HAProxy 主机地址: RW ${rw_port} / RO ${ro_port} / Split ${rwsplit_port}；本次未检查 VIP。"
+    fi
     echo "  Router 直连: router-ip:${router_rwsplit} (R/W Split) / ${router_rw} (RW) / ${router_ro} (RO)"
 }
 
@@ -225,18 +241,22 @@ check_prerequisites() {
     local profile_args=()
     case "$profile" in
         full)
+            profile_args+=("--extra-vars" "$PREFLIGHT_FULL")
             ;;
         mysql)
             profile_args+=(
                 "--extra-vars"
-                "preflight_require_router=false preflight_require_haproxy=false"
+                "preflight_require_router=false preflight_require_haproxy=false preflight_require_keepalived=false"
             )
             ;;
         router)
             profile_args+=(
                 "--extra-vars"
-                "preflight_require_router=true preflight_require_haproxy=false"
+                "preflight_require_router=true preflight_require_haproxy=false preflight_require_keepalived=false"
             )
+            ;;
+        haproxy)
+            profile_args+=("--extra-vars" "preflight_require_router=true preflight_require_haproxy=true preflight_require_keepalived=false")
             ;;
         *)
             log_error "未知 preflight profile: $profile"
@@ -244,7 +264,11 @@ check_prerequisites() {
             ;;
     esac
     log_step "执行前置检查"
-    run_playbook "${profile_args[@]}" playbooks/preflight-ha.yml
+    if (( ${#profile_args[@]} > 0 )); then
+        run_playbook "${profile_args[@]}" playbooks/preflight-ha.yml
+    else
+        run_playbook playbooks/preflight-ha.yml
+    fi
 }
 
 deploy_mysql_cluster() {
@@ -397,18 +421,22 @@ health_check() {
     fi
     case "$profile" in
         full)
+            command+=("--extra-vars" "$HEALTH_FULL")
             ;;
         mysql)
             command+=(
                 "--extra-vars"
-                "preflight_require_router=false preflight_require_haproxy=false health_require_router=false health_require_haproxy=false"
+                "preflight_require_router=false preflight_require_haproxy=false preflight_require_keepalived=false health_require_router=false health_require_haproxy=false health_require_keepalived=false"
             )
             ;;
         router)
             command+=(
                 "--extra-vars"
-                "preflight_require_router=true preflight_require_haproxy=false health_require_router=true health_require_haproxy=false"
+                "preflight_require_router=true preflight_require_haproxy=false preflight_require_keepalived=false health_require_router=true health_require_haproxy=false health_require_keepalived=false"
             )
+            ;;
+        haproxy)
+            command+=("--extra-vars" "preflight_require_router=true preflight_require_haproxy=true preflight_require_keepalived=false health_require_router=true health_require_haproxy=true health_require_keepalived=false")
             ;;
         *)
             log_error "未知 health profile: $profile"
@@ -444,8 +472,9 @@ rollback_entry_tier() {
 }
 
 show_status() {
-    health_check
-    show_connection_summary
+    local profile="${1:-full}"
+    health_check "$profile"
+    show_connection_summary "$profile"
 }
 
 production_ready_deploy() {
@@ -459,7 +488,7 @@ production_ready_deploy() {
         run_playbook playbooks/install-keepalived.yml
     else
         log_step "执行全量部署"
-        run_playbook playbooks/site.yml
+        run_playbook playbooks/site.yml --extra-vars "$PREFLIGHT_FULL"
     fi
 
     health_check
@@ -481,12 +510,13 @@ main() {
 
     local action=""
     local limit=""
+    local scope=""
     local target=""
     local new_primary=""
     local positional_inventory_seen=false
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --production-ready|--mysql-only|--install-routers|--configure-lb|--apply-config|--kernel-optimize-only|--scale-mysql-add|--scale-mysql-remove|--shrink-router|--shrink-lb|--backup|--full-deploy|--check-prereq|--test-connection|--status|--rollback)
+            --production-ready|--mysql-only|--install-routers|--configure-lb|--install-haproxy|--install-keepalived|--apply-config|--kernel-optimize-only|--scale-mysql-add|--scale-mysql-remove|--shrink-router|--shrink-lb|--backup|--full-deploy|--check-prereq|--test-connection|--status|--rollback)
                 if [[ -n "$action" ]]; then
                     log_error "一次只能指定一个操作: $action 与 $1"
                     exit 1
@@ -505,6 +535,12 @@ main() {
             --skip-kernel-optimization)
                 SKIP_KERNEL_OPTIMIZATION=true
                 shift
+                ;;
+            --scope)
+                if [[ $# -lt 2 || -z "$2" ]]; then log_error "--scope 需要非空检查范围"; exit 1; fi
+                if [[ -n "$scope" ]]; then log_error "--scope 不能重复指定"; exit 1; fi
+                scope="$2"
+                shift 2
                 ;;
             --limit)
                 if [[ $# -lt 2 ]]; then
@@ -574,6 +610,22 @@ main() {
         exit 1
     fi
 
+    if [[ -n "$scope" ]]; then
+        case "$action" in
+            --check-prereq|--status|--test-connection) ;;
+            *) log_error "--scope 仅用于只读检查；操作已中止"; exit 1 ;;
+        esac
+        case "$scope" in
+            full|mysql|router|haproxy) ;;
+            *) log_error "未知检查范围: $scope"; exit 1 ;;
+        esac
+    fi
+
+    if [[ "$action" == "--kernel-optimize-only" && "$SKIP_KERNEL_OPTIMIZATION" == "true" ]]; then
+        log_error "内核专项操作不能同时要求跳过内核优化"
+        exit 1
+    fi
+
     # 不得静默忽略作用域参数，否则操作者可能意外修改整组节点。
     if [[ -n "$limit" ]]; then
         case "$action" in
@@ -608,6 +660,18 @@ main() {
             deploy_routers
             health_check "router"
             ;;
+        --install-haproxy)
+            check_prerequisites haproxy
+            health_check router
+            run_playbook playbooks/install-haproxy.yml
+            health_check haproxy
+            ;;
+        --install-keepalived)
+            check_prerequisites full
+            health_check haproxy
+            run_playbook playbooks/install-keepalived.yml
+            health_check full
+            ;;
         --configure-lb)
             check_prerequisites
             deploy_load_balancers
@@ -638,13 +702,13 @@ main() {
             full_deploy
             ;;
         --check-prereq)
-            check_prerequisites
+            check_prerequisites "${scope:-full}"
             ;;
         --test-connection)
-            health_check
+            health_check "${scope:-full}"
             ;;
         --status)
-            show_status
+            show_status "${scope:-full}"
             ;;
         --rollback)
             rollback_entry_tier

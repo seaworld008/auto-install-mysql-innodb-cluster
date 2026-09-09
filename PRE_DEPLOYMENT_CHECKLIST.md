@@ -80,3 +80,10 @@ ansible-playbook -i inventory/hosts.local.yml playbooks/site.yml --syntax-check 
 - [ ] 已按 [应用接入指南](docs/runbooks/APPLICATION_CONNECTIONS.md) 选择端口与重试策略
 - [ ] 使用受信任 CA 和匹配连接名称的证书，验证两段 TLS 链路
 - [ ] 已部署集群的 override 与实际组 UUID 一致，未尝试热改组身份
+
+## 其他拓扑与组件操作
+
+默认示例之外，可选择 [独立、共置、混合或三节点接入层](docs/scenarios/README.md)。
+[组件指南](docs/scenarios/COMPONENTS.md) 覆盖只部署 MySQL、Router、HAProxy、Keepalived；
+[内核专项](docs/scenarios/KERNEL.md) 可单独执行。只读状态检查使用 `--scope` 选择范围，
+默认 full 保留全部 HA 检查；该选项不能用于缩减完整部署范围。

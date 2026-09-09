@@ -7,6 +7,8 @@
   hosts: all
   become: yes
   gather_facts: yes
+  vars_files:
+    - ../inventory/group_vars/all.yml
   
   vars:
     # 脚本版本和优化级别
@@ -15,7 +17,7 @@
     
     # 备份目录
     backup_timestamp: "{{ ansible_date_time.epoch }}"
-    backup_dir: "/etc/sysctl.d/backup-{{ backup_timestamp }}"
+    backup_dir: "{{ mysql_kernel_backup_root }}/{{ backup_timestamp }}"
     
     # 系统检测变量
     total_memory_gb: "{{ (ansible_memtotal_mb / 1024) | round | int }}"
@@ -158,34 +160,111 @@
           文件描述符: {{ file_max }}
           文件句柄限制: {{ nofile_limit }}
 
-    # 备份现有配置
+    - name: 初始化内核操作目标地址
+      ansible.builtin.set_fact:
+        kernel_target_addresses: []
+      run_once: true
+
+    - name: 收集内核操作目标地址
+      ansible.builtin.set_fact:
+        kernel_target_addresses: "{{ kernel_target_addresses + [hostvars[item].ansible_host | default(item) | lower] }}"
+      loop: "{{ ansible_play_hosts_all }}"
+      run_once: true
+
+    - name: 拒绝多别名并行修改同一主机内核
+      ansible.builtin.assert:
+        that:
+          - kernel_target_addresses | unique | length == kernel_target_addresses | length
+        fail_msg: "内核目标存在重复部署地址，请使用每台主机唯一的 inventory 名称。"
+      run_once: true
+
+    # 完成备份后才开始修改；备份目录不能位于被复制的源目录内。
+    - name: 检查内核备份根目录
+      ansible.builtin.assert:
+        that:
+          - mysql_kernel_backup_root is match('^/var/backups/[A-Za-z0-9_-][A-Za-z0-9._-]*(/[A-Za-z0-9_-][A-Za-z0-9._-]*)*$')
+          - "'..' not in mysql_kernel_backup_root.split('/')"
+        fail_msg: "mysql_kernel_backup_root 必须位于 /var/backups/ 下。"
+
+    - name: 解析内核备份根目录实际位置
+      ansible.builtin.command:
+        argv: [realpath, -m, --, "{{ mysql_kernel_backup_root }}"]
+      register: kernel_backup_realpath
+      changed_when: false
+
+    - name: 解析 sysctl 源目录实际位置
+      ansible.builtin.command:
+        argv: [realpath, -m, --, /etc/sysctl.d]
+      register: kernel_sysctl_realpath
+      changed_when: false
+
+    - name: 禁止备份目录落入配置源目录
+      ansible.builtin.assert:
+        that:
+          - kernel_backup_realpath.stdout != kernel_sysctl_realpath.stdout
+          - not kernel_backup_realpath.stdout.startswith(kernel_sysctl_realpath.stdout ~ '/')
+        fail_msg: "内核备份目录解析到了被备份的 sysctl.d 内部。"
+
+    - name: 检查内核备份根目录状态
+      ansible.builtin.stat:
+        path: "{{ mysql_kernel_backup_root }}"
+        follow: false
+      register: kernel_backup_root_stat
+
+    - name: 拒绝备份根目录符号链接或普通文件
+      ansible.builtin.assert:
+        that:
+          - >-
+            not kernel_backup_root_stat.stat.exists
+            or (kernel_backup_root_stat.stat.isdir | default(false)
+                and not kernel_backup_root_stat.stat.islnk | default(false))
+        fail_msg: "内核备份根目录必须是实际目录，不能是符号链接或普通文件。"
+
+    - name: 创建内核备份根目录
+      ansible.builtin.file:
+        path: "{{ mysql_kernel_backup_root }}"
+        state: directory
+        mode: '0700'
+
+    - name: 检查本轮备份目录是否已存在
+      ansible.builtin.stat:
+        path: "{{ backup_dir }}"
+        follow: false
+      register: kernel_backup_run_stat
+
+    - name: 拒绝覆盖已有内核备份
+      ansible.builtin.assert:
+        that:
+          - not kernel_backup_run_stat.stat.exists
+        fail_msg: "本轮备份目录已经存在，请保留旧备份后重新执行，不能覆盖。"
+
     - name: 创建备份目录
-      file:
+      ansible.builtin.file:
         path: "{{ backup_dir }}"
         state: directory
-        mode: '0755'
+        mode: '0700'
 
-    - name: 备份现有内核配置
-      copy:
-        src: "/etc/sysctl.conf"
-        dest: "{{ backup_dir }}/sysctl.conf.backup"
-        remote_src: yes
-      ignore_errors: yes
+    - name: 检查待备份配置是否存在
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /etc/sysctl.conf
+        - /etc/security/limits.conf
+        - /etc/sysctl.d
+      register: kernel_backup_sources
 
-    - name: 备份现有limits配置
-      copy:
-        src: "/etc/security/limits.conf"
-        dest: "{{ backup_dir }}/limits.conf.backup"
-        remote_src: yes
-      ignore_errors: yes
-
-    - name: 备份现有sysctl.d目录
-      shell: "cp -r /etc/sysctl.d {{ backup_dir }}/sysctl.d.bak/"
-      ignore_errors: yes
+    - name: 备份已有内核配置（失败则停止）
+      ansible.builtin.copy:
+        src: "{{ item.item }}{{ '/' if item.stat.isdir | default(false) else '' }}"
+        dest: "{{ backup_dir }}/{{ item.item | basename }}"
+        remote_src: true
+        mode: preserve
+      loop: "{{ kernel_backup_sources.results }}"
+      when: item.stat.exists
 
     - name: 记录当前参数值
       shell: |
-        cat > {{ backup_dir }}/current_values.txt << EOF
+        cat > {{ (backup_dir ~ '/current_values.txt') | quote }} << EOF
         # 当前系统参数值 - 备份时间: $(date)
         net.core.somaxconn = $(sysctl -n net.core.somaxconn 2>/dev/null || echo "未设置")
         fs.file-max = $(sysctl -n fs.file-max 2>/dev/null || echo "未设置")

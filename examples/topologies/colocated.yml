@@ -1,4 +1,4 @@
-# 三主机共置参考：同一主机加入多个角色组。
+# 仅拓扑示例；复制到 inventory/hosts.local.yml 后修改文档地址。
 all:
   vars:
     ansible_user: root

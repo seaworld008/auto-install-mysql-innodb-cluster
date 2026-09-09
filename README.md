@@ -22,7 +22,7 @@
 
 ## 导航
 
-[项目价值](#为什么选择这个项目) · [能力全景](#能力全景) · [架构设计](#架构设计) · [快速开始](#快速开始) · [应用接入](#应用如何连接) · [配置管理](#一套配置管理整个环境) · [日常运维](#部署之后如何运维) · [备份恢复](#备份与恢复) · [本地模拟](#在本机体验完整部署流程) · [文档与贡献](#文档与贡献)
+[项目价值](#为什么选择这个项目) · [方案选择](#按场景选择部署方案) · [能力全景](#能力全景) · [架构设计](#架构设计) · [快速开始](#快速开始) · [应用接入](#应用如何连接) · [配置管理](#一套配置管理整个环境) · [日常运维](#部署之后如何运维) · [备份恢复](#备份与恢复) · [本地模拟](#在本机体验完整部署流程) · [文档与贡献](#文档与贡献)
 
 ## 为什么选择这个项目
 
@@ -45,6 +45,24 @@
 | 管理已由本项目部署的集群 | 执行状态检查、配置调整、节点扩缩容和备份 |
 | 学习或评估 InnoDB Cluster 架构 | 在隔离模拟环境中观察真实安装与服务管理流程 |
 
+## 按场景选择部署方案
+
+默认架构只是起点：角色可以独立部署，也可以让同一主机承载多个组件；Router 与入口数量由
+inventory 决定，并不固定为两台。先选方案，再按对应指南替换参数执行。
+
+| 你希望怎样部署 | 方案与详细步骤 |
+| --- | --- |
+| 3 MySQL + 2 独立 Router + 2 独立入口 | [七主机独立部署](docs/scenarios/DEDICATED.md) |
+| 三台主机，每台共置 MySQL、Router 与入口组件 | [三主机共置部署](docs/scenarios/COLOCATED.md) |
+| Router 与数据库共置，HAProxy/Keepalived 独立 | [五主机混合部署](docs/scenarios/MIXED.md) |
+| 3 MySQL + 3 Router + 3 HAProxy/Keepalived | [三节点接入层](docs/scenarios/THREE_ENTRY.md) |
+| 只部署数据库，或在已有集群上逐层接入 | [组件单独部署](docs/scenarios/COMPONENTS.md) |
+| 仅执行内核优化，不安装数据库或入口组件 | [内核专项](docs/scenarios/KERNEL.md) |
+| 日常扩缩容、参数变更与备份恢复 | [扩缩容](docs/scenarios/SCALING.md) · [配置变更](docs/scenarios/CONFIGURATION.md) · [备份](docs/scenarios/BACKUPS.md) · [恢复](docs/scenarios/RESTORE.md) |
+
+首次使用从 [公共准备](docs/scenarios/COMMON.md) 开始；完整索引见 [部署方案与操作手册](docs/scenarios/README.md)。
+每篇包含适用条件、拓扑或参数、可复制命令、验证、排障与回退说明。
+
 ## 能力全景
 
 | 领域 | 已实现能力 | 主要入口 |
@@ -53,7 +71,7 @@
 | 数据库安装 | MySQL 8.4 / 8.0 版本线、发行版依赖、数据目录及参数配置 | `--mysql-only` |
 | 集群编排 | 创建 InnoDB Cluster、逐台加入成员、组 UUID 与成员状态检查 | `--production-ready` |
 | Router 层 | 独立部署、bootstrap、受管配置更新、身份与 keyring 保留 | `--install-routers` |
-| 高可用入口 | HAProxy 四层转发、Keepalived VIP、入口服务检查 | `--configure-lb` |
+| 高可用入口 | HAProxy / Keepalived 可分别操作，也可组合部署 | `--install-haproxy` / `--install-keepalived` / `--configure-lb` |
 | 应用路由 | 明确 RW、明确 RO、可选自动读写分离三类入口 | VIP `3307` / `3308` / `3309` |
 | 配置调整 | 硬件档位切换、配置验证、按节点应用受管配置 | `config_manager.sh` / `--apply-config` |
 | MySQL 扩缩容 | 加入新成员、指定新 primary 后移除原写节点、缩容健康校验 | `--scale-mysql-add` / `--scale-mysql-remove` |
@@ -198,6 +216,9 @@ mysql --host=db.example.com --port=3307 --user=app_user --password \
 事务型业务优先从明确的 RW 入口开始。连接池重连、幂等重试和两段 TLS 的配置要求见
 [应用接入指南](docs/runbooks/APPLICATION_CONNECTIONS.md)。
 
+仅 HAProxy 阶段用 `--status --scope haproxy` 检查；启用 Keepalived 后使用默认完整状态门。
+分层检查不会安装其他组件，详见 [组件操作](docs/scenarios/COMPONENTS.md)。
+
 ## 一套配置管理整个环境
 
 把公共默认值、环境差异和凭据分别管理，方便多人协作与环境复用：
@@ -246,6 +267,8 @@ mysql --host=db.example.com --port=3307 --user=app_user --password \
 | --- | --- | --- |
 | 仅部署数据库 | `--mysql-only` | 先完成主机和拓扑准备 |
 | 部署 Router | `--install-routers` | 新节点先加入 inventory |
+| 只部署 HAProxy | `--install-haproxy` | 要求数据库与 Router 健康，不要求 VIP |
+| 只部署 Keepalived | `--install-keepalived` | 要求同机 HAProxy 及上游健康 |
 | 部署入口层 | `--configure-lb` | 核对 VIP、网卡及入口节点角色 |
 | 滚动配置应用 | `--apply-config` | 安排维护窗口，应用后检查状态 |
 | 增加 MySQL 节点 | `--scale-mysql-add --limit mysql-node4` | 先将新节点加入 inventory |
@@ -253,7 +276,7 @@ mysql --host=db.example.com --port=3307 --user=app_user --password \
 | 移除 Router | `--shrink-router --limit router-node3` | 保留最小 HA 节点数量 |
 | 移除 LB | `--shrink-lb --limit lb-node3` | 核对剩余入口和 VIP 状态 |
 | 执行备份 | `--backup` | 先显式启用并配置备份 |
-| 检查状态 | `--status` | 用退出码识别检查结果 |
+| 检查状态 | `--status --scope full` | 可选 mysql / router / haproxy，默认 full |
 | 内核优化 | `--kernel-optimize-only` | 按目标环境选择执行；容器模拟中跳过 |
 
 `--apply-config` 复用各组件 playbook 收敛配置，可能触发服务重启；它不是 MySQL 版本升级或数据恢复入口。

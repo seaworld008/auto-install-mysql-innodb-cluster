@@ -176,6 +176,9 @@ mysql_connect_timeout: "{{ mysql_config_profiles[mysql_hardware_profile].connect
 mysql_net_read_timeout: "{{ mysql_config_profiles[mysql_hardware_profile].net_read_timeout }}"
 mysql_net_write_timeout: "{{ mysql_config_profiles[mysql_hardware_profile].net_write_timeout }}"
 
+# 内核配置备份与 sysctl 源目录分离，避免递归复制自身
+mysql_kernel_backup_root: "/var/backups/mysql-kernel"
+
 # 系统配置
 mysql_user: "mysql"
 mysql_group: "mysql"
@@ -186,7 +189,8 @@ firewall_ports:
   - "{{ mysql_admin_port }}/tcp"
   - "{{ mysql_group_replication_port }}/tcp"
 
-# 高可用最小节点要求（默认按生产最佳实践）
+# 高可用最小节点要求（独立或共置均按角色组计数；3 Router / 3 LB 可直接扩展 inventory）
+# 同一主机可加入多个角色组；每个部署地址只对应一个 inventory 主机名。
 mysql_ha_min_nodes: 3
 router_ha_required: true
 router_ha_min_nodes: 2
